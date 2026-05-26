@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "milestone-backend"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+  "alembic",
+  "fastapi>=0.115",
+  "pydantic-settings",
+  "python-dotenv",
+  "sqlmodel>=0.0.21",
+  "uvicorn[standard]",
+]
+
+[project.optional-dependencies]
+dev = [
+  "httpx",
+  "mypy",
+  "pytest",
+  "pytest-asyncio",
+  "pytest-cov",
+  "ruff",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["app/tests"]
+
+[tool.ruff]
+line-length = 100
+src = ["app"]
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.mypy]
+files = ["app"]
+python_version = "3.12"
+strict = true
+
+[tool.setuptools.packages.find]
+include = ["app*"]
