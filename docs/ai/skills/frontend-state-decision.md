@@ -15,7 +15,7 @@ roles:
 read_first:
   - AGENTS.md
   - docs/architecture.md
-  - docs/V1-TRD.md
+  - plans/milestone-architecture.md
 approval_required_if:
   - new shared state model
 related_skills:
@@ -23,14 +23,13 @@ related_skills:
   - component-boundary-decision
 canonical: true
 ---
-
 # Frontend State Decision
 
 Use when:
-- adding new frontend state,
-- moving state between components,
-- deciding between local, lifted, shared, or server-owned state,
-- introducing or reshaping context or store usage.
+- adding new frontend state
+- moving state between components
+- deciding between local, lifted, shared, or server-owned state
+- introducing or reshaping context or store usage
 
 Goal:
 Choose the smallest coherent ownership boundary for state.
@@ -49,9 +48,10 @@ Checks:
 - Who writes it?
 - Can two copies drift out of sync?
 - Is this UI state, server state, or derived state?
+- Would a shared dashboard filter, active training block, or selected activity genuinely need cross-screen ownership?
 
 Output:
 1. Recommended owner of the state.
-2. Why local / lifted / shared / server-owned is correct.
+2. Why local, lifted, shared, or server-owned is correct.
 3. Risks of rejected options.
 4. Whether approval is needed for broader shared-state changes.

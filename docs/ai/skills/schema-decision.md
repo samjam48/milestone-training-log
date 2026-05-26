@@ -24,7 +24,6 @@ related_skills:
   - backend-boundary-decision
 canonical: true
 ---
-
 # Schema Decision
 
 Use this skill before proposing or implementing any non-trivial database shape change.
@@ -36,17 +35,17 @@ Read first:
 - relevant models, migrations, services, and API handlers
 
 Goal:
-Choose the database shape that best fits query patterns, constraints, lifecycle, and long-term maintainability.
+Choose the database shape that best fits query patterns, lifecycle, and long-term maintainability.
 Do not default toward either "always add a new table" or "always extend the existing one".
 
 ## Decision process
 
 1. Identify what kind of data this is:
-- scalar attribute on an existing entity,
-- repeated child record,
-- many-to-many relationship,
-- semi-structured metadata,
-- external/raw payload.
+- scalar attribute on an existing entity
+- repeated child record
+- many-to-many relationship
+- semi-structured metadata
+- external or raw payload
 
 2. Ask these questions:
 - Will this data be filtered, sorted, or queried independently?
@@ -57,16 +56,16 @@ Do not default toward either "always add a new table" or "always extend the exis
 - Is it core business data or incidental metadata?
 
 3. Choose the structure:
-- Existing or new column when the data is truly an attribute of the same entity.
-- Child table when the data is a repeated record or needs independent querying, lifecycle, joins, or reporting.
-- Join table for many-to-many relationships.
-- JSON/JSONB only for metadata, config blobs, external payloads, or semi-structured data that is not a core relational entity.
+- Existing or new column when the data is truly an attribute of the same entity
+- Child table when the data is a repeated record or needs independent querying, lifecycle, joins, or reporting
+- Join table for many-to-many relationships
+- JSON only for metadata, config blobs, external payloads, or semi-structured data that is not a core relational entity
 
 ## Bias checks
 
 Avoid both failure modes:
-- unnecessary new tables that fragment the model,
-- stuffing relational child entities into arrays or JSON to avoid migrations.
+- unnecessary new tables that fragment the model
+- stuffing relational child entities into arrays or JSON to avoid migrations
 
 Do not avoid a new table merely to reduce implementation effort.
 Do not create a new table merely because a field group looks large.
@@ -78,11 +77,11 @@ Before implementation, state briefly:
 2. Why it fits the query and lifecycle needs.
 3. Why the main alternatives are worse.
 4. Whether schema approval is required.
-5. Which files must be updated: migration, model, API, database-schema.md, tests.
+5. Which files must be updated: migration, model, API, `docs/database-schema.md`, tests.
 
 ## Example heuristic
 
-- `developer.name` -> column.
-- multiple interviews per developer with date, notes, recruiter, outcome, and job link -> child table.
-- developers linked to many jobs and jobs linked to many developers -> join table.
-- raw webhook payload from third-party service -> JSON/JSONB.
+- `activities.name` -> column
+- multiple `activity_logs` per activity with date, volume, duration, and RPE -> child table
+- flare-up incidents linked to one or more likely triggering activity classes -> join table if multi-select is implemented
+- raw import payload from a future Apple Health or Strava sync -> JSON blob on an ingestion table, not core tables

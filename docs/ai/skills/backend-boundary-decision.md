@@ -14,7 +14,7 @@ roles:
 read_first:
   - AGENTS.md
   - docs/architecture.md
-  - docs/V1-TRD.md
+  - plans/milestone-architecture.md
 approval_required_if:
   - new repository or data-access layer
   - cross-cutting backend abstraction changes
@@ -23,15 +23,14 @@ related_skills:
   - schema-decision
 canonical: true
 ---
-
 # Backend Boundary Decision
 
 Use when:
-- deciding where backend logic should live,
-- adding new business rules or orchestration,
-- deciding route versus service versus helper,
-- considering whether a repository or data-access module is justified,
-- noticing logic spread across layers.
+- deciding where backend logic should live
+- adding new business rules or orchestration
+- deciding route versus service versus helper
+- considering whether a repository or data-access module is justified
+- noticing logic spread across layers
 
 Goal:
 Place backend logic in the layer where it belongs so the code stays coherent, testable, and easy to extend.
@@ -40,6 +39,7 @@ Core rules:
 - Keep routers thin and focused on transport concerns.
 - Put business rules, orchestration, and normal database access in `services/`.
 - Use helpers only for reusable logic that is not itself domain orchestration.
+- Keep calculation-heavy logic such as rolling load, delayed-tax detection, and rule evaluation in pure or near-pure service modules where practical.
 - Do not smear logic across layers with unclear ownership.
 - Do not introduce unnecessary service-layer ceremony for trivial one-step CRUD.
 - Repository or data-access modules are allowed later only when explicitly justified and approved, not by default.

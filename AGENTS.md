@@ -1,9 +1,23 @@
-**Read this before every session. Keep it short. Update CURRENT SPRINT each phase.**
+**Read this before every session. Keep it short. Update CURRENT SPRINT when the active phase changes.**
 ---
 ## What This Project Is
-A self-hosted personal dashboard (FastAPI + SQLModel + SQLite → React + TypeScript + Tailwind).
-Full spec: `/docs/V1-PRD.md` (what/why) and `/docs/V1-TRD.md` (how/schema/stack). Read those when you need depth.
-Project-specific role prompts live in `/agents/`. For a major feature or phase build, start with `/agents/orchestrator.md` — one gated agent at a time, no parallel tickets or sub-agents.
+A local-first health and performance tracking app for rehab and training decisions.
+Planned stack: FastAPI + SQLModel + SQLite feeding a React + TypeScript + Tailwind frontend.
+
+Current repo sources of truth:
+- `README.md` — project overview and MVP framing
+- `DESIGN.md` — functional design and product behavior
+- `MOCKUPS.md` — screen flows and UI expectations
+- `plans/milestone-architecture.md` — current architecture, schema, API, and roadmap plan
+- `docs/architecture.md` — decision rules and architectural biases
+- `docs/patterns.md` — target implementation shapes for this repo
+- `docs/api-map.md` — planned API contract map
+- `docs/database-schema.md` — planned relational schema map
+
+Project-specific role prompts live in `/agents/`.
+For a major feature or phase build, start with `/agents/orchestrator.md` as the workflow controller.
+Use one role and one ticket at a time. No parallel tickets or sub-agents.
+
 AI guidance lives in:
 - `agents/README.md` — role prompts and when to use them
 - `docs/ai/README.md` — shared AI workflow notes
@@ -11,43 +25,46 @@ AI guidance lives in:
 - `docs/ai/skills/index.md` — shared skills catalog and routing guide
 ---
 ## Hard Constraints
-1. **No commits to &#42;***`main`****.** All work on feature branches: `feat/`, `fix/`, `chore/`.
-2. **No commit without passing the required tests for that scope. In the per-ticket orchestrator flow, failing tests must exist before code, and the targeted tests for that ticket must pass before that ticket is committed. Run make test before end-of-batch handoff or any broader commit. Do not skip or comment out failing tests. For repo bootstrap work before any tests exist, owner approval is the required verification gate.**
-3. **Tests before code.** Failing tests must exist before any production code is written.
-4. **No business logic in routers.** Logic and DB access belong in `services/`. Routers call services and return responses.
-5. **No hardcoded config.** All env-specific values in `.env`, read via `backend/app/core/config.py`.
-6. **No schema changes without Alembic.** Run `alembic revision --autogenerate` — never raw SQL DDL.
-7. **No &#42;***`any`**** in TypeScript. No untyped Python.** `mypy --strict` and `tsc --noEmit` must pass clean.
-8. **No &#42;***`git push`**** without owner instruction.** Prepare the branch and commit, then stop and report.
-9. **No changes outside current task scope.** If you spot something else to fix, add it to `plans/BACKLOG.md`.
-10. **No secrets committed.** `.env`, `data/`, `*.db` are in `.gitignore`. Stop immediately if you accidentally stage them.
+1. **No commits to `main`.** All work happens on feature branches: `feat/`, `fix/`, `chore/`.
+2. **No commit without passing the required tests for that scope.** In the per-ticket workflow, failing tests must exist before code, and the targeted tests for that ticket must pass before that ticket is committed. Run `make test` before end-of-batch handoff or any broader commit. Do not skip or comment out failing tests. For bootstrap work before any tests exist, owner approval is the verification gate.
+3. **Tests before code.** Failing tests must exist before production code is written.
+4. **No business logic in routers.** Logic and database access belong in `services/`. Routers translate HTTP requests and responses.
+5. **No hardcoded config.** All env-specific values belong in `.env` and must be read through one shared backend settings module.
+6. **No schema changes without Alembic.** Run `alembic revision --autogenerate` for schema changes; never use raw SQL DDL as the source of truth.
+7. **No `any` in TypeScript. No untyped Python.** `mypy --strict` and `tsc --noEmit` must pass clean.
+8. **No `git push` without owner instruction.** Prepare the branch and commit, then stop and report.
+9. **No changes outside the current task scope.** If you spot something else to fix, add it to `plans/BACKLOG.md`.
+10. **No secrets committed.** `.env`, `data/`, and `*.db` stay ignored. Stop immediately if they are ever staged.
 11. **Keep commits small and trackable.** Prefer one logical change per commit, even during early scaffolding.
 ---
-## Quality Gates (must all pass before marking a task done)
-```javascript
-bash# Backend
-ruff check .
-mypy app --strict
-radon cc app -n C          # No function complexity > 10
-pytest --cov=app --cov-fail-under=80
+## Quality Gates
+These are the target gates once backend and frontend scaffolding exist:
+
+```bash
+# Backend
+ruff check backend
+mypy backend/app --strict
+radon cc backend/app -n C
+pytest --cov=backend/app --cov-fail-under=80
 
 # Frontend
-npx tsc --noEmit
-npx eslint src
-npm run test -- --coverage  # ≥ 70%
+npx tsc --noEmit --project frontend/tsconfig.json
+npx eslint frontend/src
+npm --prefix frontend run test -- --coverage  # >= 70%
 ```
-`make lint` and `make test` run these. Use them.
+
+`make lint` and `make test` should wrap the canonical commands once the repo bootstrap is in place.
 ---
-## Current Sprint — 
-**Goal:** 
-**Status (2026-05-18):** 
-**Ticket source:** `plans/...` 
-**Primary references:** 
-**Out of scope:** 
+## Current Sprint —
+**Goal:** Align repo guidance and planning docs so backend implementation can start against one coherent contract.
+**Status (2026-05-26):** Design and agent guidance cleanup in progress before backend scaffolding starts.
+**Ticket source:** `plans/milestone-architecture.md`
+**Primary references:** `README.md`, `DESIGN.md`, `MOCKUPS.md`, `docs/api-map.md`, `docs/database-schema.md`
+**Out of scope:** Backend implementation, frontend scaffolding, auth, multi-user support, tool-specific wrapper automation
 
 ---
 ## Definition of Done
-1. All acceptance criteria tests pass
-2. All quality gates pass
+1. Acceptance criteria tests pass for the scoped work
+2. Required quality gates pass for the scoped work
 3. Owner has reviewed the summary
-4. Owner (not the agent) merges to `main`
+4. Owner, not the agent, decides when to merge to `main`
