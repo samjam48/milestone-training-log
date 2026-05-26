@@ -17,3 +17,4 @@ test:
 lint:
 	cd $(BACKEND_DIR) && .venv/bin/python -m ruff check app
 	cd $(BACKEND_DIR) && .venv/bin/python -m mypy app --strict
+	cd $(BACKEND_DIR) && .venv/bin/radon cc app -n C
