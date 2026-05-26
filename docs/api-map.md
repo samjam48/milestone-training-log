@@ -12,11 +12,15 @@ Use this alongside:
 
 - Base path: `/api`
 - Phase 1 is local-first and single-user; auth is out of scope for now
+- `user_id` is resolved server-side to `"local"` in Phase 1
 - JSON request and response bodies
 - Date-only values use `YYYY-MM-DD`
 - Timestamps use ISO 8601
 - Routers stay thin; business logic and persistence live in `services/`
 - Add explicit domain-action endpoints when plain CRUD stops fitting cleanly
+- Daily check-in responses may include an embedded `flareUp` object composed
+  from related `flare_up_incidents` rows; the database source of truth remains
+  relational, not duplicated JSON on `daily_check_ins`
 
 ## Planned Resources
 
@@ -32,8 +36,7 @@ Use this alongside:
 | --- | --- | --- |
 | `GET` | `/api/goals` | List goals, optionally filtered by status or timeframe |
 | `POST` | `/api/goals` | Create a goal |
-| `GET` | `/api/goals/{goal_id}` | Fetch one goal |
-| `PATCH` | `/api/goals/{goal_id}` | Update goal fields such as title, target date, or status |
+| `PATCH` | `/api/goals/{goal_id}` | Update goal fields such as title, target date, status, or numeric progress |
 
 ### Training Blocks
 
@@ -42,7 +45,6 @@ Use this alongside:
 | `GET` | `/api/training-blocks` | List blocks |
 | `POST` | `/api/training-blocks` | Create a new block |
 | `GET` | `/api/training-blocks/active` | Fetch the active block, if one exists |
-| `GET` | `/api/training-blocks/{block_id}` | Fetch one block |
 | `PATCH` | `/api/training-blocks/{block_id}` | Update block metadata or lifecycle status |
 
 ### Activity Classes
@@ -51,25 +53,22 @@ Use this alongside:
 | --- | --- | --- |
 | `GET` | `/api/activity-classes` | List activity classes |
 | `POST` | `/api/activity-classes` | Create an activity class |
-| `GET` | `/api/activity-classes/{class_id}` | Fetch one activity class |
 | `PATCH` | `/api/activity-classes/{class_id}` | Update class metadata |
 
 ### Activities
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/api/activities` | List activities, optionally filtered by class or type |
+| `GET` | `/api/activities` | List activities, optionally filtered by `class_id` or `is_active` |
 | `POST` | `/api/activities` | Create an activity |
-| `GET` | `/api/activities/{activity_id}` | Fetch one activity |
-| `PATCH` | `/api/activities/{activity_id}` | Update activity fields |
+| `PATCH` | `/api/activities/{activity_id}` | Update activity fields such as name, default unit, or active status |
 
 ### Activity Logs
 
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/activity-logs` | List logs, filterable by date range, activity, or class |
-| `POST` | `/api/activity-logs` | Create a log entry |
-| `GET` | `/api/activity-logs/{log_id}` | Fetch one log entry |
+| `POST` | `/api/activity-logs` | Create a log entry and persist any log-time rule violation snapshots |
 | `PATCH` | `/api/activity-logs/{log_id}` | Update a log entry |
 | `DELETE` | `/api/activity-logs/{log_id}` | Delete a log entry |
 
@@ -78,7 +77,7 @@ Use this alongside:
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/daily-check-ins` | List check-ins, filterable by date range |
-| `POST` | `/api/daily-check-ins` | Create or upsert a check-in for a date |
+| `POST` | `/api/daily-check-ins` | Create or upsert a check-in for a date; may also create or update a linked flare-up incident |
 | `GET` | `/api/daily-check-ins/today` | Shortcut for today's check-in |
 | `GET` | `/api/daily-check-ins/{check_in_date}` | Fetch a check-in by date |
 | `PATCH` | `/api/daily-check-ins/{check_in_date}` | Update a check-in by date |
@@ -88,35 +87,39 @@ Use this alongside:
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/flare-up-incidents` | List flare-up incidents |
-| `POST` | `/api/flare-up-incidents` | Create a flare-up incident |
-| `GET` | `/api/flare-up-incidents/{incident_id}` | Fetch one incident |
+| `POST` | `/api/flare-up-incidents` | Create a flare-up incident with optional single likely-cause activity class |
 | `PATCH` | `/api/flare-up-incidents/{incident_id}` | Update an incident |
 
-### Recovery Rules
+### Rules
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/api/rules` | List recovery rules |
-| `POST` | `/api/rules` | Create a rule |
-| `GET` | `/api/rules/{rule_id}` | Fetch one rule |
+| `GET` | `/api/training-blocks/{block_id}/rules` | List rules for a training block |
+| `POST` | `/api/training-blocks/{block_id}/rules` | Create a rule under a training block |
 | `PATCH` | `/api/rules/{rule_id}` | Update a rule |
 | `DELETE` | `/api/rules/{rule_id}` | Delete a rule |
+
+### Weekly Targets
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/training-blocks/{block_id}/weekly-targets` | List weekly targets for a training block |
+| `POST` | `/api/training-blocks/{block_id}/weekly-targets` | Create a weekly target for a performance class |
+| `PATCH` | `/api/weekly-targets/{target_id}` | Update a weekly target |
 
 ### Recovery Targets
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/api/recovery-targets` | List recovery targets |
-| `POST` | `/api/recovery-targets` | Create a recovery target |
-| `GET` | `/api/recovery-targets/{target_id}` | Fetch one target |
-| `PATCH` | `/api/recovery-targets/{target_id}` | Update a target |
-| `DELETE` | `/api/recovery-targets/{target_id}` | Delete a target |
+| `GET` | `/api/training-blocks/{block_id}/recovery-targets` | List recovery targets for a training block |
+| `POST` | `/api/training-blocks/{block_id}/recovery-targets` | Create a recovery target for a recovery activity |
 
 ### Derived Load And Dashboard Data
 
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/load/summary` | Rolling load, rule violations, and traffic-light risk as of a date |
+| `POST` | `/api/load/check-violations` | Dry-run rule checks for a proposed activity log without writing to the database |
 | `GET` | `/api/load/delayed-tax` | Correlate pain or flare signals with activity spikes 24-72 hours earlier |
 | `GET` | `/api/dashboard` | Aggregate dashboard payload for weekly targets, streaks, suggestions, and status cards |
 

@@ -11,11 +11,35 @@ Use this alongside:
 ## Modeling Conventions
 
 - Phase 1 is single-user and local-first.
-- Keep a `user_id` field only if the implementation wants to preserve an easy path to future multi-user support; if that decision changes, update this doc and the architecture plan together.
+- Use opaque string IDs across all tables so backend IDs match the frontend type
+  shapes cleanly.
+- Keep `user_id = "local"` on top-level user-owned tables only:
+  `goals`, `training_blocks`, `activity_classes`, `activities`,
+  `activity_logs`, `daily_check_ins`, and `flare_up_incidents`.
+- Do not duplicate `user_id` onto block-owned child tables:
+  `rules`, `weekly_targets`, and `recovery_targets`.
 - Table names should be plural snake_case.
 - Use foreign keys for cross-entity relationships.
 - Use Alembic for every schema change.
 - Keep business rules in services, not as ad hoc schema workarounds.
+- Store detailed flare-up records relationally in `flare_up_incidents`.
+  `daily_check_ins` keeps `has_flare_up`, and API responses may compose the
+  frontend's embedded `flareUp` object from the related incident row.
+
+## Planned Tables Summary
+
+Phase 1 includes **10 tables**:
+
+- `goals`
+- `training_blocks`
+- `activity_classes`
+- `activities`
+- `activity_logs`
+- `daily_check_ins`
+- `flare_up_incidents`
+- `rules`
+- `weekly_targets`
+- `recovery_targets`
 
 ## Planned Tables
 
@@ -28,6 +52,9 @@ Use this alongside:
 - `target_date`
 - `timeframe` — monthly or quarterly
 - `activity_class_id` nullable
+- `progress_value` nullable
+- `progress_target` nullable
+- `progress_unit` nullable
 - `status` — active, achieved, missed, paused
 - `created_at`
 - `updated_at`
@@ -72,8 +99,10 @@ Purpose:
 - `activity_class_id`
 - `name`
 - `type` — performance or recovery
+- `default_volume_unit`
 - `is_active`
 - `created_at`
+- `updated_at`
 
 Purpose:
 - Specific loggable activities such as walking, padel, stretching, or contrast therapy
@@ -90,7 +119,9 @@ Purpose:
 - `rpe` nullable for recovery activities if the product keeps it optional there
 - `post_activity_feel` nullable
 - `notes` nullable
+- `rule_violations_at_log` nullable JSON snapshot
 - `created_at`
+- `updated_at`
 
 Purpose:
 - Raw activity events that drive rolling load, weekly totals, and delayed-tax analysis
@@ -106,6 +137,7 @@ Purpose:
 - `has_flare_up`
 - `notes` nullable
 - `created_at`
+- `updated_at`
 
 Constraints:
 - Unique per `user_id` and `check_in_date`
@@ -119,10 +151,12 @@ Purpose:
 - `user_id`
 - `incident_date`
 - `body_part`
-- `severity`
+- `severity` — `0..10`
 - `activity_class_id` nullable if only one likely trigger is stored
+- `daily_check_in_id` nullable
 - `notes` nullable
 - `created_at`
+- `updated_at`
 
 Purpose:
 - Structured records of pain or injury incidents beyond the regular daily check-in
@@ -137,9 +171,24 @@ Purpose:
 - `window_days`
 - `enabled`
 - `created_at`
+- `updated_at`
 
 Purpose:
-- Recovery constraints such as rest windows, frequency caps, weekly load caps, or consecutive-day limits
+- Recovery constraints such as rest windows, frequency caps, weekly load caps,
+  consecutive-day limits, or cross-class weekly activity count
+
+### `weekly_targets`
+
+- `id`
+- `training_block_id`
+- `activity_class_id`
+- `target_value`
+- `target_unit`
+- `created_at`
+- `updated_at`
+
+Purpose:
+- Weekly volume targets for performance activity classes during a training block
 
 ### `recovery_targets`
 
@@ -150,6 +199,7 @@ Purpose:
 - `frequency_unit` — daily or weekly
 - `current_streak_days`
 - `created_at`
+- `updated_at`
 
 Purpose:
 - Compliance-style goals for recovery activities that do not directly affect load
@@ -158,13 +208,16 @@ Purpose:
 
 - One `goal` can relate to many `training_blocks`, but each block references at most one goal.
 - One `training_block` owns many `rules`.
+- One `training_block` owns many `weekly_targets`.
 - One `training_block` owns many `recovery_targets`.
 - One `activity_class` owns many `activities`.
-- One `activity_class` can be referenced by many `goals`, `rules`, and `flare_up_incidents`.
+- One `activity_class` can be referenced by many `goals`, `rules`,
+  `weekly_targets`, and `flare_up_incidents`.
 - One `activity` owns many `activity_logs`.
+- One `daily_check_in` can surface zero or more linked `flare_up_incidents`,
+  though Phase 1 behavior expects at most one check-in-sourced incident row.
 
 ## Open Modeling Notes
 
 - If flare-up incidents need multi-select "likely caused by" classes, add a join table instead of storing arrays in JSON.
-- If the team decides Phase 1 should skip `user_id` entirely, remove it consistently rather than mixing both approaches.
 - If the implemented backend uses different enum names or table names, update this doc and `docs/api-map.md` together.
