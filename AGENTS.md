@@ -53,6 +53,10 @@ npx eslint frontend/src
 npm --prefix frontend run test -- --coverage  # >= 70%
 ```
 
+Before `frontend/` exists, backend gates are required and frontend gates are not
+applicable. PR checks must run backend commands through `make` or from
+`backend/` so `backend/pyproject.toml` is loaded.
+
 `make lint` and `make test` should wrap the canonical commands once the repo bootstrap is in place.
 ---
 ## Current Sprint —
