@@ -6,6 +6,7 @@ from app.routers.activity_logs import router as activity_logs_router
 from app.routers.daily_check_ins import router as daily_check_ins_router
 from app.routers.flare_up_incidents import router as flare_up_incidents_router
 from app.routers.health import router as health_router
+from app.routers.rules import rules_router, training_block_rules_router
 from app.routers.training_blocks import router as training_blocks_router
 from app.settings import APP_VERSION
 
@@ -19,6 +20,8 @@ def create_app() -> FastAPI:
     app.include_router(daily_check_ins_router)
     app.include_router(flare_up_incidents_router)
     app.include_router(training_blocks_router)
+    app.include_router(training_block_rules_router)
+    app.include_router(rules_router)
     return app
 
 
