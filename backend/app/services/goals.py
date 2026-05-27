@@ -1,11 +1,11 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from sqlmodel import Session, col, select
 
 from app.models.activity import ActivityClass
 from app.models.goal import Goal
 from app.schemas.goals import GoalCreate, GoalPatch
-from app.services.activity_classes import LOCAL_USER_ID
+from app.services.local_scope import LOCAL_USER_ID, next_updated_at
 
 
 class GoalAlreadyExistsError(Exception):
@@ -76,7 +76,7 @@ def update_goal(session: Session, goal_id: str, payload: GoalPatch) -> Goal:
         setattr(goal, field_name, value)
 
     if updates:
-        goal.updated_at = _next_updated_at(goal.updated_at)
+        goal.updated_at = next_updated_at(goal.updated_at)
 
     session.add(goal)
     session.commit()
@@ -103,14 +103,3 @@ def _get_local_goal(session: Session, goal_id: str) -> Goal:
     if goal is None:
         raise GoalNotFoundError
     return goal
-
-
-def _next_updated_at(previous_updated_at: datetime) -> datetime:
-    previous = previous_updated_at
-    if previous.tzinfo is None:
-        previous = previous.replace(tzinfo=UTC)
-
-    now = datetime.now(UTC)
-    if now <= previous:
-        return previous + timedelta(microseconds=1)
-    return now

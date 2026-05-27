@@ -1,128 +1,13 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Iterator
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 from typing import Any
 
 import pytest
 from fastapi import FastAPI
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, SQLModel, create_engine
+from httpx import AsyncClient
 
-import app.models  # noqa: F401
-from app.database import get_session
-from app.main import create_app
-from app.models.block import TrainingBlock
-from app.models.goal import Goal
-
-
-@pytest.fixture
-def app_with_test_database() -> Iterator[FastAPI]:
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    SQLModel.metadata.create_all(engine)
-    app = create_app()
-
-    def override_get_session() -> Iterator[Session]:
-        with Session(engine) as session:
-            yield session
-
-    app.dependency_overrides[get_session] = override_get_session
-    yield app
-    app.dependency_overrides.clear()
-
-
-@pytest.fixture
-async def client(app_with_test_database: FastAPI) -> AsyncIterator[AsyncClient]:
-    transport = ASGITransport(app=app_with_test_database)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        yield client
-
-
-def _utc_datetime(hour: int, minute: int = 0) -> datetime:
-    return datetime(2026, 5, 27, hour, minute, tzinfo=UTC)
-
-
-def _seed_goal(
-    app_with_test_database: FastAPI,
-    *,
-    goal_id: str = "goal-1",
-    title: str = "Walk 20km",
-) -> None:
-    override = app_with_test_database.dependency_overrides[get_session]
-    session_iterator = override()
-    session = next(session_iterator)
-    try:
-        session.add(
-            Goal(
-                id=goal_id,
-                user_id="local",
-                title=title,
-                description="Monthly walking goal",
-                target_date=date(2026, 6, 30),
-                timeframe="monthly",
-                activity_class_id=None,
-                progress_value=None,
-                progress_target=None,
-                progress_unit=None,
-                status="active",
-                created_at=_utc_datetime(7),
-                updated_at=_utc_datetime(7),
-            )
-        )
-        session.commit()
-    finally:
-        session.close()
-        try:
-            next(session_iterator)
-        except StopIteration:
-            pass
-
-
-def _seed_training_block(
-    app_with_test_database: FastAPI,
-    *,
-    block_id: str,
-    name: str,
-    start_date: date,
-    status: str = "active",
-    end_date: date | None = None,
-    related_goal_id: str | None = None,
-    notes: str | None = None,
-    is_review_milestone_hit: bool = False,
-    created_at: datetime | None = None,
-) -> None:
-    override = app_with_test_database.dependency_overrides[get_session]
-    session_iterator = override()
-    session = next(session_iterator)
-    now = created_at or _utc_datetime(8)
-    try:
-        session.add(
-            TrainingBlock(
-                id=block_id,
-                user_id="local",
-                name=name,
-                start_date=start_date,
-                end_date=end_date,
-                status=status,
-                related_goal_id=related_goal_id,
-                notes=notes,
-                is_review_milestone_hit=is_review_milestone_hit,
-                created_at=now,
-                updated_at=now,
-            )
-        )
-        session.commit()
-    finally:
-        session.close()
-        try:
-            next(session_iterator)
-        except StopIteration:
-            pass
+from app.tests.helpers.seed import seed_goal, seed_training_block
 
 
 def _assert_training_block_payload(
@@ -163,28 +48,28 @@ async def test_list_training_blocks_returns_local_blocks_in_start_date_desc_orde
     app_with_test_database: FastAPI,
     client: AsyncClient,
 ) -> None:
-    _seed_training_block(
+    seed_training_block(
         app_with_test_database,
         block_id="blk-old",
         name="Older Block",
         start_date=date(2026, 3, 1),
         status="completed",
     )
-    _seed_training_block(
+    seed_training_block(
         app_with_test_database,
         block_id="blk-new",
         name="Newer Block",
         start_date=date(2026, 5, 1),
         status="archived",
     )
-    _seed_training_block(
+    seed_training_block(
         app_with_test_database,
         block_id="blk-mid-a",
         name="Same Start A",
         start_date=date(2026, 4, 1),
         status="completed",
     )
-    _seed_training_block(
+    seed_training_block(
         app_with_test_database,
         block_id="blk-mid-b",
         name="Same Start B",
@@ -207,14 +92,14 @@ async def test_get_active_training_block_returns_active_block(
     app_with_test_database: FastAPI,
     client: AsyncClient,
 ) -> None:
-    _seed_training_block(
+    seed_training_block(
         app_with_test_database,
         block_id="blk-active",
         name="Active Block",
         start_date=date(2026, 4, 7),
         status="active",
     )
-    _seed_training_block(
+    seed_training_block(
         app_with_test_database,
         block_id="blk-completed",
         name="Completed Block",
@@ -315,7 +200,7 @@ async def test_create_training_block_returns_conflict_for_duplicate_id(
     app_with_test_database: FastAPI,
     client: AsyncClient,
 ) -> None:
-    _seed_training_block(
+    seed_training_block(
         app_with_test_database,
         block_id="blk-1",
         name="Existing Block",
@@ -340,7 +225,7 @@ async def test_create_active_training_block_completes_previous_active_block(
     app_with_test_database: FastAPI,
     client: AsyncClient,
 ) -> None:
-    _seed_training_block(
+    seed_training_block(
         app_with_test_database,
         block_id="blk-old",
         name="Old Active",
@@ -371,7 +256,7 @@ async def test_create_training_block_validates_related_goal_id(
     app_with_test_database: FastAPI,
     client: AsyncClient,
 ) -> None:
-    _seed_goal(app_with_test_database)
+    seed_goal(app_with_test_database)
 
     valid_response = await client.post(
         "/api/training-blocks",
@@ -404,7 +289,7 @@ async def test_patch_training_block_updates_only_present_fields(
     app_with_test_database: FastAPI,
     client: AsyncClient,
 ) -> None:
-    _seed_training_block(
+    seed_training_block(
         app_with_test_database,
         block_id="blk-1",
         name="Before",
@@ -436,7 +321,7 @@ async def test_patch_training_block_allows_empty_body_without_changing_row(
     app_with_test_database: FastAPI,
     client: AsyncClient,
 ) -> None:
-    _seed_training_block(
+    seed_training_block(
         app_with_test_database,
         block_id="blk-1",
         name="Unchanged",
@@ -460,8 +345,8 @@ async def test_patch_training_block_allows_nullable_fields_to_be_cleared(
     app_with_test_database: FastAPI,
     client: AsyncClient,
 ) -> None:
-    _seed_goal(app_with_test_database)
-    _seed_training_block(
+    seed_goal(app_with_test_database)
+    seed_training_block(
         app_with_test_database,
         block_id="blk-1",
         name="Linked Block",
@@ -495,14 +380,14 @@ async def test_patch_training_block_to_active_completes_previous_active_block(
     app_with_test_database: FastAPI,
     client: AsyncClient,
 ) -> None:
-    _seed_training_block(
+    seed_training_block(
         app_with_test_database,
         block_id="blk-active",
         name="Current Active",
         start_date=date(2026, 4, 7),
         status="active",
     )
-    _seed_training_block(
+    seed_training_block(
         app_with_test_database,
         block_id="blk-archived",
         name="To Activate",
@@ -528,14 +413,14 @@ async def test_patch_active_block_to_completed_does_not_promote_another_block(
     app_with_test_database: FastAPI,
     client: AsyncClient,
 ) -> None:
-    _seed_training_block(
+    seed_training_block(
         app_with_test_database,
         block_id="blk-active",
         name="Active",
         start_date=date(2026, 4, 7),
         status="active",
     )
-    _seed_training_block(
+    seed_training_block(
         app_with_test_database,
         block_id="blk-archived",
         name="Archived",
@@ -565,3 +450,65 @@ async def test_patch_missing_training_block_returns_stable_not_found(
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Training block not found"}
+
+
+@pytest.mark.parametrize("invalid_status", ["Active", "banana"])
+async def test_create_training_block_rejects_invalid_status(
+    client: AsyncClient,
+    invalid_status: str,
+) -> None:
+    response = await client.post(
+        "/api/training-blocks",
+        json={
+            "id": f"blk-invalid-{invalid_status.lower()}",
+            "name": "Invalid Status Block",
+            "start_date": "2026-04-07",
+            "status": invalid_status,
+        },
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize(
+    ("field_name", "null_patch"),
+    [
+        ("name", {"name": None}),
+        ("start_date", {"start_date": None}),
+        ("status", {"status": None}),
+    ],
+)
+async def test_patch_training_block_rejects_null_required_fields_without_changing_row(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+    field_name: str,
+    null_patch: dict[str, None],
+) -> None:
+    seed_training_block(
+        app_with_test_database,
+        block_id="blk-1",
+        name="Before",
+        start_date=date(2026, 4, 7),
+        status="archived",
+    )
+
+    response = await client.patch("/api/training-blocks/blk-1", json=null_patch)
+
+    assert response.status_code == 422
+    error_fields = {
+        str(error_location[-1])
+        for error in response.json()["detail"]
+        if (error_location := error.get("loc"))
+    }
+    assert field_name in error_fields
+
+    list_response = await client.get("/api/training-blocks")
+    assert list_response.status_code == 200
+    assert len(list_response.json()) == 1
+    _assert_training_block_payload(
+        list_response.json()[0],
+        block_id="blk-1",
+        name="Before",
+        start_date="2026-04-07",
+        status="archived",
+    )

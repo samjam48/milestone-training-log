@@ -1,4 +1,4 @@
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 from typing import Any
 
 from sqlmodel import Session, col, select
@@ -6,7 +6,7 @@ from sqlmodel import Session, col, select
 from app.models.activity import Activity
 from app.models.log import ActivityLog
 from app.schemas.activity_logs import ActivityLogCreate, ActivityLogPatch
-from app.services.activity_classes import LOCAL_USER_ID
+from app.services.local_scope import LOCAL_USER_ID, next_updated_at
 from app.services.recovery_targets import recalculate_recovery_streaks_for_activity
 
 
@@ -105,7 +105,7 @@ def update_activity_log(
             setattr(activity_log, field_name, value)
 
     if updates:
-        activity_log.updated_at = _next_updated_at(activity_log.updated_at)
+        activity_log.updated_at = next_updated_at(activity_log.updated_at)
 
     session.add(activity_log)
     session.commit()
@@ -175,12 +175,3 @@ def _get_local_activity_log(session: Session, log_id: str) -> ActivityLog:
     return activity_log
 
 
-def _next_updated_at(previous_updated_at: datetime) -> datetime:
-    previous = previous_updated_at
-    if previous.tzinfo is None:
-        previous = previous.replace(tzinfo=UTC)
-
-    now = datetime.now(UTC)
-    if now <= previous:
-        return previous + timedelta(microseconds=1)
-    return now

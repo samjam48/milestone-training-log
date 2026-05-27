@@ -1,11 +1,11 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from sqlmodel import Session, col, select
 
 from app.models.block import TrainingBlock
 from app.models.goal import Goal
 from app.schemas.training_blocks import TrainingBlockCreate, TrainingBlockPatch
-from app.services.activity_classes import LOCAL_USER_ID
+from app.services.local_scope import LOCAL_USER_ID, next_updated_at
 
 
 class TrainingBlockAlreadyExistsError(Exception):
@@ -88,7 +88,7 @@ def update_training_block(
         setattr(training_block, field_name, value)
 
     if updates:
-        training_block.updated_at = _next_updated_at(training_block.updated_at)
+        training_block.updated_at = next_updated_at(training_block.updated_at)
 
     if updates.get("status") == "active":
         _complete_other_active_blocks(session, exclude_block_id=block_id)
@@ -107,7 +107,7 @@ def _complete_other_active_blocks(session: Session, *, exclude_block_id: str) ->
     )
     for other_block in session.exec(statement).all():
         other_block.status = "completed"
-        other_block.updated_at = _next_updated_at(other_block.updated_at)
+        other_block.updated_at = next_updated_at(other_block.updated_at)
         session.add(other_block)
 
 
@@ -119,17 +119,6 @@ def _ensure_local_goal_exists(session: Session, goal_id: str) -> None:
     goal = session.exec(statement).first()
     if goal is None:
         raise GoalNotFoundError
-
-
-def _next_updated_at(previous_updated_at: datetime) -> datetime:
-    previous = previous_updated_at
-    if previous.tzinfo is None:
-        previous = previous.replace(tzinfo=UTC)
-
-    now = datetime.now(UTC)
-    if now <= previous:
-        return previous + timedelta(microseconds=1)
-    return now
 
 
 def _get_local_training_block(session: Session, block_id: str) -> TrainingBlock:

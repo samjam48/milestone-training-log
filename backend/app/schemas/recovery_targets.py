@@ -1,7 +1,8 @@
 from datetime import UTC, datetime
-from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, field_validator
+
+from app.schemas.enums import FrequencyUnit
 
 
 class RecoveryTargetCreate(BaseModel):
@@ -10,7 +11,7 @@ class RecoveryTargetCreate(BaseModel):
     id: str
     activity_id: str
     target_frequency: int
-    frequency_unit: Literal["daily", "weekly"]
+    frequency_unit: FrequencyUnit
 
     @field_validator("target_frequency")
     @classmethod

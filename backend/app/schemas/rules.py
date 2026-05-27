@@ -2,13 +2,15 @@ from datetime import UTC, datetime
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
+from app.schemas.enums import RuleType
+
 
 class RuleCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str
     activity_class_id: str | None = None
-    rule_type: str
+    rule_type: RuleType
     threshold_value: float
     window_days: int
     enabled: bool = True
@@ -18,7 +20,7 @@ class RulePatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     activity_class_id: str | None = None
-    rule_type: str | None = None
+    rule_type: RuleType | None = None
     threshold_value: float | None = None
     window_days: int | None = None
     enabled: bool | None = None

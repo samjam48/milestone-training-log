@@ -1,210 +1,19 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Iterator
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
 
 import pytest
 from fastapi import FastAPI
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, SQLModel, create_engine
+from httpx import AsyncClient
 
-import app.models  # noqa: F401
-from app.database import get_session
-from app.main import create_app
-from app.models.activity import Activity, ActivityClass
-from app.models.block import RecoveryTarget, TrainingBlock
-from app.models.log import ActivityLog
-
-
-@pytest.fixture
-def app_with_test_database() -> Iterator[FastAPI]:
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    SQLModel.metadata.create_all(engine)
-    app = create_app()
-
-    def override_get_session() -> Iterator[Session]:
-        with Session(engine) as session:
-            yield session
-
-    app.dependency_overrides[get_session] = override_get_session
-    yield app
-    app.dependency_overrides.clear()
-
-
-@pytest.fixture
-async def client(app_with_test_database: FastAPI) -> AsyncIterator[AsyncClient]:
-    transport = ASGITransport(app=app_with_test_database)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        yield client
-
-
-def _utc_datetime(hour: int, minute: int = 0) -> datetime:
-    return datetime(2026, 5, 27, hour, minute, tzinfo=UTC)
-
-
-def _with_session(app_with_test_database: FastAPI) -> Iterator[Session]:
-    override = app_with_test_database.dependency_overrides[get_session]
-    session_iterator = override()
-    session = next(session_iterator)
-    try:
-        yield session
-    finally:
-        session.close()
-        try:
-            next(session_iterator)
-        except StopIteration:
-            pass
-
-
-def _seed_training_block(
-    app_with_test_database: FastAPI,
-    *,
-    block_id: str,
-    name: str,
-    start_date: date,
-    status: str = "active",
-    end_date: date | None = None,
-    notes: str | None = None,
-    created_at: datetime | None = None,
-) -> None:
-    for session in _with_session(app_with_test_database):
-        now = created_at or _utc_datetime(8)
-        session.add(
-            TrainingBlock(
-                id=block_id,
-                user_id="local",
-                name=name,
-                start_date=start_date,
-                end_date=end_date,
-                status=status,
-                related_goal_id=None,
-                notes=notes,
-                is_review_milestone_hit=False,
-                created_at=now,
-                updated_at=now,
-            )
-        )
-        session.commit()
-
-
-def _seed_activity_class(
-    app_with_test_database: FastAPI,
-    *,
-    class_id: str,
-    name: str,
-    description: str = "Seeded class",
-    class_type: str = "recovery",
-    default_recovery_window_days: int = 1,
-    created_at: datetime | None = None,
-) -> None:
-    for session in _with_session(app_with_test_database):
-        session.add(
-            ActivityClass(
-                id=class_id,
-                user_id="local",
-                name=name,
-                description=description,
-                type=class_type,
-                default_recovery_window_days=default_recovery_window_days,
-                created_at=created_at or _utc_datetime(8),
-            )
-        )
-        session.commit()
-
-
-def _seed_activity(
-    app_with_test_database: FastAPI,
-    *,
-    activity_id: str,
-    activity_class_id: str,
-    name: str,
-    activity_type: str = "recovery",
-    default_volume_unit: str = "minutes",
-    is_active: bool = True,
-    created_at: datetime | None = None,
-    updated_at: datetime | None = None,
-) -> None:
-    for session in _with_session(app_with_test_database):
-        session.add(
-            Activity(
-                id=activity_id,
-                user_id="local",
-                activity_class_id=activity_class_id,
-                name=name,
-                type=activity_type,
-                default_volume_unit=default_volume_unit,
-                is_active=is_active,
-                created_at=created_at or _utc_datetime(9),
-                updated_at=updated_at or _utc_datetime(9),
-            )
-        )
-        session.commit()
-
-
-def _seed_recovery_target(
-    app_with_test_database: FastAPI,
-    *,
-    target_id: str,
-    training_block_id: str,
-    activity_id: str,
-    target_frequency: int,
-    frequency_unit: str,
-    current_streak_days: int = 0,
-    created_at: datetime | None = None,
-) -> None:
-    for session in _with_session(app_with_test_database):
-        now = created_at or _utc_datetime(9)
-        session.add(
-            RecoveryTarget(
-                id=target_id,
-                training_block_id=training_block_id,
-                activity_id=activity_id,
-                target_frequency=target_frequency,
-                frequency_unit=frequency_unit,
-                current_streak_days=current_streak_days,
-                created_at=now,
-                updated_at=now,
-            )
-        )
-        session.commit()
-
-
-def _seed_activity_log(
-    app_with_test_database: FastAPI,
-    *,
-    log_id: str,
-    activity_id: str,
-    logged_date: date,
-    duration_minutes: int = 20,
-    volume_value: float = 1.0,
-    volume_unit: str | None = "minutes",
-    created_at: datetime | None = None,
-) -> None:
-    for session in _with_session(app_with_test_database):
-        session.add(
-            ActivityLog(
-                id=log_id,
-                user_id="local",
-                activity_id=activity_id,
-                logged_date=logged_date,
-                duration_minutes=duration_minutes,
-                volume_value=volume_value,
-                volume_unit=volume_unit,
-                rpe=None,
-                post_activity_feel=None,
-                notes=None,
-                rule_violations_at_log=None,
-                created_at=created_at or _utc_datetime(10),
-                updated_at=created_at or _utc_datetime(10),
-            )
-        )
-        session.commit()
+from app.tests.helpers.seed import (
+    seed_activity,
+    seed_activity_class,
+    seed_activity_log,
+    seed_recovery_target,
+    seed_training_block,
+)
 
 
 def _seed_recovery_target_graph(
@@ -216,7 +25,7 @@ def _seed_recovery_target_graph(
     block_end: date | None = None,
     activity_id: str = "act-mobility",
 ) -> None:
-    _seed_training_block(
+    seed_training_block(
         app_with_test_database,
         block_id=block_id,
         name="Recovery Block",
@@ -224,24 +33,27 @@ def _seed_recovery_target_graph(
         end_date=block_end,
         status=block_status,
     )
-    _seed_activity_class(
+    seed_activity_class(
         app_with_test_database,
         class_id="cls-recovery",
         name="Recovery",
+        class_type="recovery",
+        default_recovery_window_days=1,
     )
-    _seed_activity_class(
+    seed_activity_class(
         app_with_test_database,
         class_id="cls-performance",
         name="Performance",
         class_type="performance",
     )
-    _seed_activity(
+    seed_activity(
         app_with_test_database,
         activity_id=activity_id,
         activity_class_id="cls-recovery",
         name="Mobility",
+        activity_type="recovery",
     )
-    _seed_activity(
+    seed_activity(
         app_with_test_database,
         activity_id="act-walk",
         activity_class_id="cls-performance",
@@ -343,13 +155,14 @@ async def test_list_recovery_targets_returns_targets_ordered_by_activity_then_id
     client: AsyncClient,
 ) -> None:
     _seed_recovery_target_graph(app_with_test_database)
-    _seed_activity(
+    seed_activity(
         app_with_test_database,
         activity_id="act-stretch",
         activity_class_id="cls-recovery",
         name="Stretch",
+        activity_type="recovery",
     )
-    _seed_recovery_target(
+    seed_recovery_target(
         app_with_test_database,
         target_id="rt-b",
         training_block_id="blk-active",
@@ -357,7 +170,7 @@ async def test_list_recovery_targets_returns_targets_ordered_by_activity_then_id
         target_frequency=1,
         frequency_unit="daily",
     )
-    _seed_recovery_target(
+    seed_recovery_target(
         app_with_test_database,
         target_id="rt-a",
         training_block_id="blk-active",
@@ -391,7 +204,7 @@ async def test_list_recovery_targets_remains_readable_when_parent_block_is_not_a
         app_with_test_database,
         block_status=parent_status,
     )
-    _seed_recovery_target(
+    seed_recovery_target(
         app_with_test_database,
         target_id="rt-1",
         training_block_id="blk-active",
@@ -531,7 +344,7 @@ async def test_create_recovery_target_returns_conflict_for_duplicate_id(
     client: AsyncClient,
 ) -> None:
     _seed_recovery_target_graph(app_with_test_database)
-    _seed_recovery_target(
+    seed_recovery_target(
         app_with_test_database,
         target_id="rt-1",
         training_block_id="blk-active",
@@ -559,7 +372,7 @@ async def test_create_recovery_target_returns_conflict_for_duplicate_block_activ
     client: AsyncClient,
 ) -> None:
     _seed_recovery_target_graph(app_with_test_database)
-    _seed_recovery_target(
+    seed_recovery_target(
         app_with_test_database,
         target_id="rt-existing",
         training_block_id="blk-active",
@@ -605,7 +418,7 @@ async def test_create_recovery_target_rejects_target_frequency_below_one(
     assert response.status_code == 422
 
 
-@pytest.mark.parametrize("invalid_unit", ["monthly", "day", ""])
+@pytest.mark.parametrize("invalid_unit", ["monthly", "day", "", "Daily", "WEEKLY"])
 async def test_create_recovery_target_rejects_invalid_frequency_unit(
     app_with_test_database: FastAPI,
     client: AsyncClient,
@@ -658,7 +471,7 @@ async def test_recovery_target_patch_and_delete_routes_are_not_available(
     client: AsyncClient,
 ) -> None:
     _seed_recovery_target_graph(app_with_test_database)
-    _seed_recovery_target(
+    seed_recovery_target(
         app_with_test_database,
         target_id="rt-1",
         training_block_id="blk-active",
@@ -764,13 +577,13 @@ async def test_daily_streak_is_zero_when_ending_day_does_not_meet_target(
         target_frequency=2,
         frequency_unit="daily",
     )
-    _seed_activity_log(
+    seed_activity_log(
         app_with_test_database,
         log_id="log-day-1",
         activity_id="act-mobility",
         logged_date=date(2026, 5, 25),
     )
-    _seed_activity_log(
+    seed_activity_log(
         app_with_test_database,
         log_id="log-day-2",
         activity_id="act-mobility",
@@ -887,7 +700,7 @@ async def test_weekly_streak_is_zero_when_ending_week_does_not_meet_target(
         target_frequency=2,
         frequency_unit="weekly",
     )
-    _seed_activity_log(
+    seed_activity_log(
         app_with_test_database,
         log_id="log-prior-week",
         activity_id="act-mobility",
@@ -1052,14 +865,14 @@ async def test_streak_updates_only_for_matching_target_on_active_block(
         block_id="blk-archived",
         block_status="archived",
     )
-    _seed_training_block(
+    seed_training_block(
         app_with_test_database,
         block_id="blk-active",
         name="Recovery Block Active",
         start_date=date(2026, 5, 1),
         status="active",
     )
-    _seed_recovery_target(
+    seed_recovery_target(
         app_with_test_database,
         target_id="rt-archived",
         training_block_id="blk-archived",
@@ -1103,11 +916,12 @@ async def test_recovery_log_without_matching_target_is_no_op_for_streaks(
     client: AsyncClient,
 ) -> None:
     _seed_recovery_target_graph(app_with_test_database)
-    _seed_activity(
+    seed_activity(
         app_with_test_database,
         activity_id="act-other",
         activity_class_id="cls-recovery",
         name="Other recovery",
+        activity_type="recovery",
     )
 
     response = await client.post(
@@ -1164,11 +978,12 @@ async def test_multiple_recovery_targets_update_independently(
     client: AsyncClient,
 ) -> None:
     _seed_recovery_target_graph(app_with_test_database)
-    _seed_activity(
+    seed_activity(
         app_with_test_database,
         activity_id="act-stretch",
         activity_class_id="cls-recovery",
         name="Stretch",
+        activity_type="recovery",
     )
     await _create_recovery_target(
         client,

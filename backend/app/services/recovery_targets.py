@@ -6,7 +6,7 @@ from app.models.activity import Activity
 from app.models.block import RecoveryTarget, TrainingBlock
 from app.models.log import ActivityLog
 from app.schemas.recovery_targets import RecoveryTargetCreate
-from app.services.activity_classes import LOCAL_USER_ID
+from app.services.local_scope import LOCAL_USER_ID, next_updated_at
 
 
 class RecoveryTargetAlreadyExistsError(Exception):
@@ -97,7 +97,7 @@ def recalculate_recovery_streaks_for_activity(
             recalculation_date,
         )
         target.current_streak_days = new_streak
-        target.updated_at = _next_updated_at(target.updated_at)
+        target.updated_at = next_updated_at(target.updated_at)
         session.add(target)
 
     session.commit()
@@ -265,12 +265,3 @@ def _ensure_block_activity_pair_is_unique(
         raise RecoveryTargetPairAlreadyExistsError
 
 
-def _next_updated_at(previous_updated_at: datetime) -> datetime:
-    previous = previous_updated_at
-    if previous.tzinfo is None:
-        previous = previous.replace(tzinfo=UTC)
-
-    now = datetime.now(UTC)
-    if now <= previous:
-        return previous + timedelta(microseconds=1)
-    return now

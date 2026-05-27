@@ -1,11 +1,11 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from sqlmodel import Session, col, select
 
 from app.models.activity import ActivityClass
 from app.models.block import TrainingBlock, WeeklyTarget
 from app.schemas.weekly_targets import WeeklyTargetCreate, WeeklyTargetPatch
-from app.services.activity_classes import LOCAL_USER_ID
+from app.services.local_scope import LOCAL_USER_ID, next_updated_at
 
 
 class WeeklyTargetAlreadyExistsError(Exception):
@@ -94,7 +94,7 @@ def update_weekly_target(
         setattr(weekly_target, field_name, value)
 
     if updates:
-        weekly_target.updated_at = _next_updated_at(weekly_target.updated_at)
+        weekly_target.updated_at = next_updated_at(weekly_target.updated_at)
 
     session.add(weekly_target)
     session.commit()
@@ -148,12 +148,3 @@ def _get_weekly_target(session: Session, target_id: str) -> WeeklyTarget:
     return weekly_target
 
 
-def _next_updated_at(previous_updated_at: datetime) -> datetime:
-    previous = previous_updated_at
-    if previous.tzinfo is None:
-        previous = previous.replace(tzinfo=UTC)
-
-    now = datetime.now(UTC)
-    if now <= previous:
-        return previous + timedelta(microseconds=1)
-    return now
