@@ -24,7 +24,9 @@ def root_env_file() -> Iterator[None]:
     env_path = REPO_ROOT / ".env"
     original_contents = env_path.read_text(encoding="utf-8") if env_path.exists() else None
     env_path.write_text(
-        "DATABASE_URL=sqlite:///./data/milestone.db\nAPP_VERSION=0.1.0\n",
+        "DATABASE_URL=sqlite:///./data/milestone.db\n"
+        "APP_VERSION=0.1.0\n"
+        "BACKEND_PORT=8084\n",
         encoding="utf-8",
     )
 
@@ -89,7 +91,7 @@ def test_backend_service_matches_scaffold_contract(root_env_file: None) -> None:
         (_get_mapping(port)["target"], _get_mapping(port)["published"])
         for port in _get_list(backend_service["ports"])
     }
-    assert (8000, "8000") in published_ports
+    assert (8084, "8084") in published_ports
 
     bind_targets = {
         _get_mapping(volume)["target"]: _get_mapping(volume)["type"]
@@ -100,7 +102,7 @@ def test_backend_service_matches_scaffold_contract(root_env_file: None) -> None:
 
     assert "--reload" in _get_list(backend_service["command"])
     assert backend_service["healthcheck"] == {
-        "test": ["CMD", "curl", "-f", "http://localhost:8000/api/health"],
+        "test": ["CMD", "curl", "-f", "http://localhost:8084/api/health"],
         "interval": "10s",
         "timeout": "5s",
         "retries": 5,
@@ -138,8 +140,8 @@ def test_backend_dockerfile_matches_scaffold_contract() -> None:
     assert "pyproject.toml" in dockerfile_text
     assert "pip install" in dockerfile_text
     assert "COPY app" in dockerfile_text
-    assert "EXPOSE 8000" in dockerfile_text
-    assert "uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload" in dockerfile_text
+    assert "EXPOSE 8084" in dockerfile_text
+    assert "uvicorn app.main:app --host 0.0.0.0 --port 8084 --reload" in dockerfile_text
 
 
 def test_gitignore_ignores_local_database_artifacts() -> None:
