@@ -182,8 +182,8 @@ class RecoveryRule(SQLModel, table=True):
 | GET/PATCH | `/api/daily-check-ins/{date}` | Read / update by date |
 | GET/POST | `/api/recovery-rules` | List / create rules |
 | PATCH/DELETE | `/api/recovery-rules/{id}` | Update / delete rules |
-| GET | `/api/load/summary?as_of=` | Rolling load + violations + risk level |
-| GET | `/api/load/delayed-tax?check_in_date=` | Delayed inflammation correlation |
+| GET | `/api/load/summary?as_of=` | Class statuses, suggestions, weekly progress |
+| GET | `/api/load/delayed-tax?as_of=` | Proactive load/rest risk + symptom attribution |
 | GET | `/api/mcp/context` | Structured AI-readable summary |
 
 ---
@@ -202,15 +202,10 @@ class RecoveryRule(SQLModel, table=True):
 - `max_weekly_increase_pct`: compare this 7-day window vs prior 7-day window
 - `max_rpe`: check today's entries vs cap
 
-**Delayed Tax (`detect_delayed_tax`):**
-```
-1. Find check-ins where pain_level > threshold (default 5)
-2. For that check-in's date, look back 24-72h for log entries (excludes same-day)
-3. Compute daily load scores in that window
-4. Compare peak daily load to 14-day baseline (the 14 days before the lookback window)
-5. Correlation strength: high if peak > 2.0× baseline, medium if > 1.4×
-```
-The lookback window deliberately excludes the check-in date itself — the physiological delay is 24-72h, not same-day.
+**Delayed tax (`detect_delayed_tax`):** See `plans/TRD.md` §6 and
+`plans/tickets-phase-4-load-engine-2026-05-27.md`. Proactive 7-day scan (elevated
+load vs 14-day median baseline, rest debt) plus symptom-linked attribution when
+`pain_level > 3`, flare on check-in, or flare-up incidents are recorded.
 
 **Overall risk:** `red` if any `danger` violation, `yellow` if any `warning`, `green` otherwise.
 

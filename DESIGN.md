@@ -1,5 +1,10 @@
 # Milestone — System Design & Architecture (Pre-Code)
 
+**Algorithm authority:** Rolling load, class statuses, and dashboard derivations
+follow `export/src/lib/engine.ts` / `load.ts` and `plans/TRD.md` §6. **Delayed tax**
+and live log-time rule checks follow `plans/tickets-phase-4-load-engine-2026-05-27.md`
+(Phase 4). This doc keeps product concepts, screen flows, and UX intent.
+
 ## Core Concepts
 
 ### Training Block
@@ -305,11 +310,15 @@ Stretching:               🟢 (clear, can do anytime)
 - Submit
 
 **Incident Detail / Correlation View**
-- Show the incident + its date
-- Timeline of activities 24-72h before
-- Auto-highlight the highest-load activity in that window
-- Show weekly baseline load before that window
-- "This likely correlates with <activity class> on <date> (load spike: 2.5× baseline)"
+- Show the incident or check-in symptom date
+- Timeline of performance activities in the **last 7 days** (and baseline context
+  from the prior 14 days)
+- Surface delayed-tax hits from `GET /api/load/delayed-tax`:
+  - **Proactive:** elevated-load days (≥ median baseline) and rest-debt days
+  - **Symptom-linked:** primary acute attribution after long class rest + return,
+    plus contributing load/rest stress earlier in the week when applicable
+- Example copy: "Likely linked to <activity class> on <date>" or "Building load
+  earlier this week may have contributed"
 
 ---
 
@@ -346,7 +355,13 @@ Determined by:
 2. Any pain spike (pain_level > 5) OR mild rule warning? → **Yellow** (pushing it)
 3. Otherwise → **Green** (safe)
 
-### Rule Checks (run for all enabled rules in the current training block)
+### Rule Checks
+
+**At log time (`POST /api/load/check-violations`):** all five enabled rule types
+below (dry-run before submit).
+
+**Dashboard traffic lights (`compute_class_statuses`):** rest between class and
+weekly load cap only (matches current `engine.ts` prototype).
 
 **Rest Between Same Class:**
 - Last activity in this class was on day X
@@ -370,15 +385,29 @@ Determined by:
 - If count ≥ threshold → violation
 - Example: "max 5 performance activities per week" (prevents overload across domains)
 
-### Flare-Up Correlation Detection
-When a flare-up is logged:
-1. Find the incident date
-2. Look back 24-72 hours (exclude same day)
-3. Calculate daily load for each activity class in that window
-4. Compare peak daily load to 14-day baseline (the 14 days before the lookback window)
-5. If peak > 2× baseline → **high correlation**
-6. If peak > 1.4× baseline → **medium correlation**
-7. Highlight the activity class with the highest load in that window
+### Delayed tax (load risk + symptom attribution)
+
+Canonical behaviour: `plans/tickets-phase-4-load-engine-2026-05-27.md` §Delayed-tax methodology.
+
+**Layer A — Proactive (always, last 7 days through today/`as_of`):**
+- **`elevated_load`:** performance-class daily load ≥ **median** of the prior
+  14-day baseline (top 50% vs recent personal norm)
+- **`rest_debt`:** activity on a day that violates `rest_between_class`, with
+  cumulative load across the under-rested stretch
+
+Runs even when the user feels fine and has not logged pain or flare — surfaces
+building risk before symptoms.
+
+**Layer B — Symptom-linked (when the user records it in that window):**
+- Qualifying signals: check-in `pain_level > 3` and/or `has_flare_up`; any
+  `flare_up_incident`
+- **`symptom_marker`:** user-flagged pain/flare counts as a factor
+- **`acute_attribution`:** e.g. ≥14 days no logs in that class, then a return
+  session, symptom within 3 days — "probably that run after rest"
+- **`symptom_contributor`:** earlier elevated load / rest debt in the week before
+  the symptom — "stacked stress also mattered"
+
+Pain/flare are not required to run the scan; they refine attribution when present.
 
 ### Training Block Milestones
 A block hits review milestone when **both**:

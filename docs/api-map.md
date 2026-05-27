@@ -118,9 +118,9 @@ Use this alongside:
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/api/load/summary` | Rolling load, rule violations, and traffic-light risk as of a date |
-| `POST` | `/api/load/check-violations` | Dry-run rule checks for a proposed activity log without writing to the database |
-| `GET` | `/api/load/delayed-tax` | Correlate pain or flare signals with activity spikes 24-72 hours earlier |
+| `GET` | `/api/load/summary` | Class statuses, suggestions, weekly progress; optional `?as_of=` (default server-local today); snake_case JSON; 200 with neutral payloads when no active block |
+| `POST` | `/api/load/check-violations` | Dry-run all five rule types for a proposed log; body `activity_id`, `volume_value`, `rpe`, optional `as_of`; no DB write |
+| `GET` | `/api/load/delayed-tax` | Proactive 7-day load/rest risk plus symptom attribution when pain/flare recorded; optional `?as_of=`, `?risk_window_days=`, `?baseline_days=`, `?pain_threshold=` (default 3) |
 | `GET` | `/api/dashboard` | Aggregate dashboard payload for weekly targets, streaks, suggestions, and status cards |
 
 ## Notes For Initial Backend Build

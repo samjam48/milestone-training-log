@@ -185,33 +185,55 @@ Full contract: `docs/api-map.md`.
 | GET | `/api/goals` | List; filter: `?status=`, `?timeframe=` |
 | POST | `/api/goals` | Create goal |
 | PATCH | `/api/goals/{id}` | Update goal (status, progress) |
-| GET | `/api/load/summary` | Class statuses + suggestions + weekly progress for today |
-| POST | `/api/load/check-violations` | Dry-run violations check — no write |
-| GET | `/api/load/delayed-tax` | 14-day pain correlation analysis |
+| GET | `/api/load/summary` | Class statuses, suggestions, weekly progress; `?as_of=` (default server-local today) |
+| POST | `/api/load/check-violations` | Dry-run all five rule types — no write; body may include `as_of` |
+| GET | `/api/load/delayed-tax` | Proactive 7-day load/rest risk + symptom attribution; `?as_of=`, `?risk_window_days=`, `?baseline_days=`, `?pain_threshold=` |
 | GET | `/api/dashboard` | Full aggregate matching `MilestoneEngineResult` interface |
+
+**Load route conventions (Phase 4):** Request and response JSON use **snake_case**.
+When no active training block exists, load routes return **HTTP 200** with neutral
+or empty computed payloads (not `404`). Full behaviour:
+`plans/tickets-phase-4-load-engine-2026-05-27.md`.
 
 ## 6. Load Engine
 
 `export/src/lib/engine.ts` and `export/src/lib/load.ts` are the canonical
-algorithm references. The backend replicates them exactly in
-`backend/app/services/load_engine.py`.
+references for **ported** pure functions. The backend implements them in
+`backend/app/services/load_engine.py`. Phase 4 extends beyond the prototype where
+noted below.
 
 **Python ↔ TypeScript function pairs:**
 
-| Python (load_engine.py) | TypeScript (engine.ts / load.ts) |
-|---|---|
-| `rolling_load(logs, as_of, window_days) → float` | `rollingLoad` in load.ts |
-| `compute_class_statuses(as_of, classes, activities, logs, rules)` | `computeClassStatuses` |
-| `check_violations(activity_id, volume, rpe, logs, rules, as_of)` | `checkViolations` in useMilestoneEngine.ts |
-| `compute_daily_safety_scores(start, end, logs, check_ins, incidents)` | `computeDailySafetyScores` |
-| `compute_suggestions(class_statuses, activities, classes)` | `computeSuggestions` |
-| `compute_weekly_progress(targets, classes, activities, logs, period_start, period_end)` | `computeWeeklyProgress` |
-| `compute_clean_streak(logs)` | `computeCleanStreak` |
-| `compute_load_series(class_id, activities, logs, start, end, window=7)` | `computeLoadSeries` |
-| `detect_delayed_tax(logs, check_ins, incidents)` | DESIGN.md §Load Calculation |
+| Python (load_engine.py) | TypeScript (engine.ts / load.ts) | Parity |
+|---|---|---|
+| `rolling_load(logs, as_of, window_days) → float` | `rollingLoad` in load.ts | Exact |
+| `compute_class_statuses(as_of, classes, activities, logs, rules)` | `computeClassStatuses` | Exact (rest + weekly load cap only) |
+| `check_violations(activity_id, volume, rpe, logs, rules, as_of)` | `checkViolations` in useMilestoneEngine.ts | **Extended:** all five rule types (prototype: rest + cap only) |
+| `compute_daily_safety_scores(start, end, logs, check_ins, incidents)` | `computeDailySafetyScores` | Exact |
+| `compute_suggestions(class_statuses, activities, classes)` | `computeSuggestions` | Exact |
+| `compute_weekly_progress(targets, classes, activities, logs, period_start, period_end)` | `computeWeeklyProgress` | Exact |
+| `compute_clean_streak(logs)` | `computeCleanStreak` | Exact |
+| `compute_load_series(class_id, activities, logs, start, end, window=7)` | `computeLoadSeries` | Exact |
+| `detect_delayed_tax(logs, activities, classes, rules, check_ins, incidents, as_of, …)` | *(no TS reference)* | **New:** see §Delayed tax below |
 
 **Load formula:** `load = Σ(volume_value × rpe)` per log entry.
 **Default RPE** when not provided: 5 (matches `DEFAULT_RPE` in `export/src/lib/load.ts`).
+
+### Delayed tax (`detect_delayed_tax`)
+
+Two layers (canonical spec: `plans/tickets-phase-4-load-engine-2026-05-27.md` §Delayed-tax methodology):
+
+**Layer A — Proactive (always):** Scan the last **7** days through `as_of`. Compare
+each performance class’s daily load to a **14-day median baseline** immediately
+before that window. Emit `elevated_load` when `daily_load >= median`, and
+`rest_debt` when activity breaks `rest_between_class` (with cumulative load across
+under-rested days).
+
+**Layer B — Symptom-linked (when recorded):** In the same window, factor user-logged
+`pain_level > 3`, `has_flare_up`, and `flare_up_incidents`. Emit `symptom_marker`,
+`acute_attribution` (e.g. ≥14 class-rest days then a return within 3 days of symptom),
+and `symptom_contributor` (earlier elevated load / rest debt in the week before the
+symptom). Symptoms are not required to run Layer A.
 
 ## 7. Phased Implementation Plan
 
@@ -289,18 +311,22 @@ attempt to activate a second block → first deactivates; `pytest -k phase3` gre
 
 ### Phase 4 — Load Engine Service
 
-**Goal:** Python service that produces identical outputs to `engine.ts` on the
-same input data. Verified by running both against seed data.
+**Goal:** Python `load_engine.py` with ported `engine.ts`/`load.ts` functions,
+extended dry-run rule checks, proactive + symptom-linked delayed tax, and load
+API routes. Ported functions verified with Python unit tests and `mockData.ts`
+fixtures at `as_of=2026-05-25`.
+
+**Ticket detail:** `plans/tickets-phase-4-load-engine-2026-05-27.md`
 
 | Ticket | Scope |
 |---|---|
-| B4.1 | `backend/app/services/load_engine.py`: all 9 functions from §6; unit tests in `tests/test_load_engine.py` using known inputs derived from `mockData.ts` seed data |
-| B4.2 | Load routes: `GET /api/load/summary` (class statuses + suggestions + weekly progress for today); `POST /api/load/check-violations` (request body: `{activity_id, volume_value, rpe}`; response: violation list; no DB write) |
-| B4.3 | Delayed tax: `GET /api/load/delayed-tax`; scan 14-day window; flag days where load spike (top 25% of rolling average) precedes pain/flare-up by 24–72h |
+| B4.1 | `load_engine.py`: §6 functions; `check_violations` all five rule types; `detect_delayed_tax` proactive + symptom layers |
+| B4.2 | `GET /api/load/summary`, `POST /api/load/check-violations`; `as_of` default today; snake_case JSON; 200 when no active block |
+| B4.3 | `GET /api/load/delayed-tax`; 7-day risk / 14-day median baseline; elevated load, rest debt, symptom attribution |
 
-**Verification:** Seed DB → `GET /api/load/summary` → manually compare class statuses
-to `computeClassStatuses` output on same data in browser prototype.
-Unit test for `compute_class_statuses` with known inputs.
+**Verification:** `pytest` for `test_load_engine.py` and `test_load_api.py`;
+`GET /api/load/summary?as_of=2026-05-25` class statuses match `computeClassStatuses`
+on the same fixture data.
 
 ---
 

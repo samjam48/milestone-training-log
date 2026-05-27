@@ -37,8 +37,8 @@
 - **Baseline** for load comparison = **14 calendar days** immediately before the
   7-day risk window (per performance class daily load). Use **median only** (not
   mean) for the top-50% threshold.
-- `DESIGN.md` §Flare-Up Correlation and TRD B4.3 pain/percentile wording are
-  superseded for Phase 4; reconcile docs in a follow-up chore if needed.
+- Product docs reconciled 2026-05-27: `plans/TRD.md`, `plans/PRD.md`, `DESIGN.md`,
+  `docs/api-map.md`, `README.md`, `plans/milestone-architecture.md`.
 - No new tables or Alembic revisions in Phase 4 unless a test exposes a Phase 1
   schema bug.
 - Business logic stays in `services/`; routers translate HTTP only.
