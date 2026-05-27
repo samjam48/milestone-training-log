@@ -101,7 +101,7 @@ milestone-training-log/
 Full field-level spec: `docs/database-schema.md`.
 Canonical type shapes: `export/src/types.ts` (supersedes `plans/milestone-architecture.md`).
 
-**9 tables:** activity_classes, activities, activity_logs, daily_check_ins,
+**10 tables:** activity_classes, activities, activity_logs, daily_check_ins,
 flare_up_incidents, training_blocks, rules, recovery_targets, weekly_targets, goals.
 
 **user_id convention:** `user_id TEXT NOT NULL DEFAULT 'local'` on all user-owned
@@ -109,9 +109,27 @@ rows. Phase 1 is single-user; the field exists so multi-user auth migration
 requires only one new column (a real UUID/auth sub) and one middleware layer —
 no schema restructuring.
 
+**ID convention:** Use opaque string IDs (`TEXT` in SQLite) so backend records
+map cleanly to `export/src/types.ts` and seed data without translation.
+
+**Child-table ownership:** `rules`, `weekly_targets`, and `recovery_targets`
+inherit ownership through `training_blocks`; they do not carry their own
+`user_id` column in Phase 1.
+
 **flare_up_incidents → activity_classes:** Single nullable FK `activity_class_id`
 on `flare_up_incidents`. User picks one likely cause class. If multi-class cause
 attribution is needed later, add a join table then (BACKLOG item).
+
+**flare-up persistence:** Detailed flare-up records are stored relationally in
+`flare_up_incidents`, optionally linked back to `daily_check_ins` through
+`daily_check_in_id`. Daily check-in API responses may compose the frontend's
+embedded `flareUp` object from that related row rather than storing duplicate
+JSON as the database source of truth.
+
+**Field set locked for Phase 1:** Include `activities.default_volume_unit`,
+`activity_logs.rule_violations_at_log`, `weekly_targets.target_unit`, and
+`goals.progress_value` / `progress_target` / `progress_unit` in the initial
+schema.
 
 **Relationship summary:**
 - `goals` ← `training_blocks` (each block optionally references one goal)
@@ -144,12 +162,12 @@ Full contract: `docs/api-map.md`.
 | PATCH | `/api/activity-logs/{id}` | Update log |
 | DELETE | `/api/activity-logs/{id}` | Delete log |
 | GET | `/api/daily-check-ins` | List check-ins |
-| POST | `/api/daily-check-ins` | Create/upsert for (user_id, check_in_date) |
+| POST | `/api/daily-check-ins` | Create/upsert for (user_id, check_in_date); may also create or update a linked flare-up incident |
 | GET | `/api/daily-check-ins/today` | Fast path for today |
 | GET | `/api/daily-check-ins/{date}` | Check-in for specific date |
-| PATCH | `/api/daily-check-ins/{date}` | Update check-in |
+| PATCH | `/api/daily-check-ins/{date}` | Update check-in; response may include an embedded `flareUp` object composed from relational incident data |
 | GET | `/api/flare-up-incidents` | List incidents |
-| POST | `/api/flare-up-incidents` | Create incident |
+| POST | `/api/flare-up-incidents` | Create incident (severity `0..10`, single optional likely-cause class) |
 | PATCH | `/api/flare-up-incidents/{id}` | Update incident |
 | GET | `/api/training-blocks` | List all blocks |
 | GET | `/api/training-blocks/active` | Get the single active block |
@@ -225,12 +243,12 @@ that mirrors `export/src/lib/mockData.ts` (Sam Chen / plantar fasciitis scenario
 
 | Ticket | Scope |
 |---|---|
-| B1.1 | SQLModel models for all 9 tables in `backend/app/models/`; `user_id TEXT NOT NULL DEFAULT 'local'` on all user-owned tables; correct FK relationships |
+| B1.1 | SQLModel models for all 10 tables in `backend/app/models/`; `user_id TEXT NOT NULL DEFAULT 'local'` on top-level user-owned tables; correct FK relationships |
 | B1.2 | `alembic init`; configure to point at models; generate initial migration; test `alembic upgrade head` → `alembic downgrade base` roundtrip in CI |
-| B1.3 | `backend/scripts/seed.py`: 3 activity classes, 5 activities, 26 activity logs spanning 7 weeks, 6 check-ins, 2 flare-up incidents, 1 active training block with rules and weekly targets |
+| B1.3 | `backend/scripts/seed.py`: 3 activity classes, 5 activities, 26 activity logs spanning 7 weeks, 6 check-ins, 2 flare-up incidents, 1 active training block with 4 rules and 2 weekly targets |
 
-**Verification:** `alembic upgrade head` creates 9 tables; `python -m scripts.seed` populates;
-`sqlite3 data/milestone.db "SELECT name FROM sqlite_master WHERE type='table'"` lists all 9.
+**Verification:** `alembic upgrade head` creates 10 tables; `python -m scripts.seed` populates;
+`sqlite3 data/milestone.db "SELECT name FROM sqlite_master WHERE type='table'"` lists all 10.
 
 ---
 
@@ -244,7 +262,7 @@ split enforced. Tests written before production code.
 | B2.1 | ActivityClass CRUD: schemas, service (`services/activity_classes.py`), router; `GET /api/activity-classes`, `POST`, `PATCH /{id}` |
 | B2.2 | Activity CRUD: + query filters `?class_id=`, `?is_active=`; `PATCH /{id}` supports `is_active` toggle |
 | B2.3 | ActivityLog CRUD: full CRUD; filters `?from=`, `?to=`, `?activity_id=`, `?class_id=`; `ruleViolationsAtLog` stored as JSON column |
-| B2.4 | DailyCheckIn CRUD: upsert semantics on `(user_id, check_in_date)` — POST creates or replaces; `GET /today` resolves to server's local date; flare-up embedded object stored as JSON |
+| B2.4 | DailyCheckIn CRUD: upsert semantics on `(user_id, check_in_date)` — POST creates or replaces; `GET /today` resolves to server's local date; response may include an embedded `flareUp` object composed from related incident data |
 | B2.5 | FlareUpIncident CRUD: full CRUD; nullable `activity_class_id` FK |
 
 **Verification:** `pytest backend/app/tests/ -v` green on all Phase 2 tests.
@@ -391,7 +409,7 @@ exists (Phase 0, ticket B0.1).
 | B0.1 | 0 Scaffold | Repo structure, pyproject.toml, Makefile |
 | B0.2 | 0 Scaffold | docker-compose.yml |
 | B0.3 | 0 Scaffold | GET /api/health + test |
-| B1.1 | 1 Models | SQLModel table classes (9 tables) |
+| B1.1 | 1 Models | SQLModel table classes (10 tables) |
 | B1.2 | 1 Models | Alembic init + initial migration |
 | B1.3 | 1 Models | Seed script (Sam Chen scenario) |
 | B2.1 | 2 Core CRUD | ActivityClass CRUD |
