@@ -32,12 +32,76 @@ See [`plans/milestone-architecture.md`](plans/milestone-architecture.md) for the
 ## 🚀 Quick Start
 
 ```bash
-# Start services with Docker Compose
-docker compose up
+# One-time setup: copy env to repo root (Docker Compose reads ./.env)
+cp backend/.env.example .env
 
-# Backend: http://localhost:8000 (Swagger UI: /docs)
-# Frontend: http://localhost:5173
+# Start services with Docker Compose
+docker compose up backend
+
+# Backend: http://localhost:8084 (Swagger UI: /docs)
+# Frontend: http://localhost:5173 (placeholder until Phase 6)
 ```
+
+Default backend port is **8084** (not 8000) to avoid clashing with other local apps. Change `BACKEND_PORT` in `.env` if needed.
+
+## Backend setup (local, without Docker)
+
+Run these from the `backend/` directory. The app reads config from the repo-root `.env` file; do **not** override `DATABASE_URL` on the command line — relative paths are resolved against the repo root by `app/settings.py`.
+
+```bash
+# One-time: create venv and install (if not already done)
+python -m venv .venv
+.venv/bin/pip install -e '.[dev]'
+
+# One-time: env file at repo root
+cp .env.example ../.env
+
+# Create schema
+.venv/bin/alembic upgrade head
+
+# Load prototype seed data (safe to rerun)
+.venv/bin/python -m scripts.seed
+
+# Run API locally
+.venv/bin/uvicorn app.main:app --reload --host 0.0.0.0 --port 8084
+```
+
+Verify:
+
+```bash
+curl http://localhost:8084/api/health
+open http://localhost:8084/docs
+```
+
+Quality gates from repo root:
+
+```bash
+make lint
+make test
+```
+
+## Configuration
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `DATABASE_URL` | `sqlite:///./data/milestone.db` | SQLite path (resolved to repo-root `data/milestone.db`) |
+| `APP_VERSION` | `0.1.0` | API version string |
+| `BACKEND_PORT` | `8084` | Host/container port for uvicorn and Docker Compose |
+
+**Port references to update when changing `BACKEND_PORT` or adding frontend:**
+
+| File | Notes |
+| --- | --- |
+| `.env` / `backend/.env.example` | Source of truth for `BACKEND_PORT` |
+| `docker-compose.yml` | Port mapping, uvicorn `--port`, healthcheck |
+| `backend/Dockerfile` | `EXPOSE` and default `CMD` port |
+| `backend/app/settings.py` | Shared settings export |
+| `README.md` | Operator docs (this file) |
+| `plans/milestone-architecture.md` | Architecture diagram and Vite proxy notes (still references `:8000` until frontend work) |
+| `plans/TRD.md` | Technical requirements (still references `:8000` until synced) |
+| `frontend/vite.config.ts` | Not present yet; set `/api` proxy target to `http://backend:8084` (or `${BACKEND_PORT}`) in Phase 6 |
+
+Planning docs under `plans/` may still mention port 8000 from the original scaffold; runtime config and this README use **8084**.
 
 ## 📁 Project Structure
 
@@ -53,7 +117,7 @@ milestone-training-log/
 
 1. Edit `backend/app/` or `frontend/src/` — hot reload enabled
 2. Database changes: add migration to `backend/alembic/versions/`
-3. Tests: `pytest backend/app/tests/` (in container or locally)
+3. Tests: `make test` from repo root, or `pytest app/tests/` from `backend/`
 
 ## 🎯 Core Entities
 

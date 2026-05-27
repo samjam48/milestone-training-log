@@ -31,6 +31,7 @@ def _normalize_database_url(database_url: str) -> str:
 class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./data/milestone.db"
     APP_VERSION: str = "0.1.0"
+    BACKEND_PORT: int = 8084
 
     model_config = SettingsConfigDict(
         env_file=ENV_FILE,
@@ -43,3 +44,4 @@ settings = Settings()
 
 DATABASE_URL = _normalize_database_url(settings.DATABASE_URL)
 APP_VERSION = settings.APP_VERSION
+BACKEND_PORT = settings.BACKEND_PORT

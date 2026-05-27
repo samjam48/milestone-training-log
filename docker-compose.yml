@@ -11,16 +11,16 @@ services:
       - --host
       - 0.0.0.0
       - --port
-      - "8000"
+      - "${BACKEND_PORT:-8084}"
       - --reload
     ports:
-      - "8000:8000"
+      - "${BACKEND_PORT:-8084}:${BACKEND_PORT:-8084}"
     volumes:
       # Docker creates ./data on first run if it does not exist yet.
       - ./data:/app/data
       - ./backend/app:/app/app
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:${BACKEND_PORT:-8084}/api/health"]
       interval: 10s
       timeout: 5s
       retries: 5
