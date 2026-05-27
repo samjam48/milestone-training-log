@@ -60,11 +60,11 @@ applicable. PR checks must run backend commands through `make` or from
 `make lint` and `make test` should wrap the canonical commands once the repo bootstrap is in place.
 ---
 ## Current Sprint —
-**Goal:** Build the Phase 2 Core CRUD API for the five primary user-facing backend resources.
-**Status (2026-05-27):** Phase 0 scaffold and Phase 1 database models are complete; Phase 2 ticket planning is ready for owner review.
-**Ticket source:** `plans/tickets-phase-2-core-crud-api-2026-05-27.md`
+**Goal:** Build the Phase 3 Training Infrastructure API for training blocks, rules, targets, and goals.
+**Status (2026-05-27):** Phase 0–2 complete; Phase 3 ticket planning approved and ready for implementation.
+**Ticket source:** `plans/tickets-phase-3-training-infrastructure-2026-05-27.md`
 **Primary references:** `plans/TRD.md`, `plans/PRD.md`, `docs/api-map.md`, `docs/database-schema.md`, `docs/patterns.md`
-**Out of scope:** Training block CRUD, rule/target/goal CRUD, load engine, dashboard aggregation, frontend scaffolding, auth, multi-user support
+**Out of scope:** Load engine, dashboard aggregation, review-milestone auto-detection, frontend scaffolding, auth, multi-user support
 
 ---
 ## Definition of Done
