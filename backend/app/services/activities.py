@@ -1,10 +1,10 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from sqlmodel import Session, select
 
 from app.models.activity import Activity, ActivityClass
 from app.schemas.activities import ActivityCreate, ActivityPatch
-from app.services.activity_classes import LOCAL_USER_ID
+from app.services.local_scope import LOCAL_USER_ID, next_updated_at
 
 
 class ActivityAlreadyExistsError(Exception):
@@ -72,7 +72,7 @@ def update_activity(
         setattr(activity, field_name, value)
 
     if updates:
-        activity.updated_at = _next_updated_at(activity.updated_at)
+        activity.updated_at = next_updated_at(activity.updated_at)
 
     session.add(activity)
     session.commit()
@@ -88,17 +88,6 @@ def _ensure_local_activity_class_exists(session: Session, class_id: str) -> None
     activity_class = session.exec(statement).first()
     if activity_class is None:
         raise ActivityClassNotFoundError
-
-
-def _next_updated_at(previous_updated_at: datetime) -> datetime:
-    previous = previous_updated_at
-    if previous.tzinfo is None:
-        previous = previous.replace(tzinfo=UTC)
-
-    now = datetime.now(UTC)
-    if now <= previous:
-        return previous + timedelta(microseconds=1)
-    return now
 
 
 def _get_local_activity(session: Session, activity_id: str) -> Activity:

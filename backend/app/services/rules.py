@@ -1,11 +1,11 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from sqlmodel import Session, col, select
 
 from app.models.activity import ActivityClass
 from app.models.block import Rule, TrainingBlock
 from app.schemas.rules import RuleCreate, RulePatch
-from app.services.activity_classes import LOCAL_USER_ID
+from app.services.local_scope import LOCAL_USER_ID, next_updated_at
 
 
 class RuleAlreadyExistsError(Exception):
@@ -73,7 +73,7 @@ def update_rule(session: Session, rule_id: str, payload: RulePatch) -> Rule:
         setattr(rule, field_name, value)
 
     if updates:
-        rule.updated_at = _next_updated_at(rule.updated_at)
+        rule.updated_at = next_updated_at(rule.updated_at)
 
     session.add(rule)
     session.commit()
@@ -114,12 +114,3 @@ def _get_rule(session: Session, rule_id: str) -> Rule:
     return rule
 
 
-def _next_updated_at(previous_updated_at: datetime) -> datetime:
-    previous = previous_updated_at
-    if previous.tzinfo is None:
-        previous = previous.replace(tzinfo=UTC)
-
-    now = datetime.now(UTC)
-    if now <= previous:
-        return previous + timedelta(microseconds=1)
-    return now

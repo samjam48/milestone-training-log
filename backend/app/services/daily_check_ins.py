@@ -1,4 +1,4 @@
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 
 from sqlmodel import Session, col, select
 
@@ -10,7 +10,7 @@ from app.schemas.daily_check_ins import (
     FlareUpForCheckInPatch,
     FlareUpForCheckInRead,
 )
-from app.services.activity_classes import LOCAL_USER_ID
+from app.services.local_scope import LOCAL_USER_ID, next_updated_at
 
 
 class DailyCheckInAlreadyExistsError(Exception):
@@ -115,7 +115,7 @@ def update_daily_check_in(
         raise FlareUpDetailsRequiredError
 
     if updates:
-        check_in.updated_at = _next_updated_at(check_in.updated_at)
+        check_in.updated_at = next_updated_at(check_in.updated_at)
 
     session.add(check_in)
     session.commit()
@@ -164,7 +164,7 @@ def _update_existing_check_in_for_upsert(
     check_in.stiffness_level = payload.stiffness_level
     check_in.has_flare_up = payload.has_flare_up
     check_in.notes = payload.notes
-    check_in.updated_at = _next_updated_at(check_in.updated_at)
+    check_in.updated_at = next_updated_at(check_in.updated_at)
     _sync_linked_flare_up_from_create(session, check_in, payload, check_in.updated_at)
     session.add(check_in)
     session.commit()
@@ -255,7 +255,7 @@ def _sync_linked_flare_up_from_patch(
             if field_name != "id":
                 setattr(linked_flare_up, field_name, value)
         linked_flare_up.incident_date = check_in.check_in_date
-        linked_flare_up.updated_at = _next_updated_at(linked_flare_up.updated_at)
+        linked_flare_up.updated_at = next_updated_at(linked_flare_up.updated_at)
 
     session.add(linked_flare_up)
 
@@ -309,12 +309,3 @@ def _delete_linked_flare_ups(session: Session, check_in: DailyCheckIn) -> None:
         session.delete(flare_up)
 
 
-def _next_updated_at(previous_updated_at: datetime) -> datetime:
-    previous = previous_updated_at
-    if previous.tzinfo is None:
-        previous = previous.replace(tzinfo=UTC)
-
-    now = datetime.now(UTC)
-    if now <= previous:
-        return previous + timedelta(microseconds=1)
-    return now

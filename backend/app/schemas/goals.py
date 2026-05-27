@@ -2,6 +2,8 @@ from datetime import UTC, date, datetime
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
+from app.schemas.enums import GoalStatus, GoalTimeframe
+
 
 class GoalCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -10,12 +12,12 @@ class GoalCreate(BaseModel):
     title: str
     description: str
     target_date: date
-    timeframe: str
+    timeframe: GoalTimeframe
     activity_class_id: str | None = None
     progress_value: float | None = None
     progress_target: float | None = None
     progress_unit: str | None = None
-    status: str = "active"
+    status: GoalStatus = "active"
 
 
 class GoalPatch(BaseModel):
@@ -24,12 +26,12 @@ class GoalPatch(BaseModel):
     title: str | None = None
     description: str | None = None
     target_date: date | None = None
-    timeframe: str | None = None
+    timeframe: GoalTimeframe | None = None
     activity_class_id: str | None = None
     progress_value: float | None = None
     progress_target: float | None = None
     progress_unit: str | None = None
-    status: str | None = None
+    status: GoalStatus | None = None
 
     @field_validator("title", "description", "target_date", "timeframe", "status", mode="before")
     @classmethod

@@ -1,155 +1,18 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Iterator
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 from typing import Any
 
 import pytest
 from fastapi import FastAPI
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, SQLModel, create_engine
+from httpx import AsyncClient
 
-import app.models  # noqa: F401
-from app.database import get_session
-from app.main import create_app
-from app.models.activity import Activity, ActivityClass
-from app.models.log import ActivityLog
-
-
-@pytest.fixture
-def app_with_test_database() -> Iterator[FastAPI]:
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    SQLModel.metadata.create_all(engine)
-    app = create_app()
-
-    def override_get_session() -> Iterator[Session]:
-        with Session(engine) as session:
-            yield session
-
-    app.dependency_overrides[get_session] = override_get_session
-    yield app
-    app.dependency_overrides.clear()
-
-
-@pytest.fixture
-async def client(app_with_test_database: FastAPI) -> AsyncIterator[AsyncClient]:
-    transport = ASGITransport(app=app_with_test_database)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        yield client
-
-
-def _utc_datetime(hour: int, minute: int = 0) -> datetime:
-    return datetime(2026, 5, 27, hour, minute, tzinfo=UTC)
-
-
-def _with_session(app_with_test_database: FastAPI) -> Iterator[Session]:
-    override = app_with_test_database.dependency_overrides[get_session]
-    session_iterator = override()
-    session = next(session_iterator)
-    try:
-        yield session
-    finally:
-        session.close()
-        try:
-            next(session_iterator)
-        except StopIteration:
-            pass
-
-
-def _seed_activity_class(
-    app_with_test_database: FastAPI,
-    *,
-    class_id: str,
-    name: str,
-    description: str = "Seeded class",
-    class_type: str = "performance",
-    default_recovery_window_days: int = 3,
-    created_at: datetime | None = None,
-) -> None:
-    for session in _with_session(app_with_test_database):
-        session.add(
-            ActivityClass(
-                id=class_id,
-                user_id="local",
-                name=name,
-                description=description,
-                type=class_type,
-                default_recovery_window_days=default_recovery_window_days,
-                created_at=created_at or _utc_datetime(8),
-            )
-        )
-        session.commit()
-
-
-def _seed_activity(
-    app_with_test_database: FastAPI,
-    *,
-    activity_id: str,
-    activity_class_id: str,
-    name: str,
-    activity_type: str = "performance",
-    default_volume_unit: str = "minutes",
-    is_active: bool = True,
-    created_at: datetime | None = None,
-    updated_at: datetime | None = None,
-) -> None:
-    for session in _with_session(app_with_test_database):
-        session.add(
-            Activity(
-                id=activity_id,
-                user_id="local",
-                activity_class_id=activity_class_id,
-                name=name,
-                type=activity_type,
-                default_volume_unit=default_volume_unit,
-                is_active=is_active,
-                created_at=created_at or _utc_datetime(9),
-                updated_at=updated_at or _utc_datetime(9),
-            )
-        )
-        session.commit()
-
-
-def _seed_activity_log(
-    app_with_test_database: FastAPI,
-    *,
-    log_id: str,
-    activity_id: str,
-    logged_date: date,
-    duration_minutes: int = 30,
-    volume_value: float = 3.0,
-    volume_unit: str | None = "km",
-    rpe: int | None = 5,
-    post_activity_feel: str | None = "steady",
-    notes: str | None = "Seeded log",
-    rule_violations_at_log: list[dict[str, Any]] | None = None,
-    created_at: datetime | None = None,
-    updated_at: datetime | None = None,
-) -> None:
-    for session in _with_session(app_with_test_database):
-        session.add(
-            ActivityLog(
-                id=log_id,
-                user_id="local",
-                activity_id=activity_id,
-                logged_date=logged_date,
-                duration_minutes=duration_minutes,
-                volume_value=volume_value,
-                volume_unit=volume_unit,
-                rpe=rpe,
-                post_activity_feel=post_activity_feel,
-                notes=notes,
-                rule_violations_at_log=rule_violations_at_log,
-                created_at=created_at or _utc_datetime(10),
-                updated_at=updated_at or _utc_datetime(10),
-            )
-        )
-        session.commit()
+from app.tests.helpers.seed import (
+    seed_activity,
+    seed_activity_class,
+    seed_activity_log,
+    utc_datetime,
+)
 
 
 def _seed_log_graph(
@@ -159,8 +22,8 @@ def _seed_log_graph(
     activity_id: str = "act-walk",
     activity_is_active: bool = True,
 ) -> None:
-    _seed_activity_class(app_with_test_database, class_id=class_id, name=f"{class_id} class")
-    _seed_activity(
+    seed_activity_class(app_with_test_database, class_id=class_id, name=f"{class_id} class")
+    seed_activity(
         app_with_test_database,
         activity_id=activity_id,
         activity_class_id=class_id,
@@ -213,33 +76,33 @@ async def test_list_activity_logs_returns_local_logs_in_stable_recent_order(
     client: AsyncClient,
 ) -> None:
     _seed_log_graph(app_with_test_database)
-    _seed_activity_log(
+    seed_activity_log(
         app_with_test_database,
         log_id="log-old",
         activity_id="act-walk",
         logged_date=date(2026, 5, 20),
-        created_at=_utc_datetime(9),
+        created_at=utc_datetime(9),
     )
-    _seed_activity_log(
+    seed_activity_log(
         app_with_test_database,
         log_id="log-newer-created",
         activity_id="act-walk",
         logged_date=date(2026, 5, 21),
-        created_at=_utc_datetime(11),
+        created_at=utc_datetime(11),
     )
-    _seed_activity_log(
+    seed_activity_log(
         app_with_test_database,
         log_id="log-alpha-same-created",
         activity_id="act-walk",
         logged_date=date(2026, 5, 21),
-        created_at=_utc_datetime(10),
+        created_at=utc_datetime(10),
     )
-    _seed_activity_log(
+    seed_activity_log(
         app_with_test_database,
         log_id="log-beta-same-created",
         activity_id="act-walk",
         logged_date=date(2026, 5, 21),
-        created_at=_utc_datetime(10),
+        created_at=utc_datetime(10),
     )
 
     response = await client.get("/api/activity-logs")
@@ -261,19 +124,19 @@ async def test_list_activity_logs_filters_from_start_date(
     client: AsyncClient,
 ) -> None:
     _seed_log_graph(app_with_test_database)
-    _seed_activity_log(
+    seed_activity_log(
         app_with_test_database,
         log_id="log-before",
         activity_id="act-walk",
         logged_date=date(2026, 5, 19),
     )
-    _seed_activity_log(
+    seed_activity_log(
         app_with_test_database,
         log_id="log-on-start",
         activity_id="act-walk",
         logged_date=date(2026, 5, 20),
     )
-    _seed_activity_log(
+    seed_activity_log(
         app_with_test_database,
         log_id="log-after",
         activity_id="act-walk",
@@ -291,19 +154,19 @@ async def test_list_activity_logs_filters_to_end_date(
     client: AsyncClient,
 ) -> None:
     _seed_log_graph(app_with_test_database)
-    _seed_activity_log(
+    seed_activity_log(
         app_with_test_database,
         log_id="log-before",
         activity_id="act-walk",
         logged_date=date(2026, 5, 19),
     )
-    _seed_activity_log(
+    seed_activity_log(
         app_with_test_database,
         log_id="log-on-end",
         activity_id="act-walk",
         logged_date=date(2026, 5, 20),
     )
-    _seed_activity_log(
+    seed_activity_log(
         app_with_test_database,
         log_id="log-after",
         activity_id="act-walk",
@@ -321,19 +184,19 @@ async def test_list_activity_logs_filters_by_activity_id(
     client: AsyncClient,
 ) -> None:
     _seed_log_graph(app_with_test_database, activity_id="act-walk")
-    _seed_activity(
+    seed_activity(
         app_with_test_database,
         activity_id="act-bike",
         activity_class_id="cls-load",
         name="Bike",
     )
-    _seed_activity_log(
+    seed_activity_log(
         app_with_test_database,
         log_id="log-walk",
         activity_id="act-walk",
         logged_date=date(2026, 5, 21),
     )
-    _seed_activity_log(
+    seed_activity_log(
         app_with_test_database,
         log_id="log-bike",
         activity_id="act-bike",
@@ -352,13 +215,13 @@ async def test_list_activity_logs_filters_by_class_id(
 ) -> None:
     _seed_log_graph(app_with_test_database, class_id="cls-load", activity_id="act-walk")
     _seed_log_graph(app_with_test_database, class_id="cls-recovery", activity_id="act-mobility")
-    _seed_activity_log(
+    seed_activity_log(
         app_with_test_database,
         log_id="log-walk",
         activity_id="act-walk",
         logged_date=date(2026, 5, 21),
     )
-    _seed_activity_log(
+    seed_activity_log(
         app_with_test_database,
         log_id="log-mobility",
         activity_id="act-mobility",
@@ -376,38 +239,38 @@ async def test_list_activity_logs_applies_combined_filters(
     client: AsyncClient,
 ) -> None:
     _seed_log_graph(app_with_test_database, class_id="cls-load", activity_id="act-walk")
-    _seed_activity(
+    seed_activity(
         app_with_test_database,
         activity_id="act-bike",
         activity_class_id="cls-load",
         name="Bike",
     )
     _seed_log_graph(app_with_test_database, class_id="cls-recovery", activity_id="act-mobility")
-    _seed_activity_log(
+    seed_activity_log(
         app_with_test_database,
         log_id="log-target",
         activity_id="act-walk",
         logged_date=date(2026, 5, 20),
     )
-    _seed_activity_log(
+    seed_activity_log(
         app_with_test_database,
         log_id="log-before-window",
         activity_id="act-walk",
         logged_date=date(2026, 5, 18),
     )
-    _seed_activity_log(
+    seed_activity_log(
         app_with_test_database,
         log_id="log-after-window",
         activity_id="act-walk",
         logged_date=date(2026, 5, 22),
     )
-    _seed_activity_log(
+    seed_activity_log(
         app_with_test_database,
         log_id="log-other-activity",
         activity_id="act-bike",
         logged_date=date(2026, 5, 20),
     )
-    _seed_activity_log(
+    seed_activity_log(
         app_with_test_database,
         log_id="log-other-class",
         activity_id="act-mobility",
@@ -433,7 +296,7 @@ async def test_list_activity_logs_returns_empty_when_from_is_after_to(
     client: AsyncClient,
 ) -> None:
     _seed_log_graph(app_with_test_database)
-    _seed_activity_log(
+    seed_activity_log(
         app_with_test_database,
         log_id="log-window",
         activity_id="act-walk",
@@ -605,7 +468,7 @@ async def test_create_activity_log_returns_conflict_for_duplicate_id(
     client: AsyncClient,
 ) -> None:
     _seed_log_graph(app_with_test_database)
-    _seed_activity_log(
+    seed_activity_log(
         app_with_test_database,
         log_id="log-walk",
         activity_id="act-walk",
@@ -650,13 +513,13 @@ async def test_patch_activity_log_updates_present_fields_and_json_snapshot(
     client: AsyncClient,
 ) -> None:
     _seed_log_graph(app_with_test_database, activity_id="act-walk")
-    _seed_activity(
+    seed_activity(
         app_with_test_database,
         activity_id="act-bike",
         activity_class_id="cls-load",
         name="Bike",
     )
-    _seed_activity_log(
+    seed_activity_log(
         app_with_test_database,
         log_id="log-walk",
         activity_id="act-walk",
@@ -668,7 +531,7 @@ async def test_patch_activity_log_updates_present_fields_and_json_snapshot(
         post_activity_feel="steady",
         notes="Before patch",
         rule_violations_at_log=[],
-        updated_at=_utc_datetime(10),
+        updated_at=utc_datetime(10),
     )
     rule_violations = [
         {
@@ -709,7 +572,7 @@ async def test_patch_activity_log_updates_present_fields_and_json_snapshot(
         notes="After patch",
         rule_violations_at_log=rule_violations,
     )
-    assert datetime.fromisoformat(payload["updated_at"]) > _utc_datetime(10)
+    assert datetime.fromisoformat(payload["updated_at"]) > utc_datetime(10)
 
 
 async def test_patch_activity_log_allows_nullable_fields_to_be_cleared(
@@ -717,7 +580,7 @@ async def test_patch_activity_log_allows_nullable_fields_to_be_cleared(
     client: AsyncClient,
 ) -> None:
     _seed_log_graph(app_with_test_database)
-    _seed_activity_log(
+    seed_activity_log(
         app_with_test_database,
         log_id="log-walk",
         activity_id="act-walk",
@@ -754,7 +617,7 @@ async def test_patch_activity_log_allows_empty_body_without_changing_row(
     client: AsyncClient,
 ) -> None:
     _seed_log_graph(app_with_test_database)
-    _seed_activity_log(
+    seed_activity_log(
         app_with_test_database,
         log_id="log-walk",
         activity_id="act-walk",
@@ -791,7 +654,7 @@ async def test_patch_activity_log_to_missing_activity_returns_stable_client_erro
     client: AsyncClient,
 ) -> None:
     _seed_log_graph(app_with_test_database)
-    _seed_activity_log(
+    seed_activity_log(
         app_with_test_database,
         log_id="log-walk",
         activity_id="act-walk",
@@ -814,7 +677,7 @@ async def test_patch_activity_log_rejects_rpe_outside_valid_range_without_changi
     invalid_rpe: int,
 ) -> None:
     _seed_log_graph(app_with_test_database)
-    _seed_activity_log(
+    seed_activity_log(
         app_with_test_database,
         log_id="log-walk",
         activity_id="act-walk",
@@ -851,7 +714,7 @@ async def test_patch_activity_log_rejects_null_required_fields_without_changing_
     null_patch: dict[str, None],
 ) -> None:
     _seed_log_graph(app_with_test_database)
-    _seed_activity_log(
+    seed_activity_log(
         app_with_test_database,
         log_id="log-walk",
         activity_id="act-walk",
@@ -896,7 +759,7 @@ async def test_activity_logs_for_inactive_activities_remain_visible_and_editable
     client: AsyncClient,
 ) -> None:
     _seed_log_graph(app_with_test_database, activity_is_active=False)
-    _seed_activity_log(
+    seed_activity_log(
         app_with_test_database,
         log_id="log-inactive",
         activity_id="act-walk",
@@ -921,7 +784,7 @@ async def test_delete_activity_log_returns_no_content_and_removes_row(
     client: AsyncClient,
 ) -> None:
     _seed_log_graph(app_with_test_database)
-    _seed_activity_log(
+    seed_activity_log(
         app_with_test_database,
         log_id="log-walk",
         activity_id="act-walk",

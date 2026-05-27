@@ -1,163 +1,17 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Iterator
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 from typing import Any
 
 import pytest
 from fastapi import FastAPI
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, SQLModel, create_engine
+from httpx import AsyncClient
 
-import app.models  # noqa: F401
-from app.database import get_session
-from app.main import create_app
-from app.models.activity import ActivityClass
-from app.models.block import Rule, TrainingBlock
-
-
-@pytest.fixture
-def app_with_test_database() -> Iterator[FastAPI]:
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    SQLModel.metadata.create_all(engine)
-    app = create_app()
-
-    def override_get_session() -> Iterator[Session]:
-        with Session(engine) as session:
-            yield session
-
-    app.dependency_overrides[get_session] = override_get_session
-    yield app
-    app.dependency_overrides.clear()
-
-
-@pytest.fixture
-async def client(app_with_test_database: FastAPI) -> AsyncIterator[AsyncClient]:
-    transport = ASGITransport(app=app_with_test_database)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        yield client
-
-
-def _utc_datetime(hour: int, minute: int = 0) -> datetime:
-    return datetime(2026, 5, 27, hour, minute, tzinfo=UTC)
-
-
-def _seed_training_block(
-    app_with_test_database: FastAPI,
-    *,
-    block_id: str,
-    name: str,
-    start_date: date,
-    status: str = "active",
-    end_date: date | None = None,
-    notes: str | None = None,
-    created_at: datetime | None = None,
-) -> None:
-    override = app_with_test_database.dependency_overrides[get_session]
-    session_iterator = override()
-    session = next(session_iterator)
-    now = created_at or _utc_datetime(8)
-    try:
-        session.add(
-            TrainingBlock(
-                id=block_id,
-                user_id="local",
-                name=name,
-                start_date=start_date,
-                end_date=end_date,
-                status=status,
-                related_goal_id=None,
-                notes=notes,
-                is_review_milestone_hit=False,
-                created_at=now,
-                updated_at=now,
-            )
-        )
-        session.commit()
-    finally:
-        session.close()
-        try:
-            next(session_iterator)
-        except StopIteration:
-            pass
-
-
-def _seed_activity_class(
-    app_with_test_database: FastAPI,
-    *,
-    class_id: str,
-    name: str,
-    description: str = "Seeded class",
-    class_type: str = "performance",
-    default_recovery_window_days: int = 3,
-    created_at: datetime | None = None,
-) -> None:
-    override = app_with_test_database.dependency_overrides[get_session]
-    session_iterator = override()
-    session = next(session_iterator)
-    try:
-        session.add(
-            ActivityClass(
-                id=class_id,
-                user_id="local",
-                name=name,
-                description=description,
-                type=class_type,
-                default_recovery_window_days=default_recovery_window_days,
-                created_at=created_at or _utc_datetime(8),
-            )
-        )
-        session.commit()
-    finally:
-        session.close()
-        try:
-            next(session_iterator)
-        except StopIteration:
-            pass
-
-
-def _seed_rule(
-    app_with_test_database: FastAPI,
-    *,
-    rule_id: str,
-    training_block_id: str,
-    rule_type: str,
-    threshold_value: float,
-    window_days: int,
-    activity_class_id: str | None = None,
-    enabled: bool = True,
-    created_at: datetime | None = None,
-) -> None:
-    override = app_with_test_database.dependency_overrides[get_session]
-    session_iterator = override()
-    session = next(session_iterator)
-    now = created_at or _utc_datetime(9)
-    try:
-        session.add(
-            Rule(
-                id=rule_id,
-                training_block_id=training_block_id,
-                activity_class_id=activity_class_id,
-                rule_type=rule_type,
-                threshold_value=threshold_value,
-                window_days=window_days,
-                enabled=enabled,
-                created_at=now,
-                updated_at=now,
-            )
-        )
-        session.commit()
-    finally:
-        session.close()
-        try:
-            next(session_iterator)
-        except StopIteration:
-            pass
+from app.tests.helpers.seed import (
+    seed_activity_class,
+    seed_rule,
+    seed_training_block,
+)
 
 
 def _assert_rule_payload(
@@ -185,14 +39,14 @@ def _assert_rule_payload(
 
 
 def _seed_rule_graph(app_with_test_database: FastAPI) -> None:
-    _seed_training_block(
+    seed_training_block(
         app_with_test_database,
         block_id="blk-1",
         name="Rehab Block",
         start_date=date(2026, 4, 7),
         status="archived",
     )
-    _seed_activity_class(
+    seed_activity_class(
         app_with_test_database,
         class_id="cls-foot-load",
         name="Foot Load",
@@ -203,7 +57,7 @@ async def test_list_rules_returns_empty_list(
     app_with_test_database: FastAPI,
     client: AsyncClient,
 ) -> None:
-    _seed_training_block(
+    seed_training_block(
         app_with_test_database,
         block_id="blk-1",
         name="Empty Block",
@@ -221,14 +75,14 @@ async def test_list_rules_returns_rules_ordered_by_rule_type_then_id(
     app_with_test_database: FastAPI,
     client: AsyncClient,
 ) -> None:
-    _seed_training_block(
+    seed_training_block(
         app_with_test_database,
         block_id="blk-1",
         name="Ordered Block",
         start_date=date(2026, 4, 7),
         status="archived",
     )
-    _seed_rule(
+    seed_rule(
         app_with_test_database,
         rule_id="rule-z",
         training_block_id="blk-1",
@@ -236,7 +90,7 @@ async def test_list_rules_returns_rules_ordered_by_rule_type_then_id(
         threshold_value=100.0,
         window_days=7,
     )
-    _seed_rule(
+    seed_rule(
         app_with_test_database,
         rule_id="rule-a",
         training_block_id="blk-1",
@@ -244,7 +98,7 @@ async def test_list_rules_returns_rules_ordered_by_rule_type_then_id(
         threshold_value=3.0,
         window_days=7,
     )
-    _seed_rule(
+    seed_rule(
         app_with_test_database,
         rule_id="rule-b",
         training_block_id="blk-1",
@@ -278,14 +132,14 @@ async def test_list_rules_remains_readable_when_parent_block_is_not_active(
     client: AsyncClient,
     parent_status: str,
 ) -> None:
-    _seed_training_block(
+    seed_training_block(
         app_with_test_database,
         block_id="blk-1",
         name="Inactive Parent",
         start_date=date(2026, 4, 7),
         status=parent_status,
     )
-    _seed_rule(
+    seed_rule(
         app_with_test_database,
         rule_id="rule-1",
         training_block_id="blk-1",
@@ -336,7 +190,7 @@ async def test_create_cross_class_rule_allows_null_activity_class_id(
     app_with_test_database: FastAPI,
     client: AsyncClient,
 ) -> None:
-    _seed_training_block(
+    seed_training_block(
         app_with_test_database,
         block_id="blk-1",
         name="Cross-Class Block",
@@ -466,7 +320,7 @@ async def test_create_rule_returns_conflict_for_duplicate_id(
     client: AsyncClient,
 ) -> None:
     _seed_rule_graph(app_with_test_database)
-    _seed_rule(
+    seed_rule(
         app_with_test_database,
         rule_id="rule-1",
         training_block_id="blk-1",
@@ -553,7 +407,7 @@ async def test_patch_rule_updates_only_present_fields(
     client: AsyncClient,
 ) -> None:
     _seed_rule_graph(app_with_test_database)
-    _seed_rule(
+    seed_rule(
         app_with_test_database,
         rule_id="rule-1",
         training_block_id="blk-1",
@@ -590,7 +444,7 @@ async def test_patch_rule_allows_empty_body_without_changing_row(
     client: AsyncClient,
 ) -> None:
     _seed_rule_graph(app_with_test_database)
-    _seed_rule(
+    seed_rule(
         app_with_test_database,
         rule_id="rule-1",
         training_block_id="blk-1",
@@ -619,7 +473,7 @@ async def test_patch_rule_allows_activity_class_id_to_be_cleared(
     client: AsyncClient,
 ) -> None:
     _seed_rule_graph(app_with_test_database)
-    _seed_rule(
+    seed_rule(
         app_with_test_database,
         rule_id="rule-1",
         training_block_id="blk-1",
@@ -643,7 +497,7 @@ async def test_patch_rule_updates_threshold_value_and_window_days_independently(
     client: AsyncClient,
 ) -> None:
     _seed_rule_graph(app_with_test_database)
-    _seed_rule(
+    seed_rule(
         app_with_test_database,
         rule_id="rule-1",
         training_block_id="blk-1",
@@ -675,14 +529,14 @@ async def test_patch_rule_validates_activity_class_id_when_changed(
     client: AsyncClient,
 ) -> None:
     _seed_rule_graph(app_with_test_database)
-    _seed_activity_class(
+    seed_activity_class(
         app_with_test_database,
         class_id="cls-recovery",
         name="Recovery",
         class_type="recovery",
         default_recovery_window_days=1,
     )
-    _seed_rule(
+    seed_rule(
         app_with_test_database,
         rule_id="rule-1",
         training_block_id="blk-1",
@@ -724,7 +578,7 @@ async def test_delete_rule_returns_no_content_and_removes_row(
     client: AsyncClient,
 ) -> None:
     _seed_rule_graph(app_with_test_database)
-    _seed_rule(
+    seed_rule(
         app_with_test_database,
         rule_id="rule-1",
         training_block_id="blk-1",
@@ -751,3 +605,74 @@ async def test_delete_missing_rule_returns_stable_not_found(
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Rule not found"}
+
+
+@pytest.mark.parametrize("invalid_rule_type", ["REST_BETWEEN", "banana", "rest_between"])
+async def test_create_rule_rejects_invalid_rule_type(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+    invalid_rule_type: str,
+) -> None:
+    _seed_rule_graph(app_with_test_database)
+
+    response = await client.post(
+        "/api/training-blocks/blk-1/rules",
+        json={
+            "id": f"rule-invalid-{invalid_rule_type.lower()}",
+            "activity_class_id": "cls-foot-load",
+            "rule_type": invalid_rule_type,
+            "threshold_value": 2.0,
+            "window_days": 7,
+        },
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize(
+    ("field_name", "null_patch"),
+    [
+        ("rule_type", {"rule_type": None}),
+        ("threshold_value", {"threshold_value": None}),
+        ("window_days", {"window_days": None}),
+    ],
+)
+async def test_patch_rule_rejects_null_required_fields_without_changing_row(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+    field_name: str,
+    null_patch: dict[str, None],
+) -> None:
+    _seed_rule_graph(app_with_test_database)
+    seed_rule(
+        app_with_test_database,
+        rule_id="rule-1",
+        training_block_id="blk-1",
+        activity_class_id="cls-foot-load",
+        rule_type="frequency_limit",
+        threshold_value=3.0,
+        window_days=7,
+    )
+
+    response = await client.patch("/api/rules/rule-1", json=null_patch)
+
+    assert response.status_code == 422
+    error_fields = {
+        str(error_location[-1])
+        for error in response.json()["detail"]
+        if (error_location := error.get("loc"))
+    }
+    assert field_name in error_fields
+
+    list_response = await client.get("/api/training-blocks/blk-1/rules")
+    assert list_response.status_code == 200
+    assert len(list_response.json()) == 1
+    _assert_rule_payload(
+        list_response.json()[0],
+        rule_id="rule-1",
+        training_block_id="blk-1",
+        activity_class_id="cls-foot-load",
+        rule_type="frequency_limit",
+        threshold_value=3.0,
+        window_days=7,
+    )

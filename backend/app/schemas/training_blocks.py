@@ -2,6 +2,8 @@ from datetime import UTC, date, datetime
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
+from app.schemas.enums import TrainingBlockStatus
+
 
 class TrainingBlockCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -10,7 +12,7 @@ class TrainingBlockCreate(BaseModel):
     name: str
     start_date: date
     end_date: date | None = None
-    status: str = "active"
+    status: TrainingBlockStatus = "active"
     related_goal_id: str | None = None
     notes: str | None = None
 
@@ -21,7 +23,7 @@ class TrainingBlockPatch(BaseModel):
     name: str | None = None
     start_date: date | None = None
     end_date: date | None = None
-    status: str | None = None
+    status: TrainingBlockStatus | None = None
     related_goal_id: str | None = None
     notes: str | None = None
 

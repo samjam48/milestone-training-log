@@ -4,8 +4,7 @@ from sqlmodel import Session, select
 
 from app.models.activity import ActivityClass
 from app.schemas.activity_classes import ActivityClassCreate, ActivityClassPatch
-
-LOCAL_USER_ID = "local"
+from app.services.local_scope import LOCAL_USER_ID
 
 
 class ActivityClassAlreadyExistsError(Exception):

@@ -1,83 +1,13 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Iterator
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
 import pytest
 from fastapi import FastAPI
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, SQLModel, create_engine
+from httpx import AsyncClient
 
-import app.models  # noqa: F401
-from app.database import get_session
-from app.main import create_app
-from app.models.activity import ActivityClass
-
-
-@pytest.fixture
-def app_with_test_database() -> Iterator[FastAPI]:
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    SQLModel.metadata.create_all(engine)
-    app = create_app()
-
-    def override_get_session() -> Iterator[Session]:
-        with Session(engine) as session:
-            yield session
-
-    app.dependency_overrides[get_session] = override_get_session
-    yield app
-    app.dependency_overrides.clear()
-
-
-@pytest.fixture
-async def client(app_with_test_database: FastAPI) -> AsyncIterator[AsyncClient]:
-    transport = ASGITransport(app=app_with_test_database)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        yield client
-
-
-def _utc_datetime(hour: int, minute: int = 0) -> datetime:
-    return datetime(2026, 5, 27, hour, minute, tzinfo=UTC)
-
-
-def _seed_activity_class(
-    app_with_test_database: FastAPI,
-    *,
-    class_id: str,
-    name: str,
-    description: str = "Seeded class",
-    class_type: str = "performance",
-    default_recovery_window_days: int = 3,
-    created_at: datetime | None = None,
-) -> None:
-    override = app_with_test_database.dependency_overrides[get_session]
-    session_iterator = override()
-    session = next(session_iterator)
-    try:
-        session.add(
-            ActivityClass(
-                id=class_id,
-                user_id="local",
-                name=name,
-                description=description,
-                type=class_type,
-                default_recovery_window_days=default_recovery_window_days,
-                created_at=created_at or _utc_datetime(8),
-            )
-        )
-        session.commit()
-    finally:
-        session.close()
-        try:
-            next(session_iterator)
-        except StopIteration:
-            pass
+from app.tests.helpers.seed import seed_activity_class, utc_datetime
 
 
 def _assert_activity_class_payload(
@@ -110,27 +40,27 @@ async def test_list_activity_classes_returns_local_classes_in_stable_name_order(
     app_with_test_database: FastAPI,
     client: AsyncClient,
 ) -> None:
-    _seed_activity_class(
+    seed_activity_class(
         app_with_test_database,
         class_id="cls-zeta",
         name="Walking",
-        created_at=_utc_datetime(8),
+        created_at=utc_datetime(8),
     )
-    _seed_activity_class(
+    seed_activity_class(
         app_with_test_database,
         class_id="cls-alpha",
         name="Recovery",
         class_type="recovery",
         default_recovery_window_days=1,
-        created_at=_utc_datetime(9),
+        created_at=utc_datetime(9),
     )
-    _seed_activity_class(
+    seed_activity_class(
         app_with_test_database,
         class_id="cls-beta",
         name="Recovery",
         class_type="recovery",
         default_recovery_window_days=2,
-        created_at=_utc_datetime(10),
+        created_at=utc_datetime(10),
     )
 
     response = await client.get("/api/activity-classes")
@@ -211,7 +141,7 @@ async def test_create_activity_class_returns_conflict_for_duplicate_id(
     app_with_test_database: FastAPI,
     client: AsyncClient,
 ) -> None:
-    _seed_activity_class(
+    seed_activity_class(
         app_with_test_database,
         class_id="cls-foot-load",
         name="High-Intensity Foot Load",
@@ -236,7 +166,7 @@ async def test_patch_activity_class_updates_only_present_fields(
     app_with_test_database: FastAPI,
     client: AsyncClient,
 ) -> None:
-    _seed_activity_class(
+    seed_activity_class(
         app_with_test_database,
         class_id="cls-foot-load",
         name="High-Intensity Foot Load",
@@ -268,7 +198,7 @@ async def test_patch_activity_class_allows_empty_body_without_changing_row(
     app_with_test_database: FastAPI,
     client: AsyncClient,
 ) -> None:
-    _seed_activity_class(
+    seed_activity_class(
         app_with_test_database,
         class_id="cls-recovery",
         name="Low-Impact Recovery",
@@ -303,7 +233,7 @@ async def test_patch_activity_class_rejects_null_required_fields_without_changin
     field_name: str,
     null_patch: dict[str, None],
 ) -> None:
-    _seed_activity_class(
+    seed_activity_class(
         app_with_test_database,
         class_id="cls-foot-load",
         name="High-Intensity Foot Load",
