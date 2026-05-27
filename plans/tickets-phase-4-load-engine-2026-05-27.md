@@ -16,9 +16,12 @@
   override with `?as_of=YYYY-MM-DD` (summary, delayed-tax) or the same field in
   the check-violations body when supplied.
 - When no active training block exists, load routes return **HTTP 200** with
-  neutral/empty computed payloads (not `404`). Class statuses treat every class
-  as safe; violation lists are empty; weekly progress is `[]`; delayed-tax hits
-  are `[]`.
+  neutral/empty computed payloads (not `404`). **Summary** and **check-violations**
+  treat every class as safe, return empty violation lists, and set weekly progress
+  to `[]`. **Delayed-tax** still runs the proactive scan (no block required):
+  `elevated_load` and `symptom_marker` hits can appear from logs and check-ins;
+  `rest_debt` and block-scoped rules need an active block and stay empty without
+  one.
 - `compute_class_statuses` ports `export/src/lib/engine.ts` behavior exactly
   (rest + weekly load cap only). **`check_violations` evaluates all five rule
   types** (owner confirmed 2026-05-27).

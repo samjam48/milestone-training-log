@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
+import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
 
@@ -33,6 +34,15 @@ SUMMARY_URL = "/api/load/summary"
 CHECK_VIOLATIONS_URL = "/api/load/check-violations"
 DELAYED_TAX_URL = "/api/load/delayed-tax"
 
+FROZEN_TODAY = date.fromisoformat(AS_OF)
+
+
+def _freeze_server_today(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "app.services.load_queries._server_local_today",
+        lambda: FROZEN_TODAY,
+    )
+
 
 def _foot_status(payload: dict[str, Any]) -> dict[str, Any]:
     return next(
@@ -53,19 +63,6 @@ def _expected_weekly_progress() -> list[Any]:
         BLOCK_START,
         AS_OF,
     )
-
-
-async def test_get_load_summary_returns_404_until_router_exists(
-    client: AsyncClient,
-) -> None:
-    response = await client.get(SUMMARY_URL)
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["as_of"]
-    assert payload["class_statuses"] == []
-    assert payload["suggestions"] == []
-    assert payload["weekly_progress"] == []
 
 
 async def test_get_load_summary_with_mock_seed_asserts_cls_foot_caution(
@@ -165,8 +162,11 @@ async def test_get_load_summary_without_active_block_returns_neutral_payload(
 
 async def test_get_load_summary_empty_database_returns_safe_defaults(
     client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    response = await client.get(SUMMARY_URL, params={"as_of": AS_OF})
+    _freeze_server_today(monkeypatch)
+
+    response = await client.get(SUMMARY_URL)
 
     assert response.status_code == 200
     payload = response.json()
@@ -174,6 +174,23 @@ async def test_get_load_summary_empty_database_returns_safe_defaults(
     assert payload["class_statuses"] == []
     assert payload["suggestions"] == []
     assert payload["weekly_progress"] == []
+
+
+async def test_get_load_summary_defaults_as_of_to_server_today(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _freeze_server_today(monkeypatch)
+    seed_load_mock_graph(app_with_test_database)
+
+    response = await client.get(SUMMARY_URL)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["as_of"] == AS_OF
+    foot = _foot_status(payload)
+    assert foot["state"] == "caution"
 
 
 async def test_get_load_summary_rejects_invalid_as_of_query(
@@ -205,9 +222,12 @@ async def test_get_load_summary_excludes_logs_after_as_of(
     assert foot["last_done_date"] == "2026-05-22"
 
 
-async def test_post_check_violations_returns_404_until_router_exists(
+async def test_post_check_violations_empty_database_returns_empty_violations(
     client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _freeze_server_today(monkeypatch)
+
     response = await client.post(
         CHECK_VIOLATIONS_URL,
         json={"activity_id": "act-walk", "volume_value": 1.5, "rpe": 3},
@@ -215,6 +235,37 @@ async def test_post_check_violations_returns_404_until_router_exists(
 
     assert response.status_code == 200
     assert response.json() == {"violations": []}
+
+
+async def test_post_check_violations_defaults_as_of_to_server_today(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _freeze_server_today(monkeypatch)
+    seed_load_mock_graph(app_with_test_database)
+    seed_activity_log(
+        app_with_test_database,
+        log_id="log-freq-window",
+        activity_id="act-bike",
+        logged_date=date(2026, 5, 20),
+        volume_value=10.0,
+        rpe=3,
+    )
+
+    response = await client.post(
+        CHECK_VIOLATIONS_URL,
+        json={
+            "activity_id": "act-walk",
+            "volume_value": 1.5,
+            "rpe": 3,
+        },
+    )
+
+    assert response.status_code == 200
+    rule_types = {v["rule_type"] for v in response.json()["violations"]}
+    assert "rest_between_class" in rule_types
+    assert "frequency_limit" in rule_types
 
 
 async def test_post_check_violations_flags_rest_between_class_and_frequency_limit(
@@ -467,13 +518,33 @@ async def test_get_delayed_tax_flare_incident_produces_flare_symptom_marker(
 
 async def test_get_delayed_tax_empty_database_returns_empty_hits(
     client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    response = await client.get(DELAYED_TAX_URL, params={"as_of": AS_OF})
+    _freeze_server_today(monkeypatch)
+
+    response = await client.get(DELAYED_TAX_URL)
 
     assert response.status_code == 200
     payload = response.json()
     assert payload["as_of"] == AS_OF
     assert payload["hits"] == []
+
+
+async def test_get_delayed_tax_defaults_as_of_to_server_today(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _freeze_server_today(monkeypatch)
+    seed_load_mock_graph(app_with_test_database)
+
+    response = await client.get(DELAYED_TAX_URL)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["as_of"] == AS_OF
+    elevated = _hits_of_type(payload, "elevated_load")
+    assert any(h["activity_class_id"] == "cls-foot" for h in elevated)
 
 
 async def test_get_delayed_tax_rejects_invalid_query_params(
@@ -483,6 +554,7 @@ async def test_get_delayed_tax_rejects_invalid_query_params(
         {"as_of": "not-a-date"},
         {"risk_window_days": 0},
         {"baseline_days": -1},
+        {"pain_threshold": -1},
     )
     for params in invalid_cases:
         response = await client.get(DELAYED_TAX_URL, params=params)

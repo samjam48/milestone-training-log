@@ -46,7 +46,7 @@ async def get_delayed_tax_route(
     as_of: date | None = None,
     risk_window_days: Annotated[int, Query(gt=0)] = 7,
     baseline_days: Annotated[int, Query(gt=0)] = 14,
-    pain_threshold: int = 3,
+    pain_threshold: Annotated[int, Query(ge=0)] = 3,
 ) -> DelayedTaxResponse:
     return get_delayed_tax(
         session,

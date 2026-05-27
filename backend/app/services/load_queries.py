@@ -47,8 +47,12 @@ from app.services.training_blocks import TrainingBlockNotFoundError, get_active_
 from app.services.weekly_targets import list_weekly_targets
 
 
+def _server_local_today() -> date:
+    return date.today()
+
+
 def resolve_as_of(as_of: date | None) -> date:
-    return as_of if as_of is not None else date.today()
+    return as_of if as_of is not None else _server_local_today()
 
 
 def get_load_summary(session: Session, *, as_of: date | None = None) -> LoadSummaryRead:
