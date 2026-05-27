@@ -57,3 +57,40 @@ class RuleViolationRead(BaseModel):
 
 class CheckViolationsResponse(BaseModel):
     violations: list[RuleViolationRead]
+
+
+HitType = Literal[
+    "elevated_load",
+    "rest_debt",
+    "symptom_marker",
+    "acute_attribution",
+    "symptom_contributor",
+]
+SymptomSource = Literal["check_in_pain", "check_in_flare", "flare_incident"]
+
+
+class DelayedTaxHitRead(BaseModel):
+    hit_type: HitType
+    message: str
+    activity_class_id: str | None = None
+    contributing_date: str | None = None
+    daily_load: float | None = None
+    baseline_median_daily_load: float | None = None
+    days_since_last_session: int | None = None
+    required_rest_days: int | None = None
+    cumulative_load: float | None = None
+    symptom_date: str | None = None
+    symptom_source: SymptomSource | None = None
+    pain_level: int | None = None
+    check_in_id: str | None = None
+    incident_id: str | None = None
+    primary: bool | None = None
+    contributor_hit_type: HitType | None = None
+
+
+class DelayedTaxResponse(BaseModel):
+    as_of: date
+    risk_window_days: int
+    baseline_days: int
+    pain_threshold: int
+    hits: list[DelayedTaxHitRead]

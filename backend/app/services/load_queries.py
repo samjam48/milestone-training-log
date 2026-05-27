@@ -8,10 +8,13 @@ from sqlmodel import Session
 
 from app.models.activity import Activity, ActivityClass
 from app.models.block import Rule, WeeklyTarget
+from app.models.checkin import DailyCheckIn, FlareUpIncident
 from app.models.log import ActivityLog
 from app.schemas.load import (
     ActivityClassStatusRead,
     CheckViolationsResponse,
+    DelayedTaxHitRead,
+    DelayedTaxResponse,
     LoadSummaryRead,
     RuleViolationRead,
     SuggestionRead,
@@ -20,6 +23,8 @@ from app.schemas.load import (
 from app.schemas.load_engine import (
     ActivityClassDict,
     ActivityDict,
+    CheckInDict,
+    IncidentDict,
     LogDict,
     RuleDict,
     WeeklyTargetDict,
@@ -27,11 +32,14 @@ from app.schemas.load_engine import (
 from app.services.activities import list_activities
 from app.services.activity_classes import list_activity_classes
 from app.services.activity_logs import list_activity_logs
+from app.services.daily_check_ins import list_daily_check_ins
+from app.services.flare_up_incidents import list_flare_up_incidents
 from app.services.load_engine import (
     check_violations,
     compute_class_statuses,
     compute_suggestions,
     compute_weekly_progress,
+    detect_delayed_tax,
     format_iso_date,
 )
 from app.services.rules import list_rules
@@ -142,6 +150,64 @@ def check_load_violations(
     )
 
 
+def get_delayed_tax(
+    session: Session,
+    *,
+    as_of: date | None = None,
+    risk_window_days: int = 7,
+    baseline_days: int = 14,
+    pain_threshold: int = 3,
+) -> DelayedTaxResponse:
+    resolved = resolve_as_of(as_of)
+    as_of_str = format_iso_date(resolved)
+
+    activity_classes = list_activity_classes(session)
+    activities = list_activities(session)
+    logs = list_activity_logs(session, end_date=resolved)
+    check_ins = list_daily_check_ins(session, end_date=resolved)
+    incidents = [
+        incident
+        for incident in list_flare_up_incidents(session)
+        if incident.incident_date <= resolved
+    ]
+
+    class_dicts = [_activity_class_dict(cls) for cls in activity_classes]
+    activity_dicts = [_activity_dict(activity) for activity in activities]
+    log_dicts = [_log_dict(log) for log in logs]
+    check_in_dicts = [_check_in_dict(check_in) for check_in in check_ins]
+    incident_dicts = [_incident_dict(incident) for incident in incidents]
+
+    rules: list[Rule] = []
+    try:
+        active_block = get_active_training_block(session)
+        rules = list_rules(session, active_block.id)
+    except TrainingBlockNotFoundError:
+        pass
+
+    rule_dicts = [_rule_dict(rule) for rule in rules]
+
+    hits = detect_delayed_tax(
+        log_dicts,
+        activity_dicts,
+        class_dicts,
+        rule_dicts,
+        check_in_dicts,
+        incident_dicts,
+        as_of_str,
+        risk_window_days=risk_window_days,
+        baseline_days=baseline_days,
+        pain_threshold=pain_threshold,
+    )
+
+    return DelayedTaxResponse(
+        as_of=resolved,
+        risk_window_days=risk_window_days,
+        baseline_days=baseline_days,
+        pain_threshold=pain_threshold,
+        hits=[DelayedTaxHitRead.model_validate(hit) for hit in hits],
+    )
+
+
 def _activity_class_dict(activity_class: ActivityClass) -> ActivityClassDict:
     return {
         "id": activity_class.id,
@@ -195,4 +261,22 @@ def _weekly_target_dict(target: WeeklyTarget) -> WeeklyTargetDict:
         "activity_class_id": target.activity_class_id,
         "target_value": target.target_value,
         "target_unit": target.target_unit,
+    }
+
+
+def _check_in_dict(check_in: DailyCheckIn) -> CheckInDict:
+    return {
+        "id": check_in.id,
+        "check_in_date": format_iso_date(check_in.check_in_date),
+        "pain_level": check_in.pain_level,
+        "has_flare_up": check_in.has_flare_up,
+    }
+
+
+def _incident_dict(incident: FlareUpIncident) -> IncidentDict:
+    return {
+        "id": incident.id,
+        "incident_date": format_iso_date(incident.incident_date),
+        "activity_class_id": incident.activity_class_id,
+        "severity": incident.severity,
     }

@@ -1,12 +1,17 @@
 from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlmodel import Session
 
 from app.database import get_session
-from app.schemas.load import CheckViolationsRequest, CheckViolationsResponse, LoadSummaryRead
-from app.services.load_queries import check_load_violations, get_load_summary
+from app.schemas.load import (
+    CheckViolationsRequest,
+    CheckViolationsResponse,
+    DelayedTaxResponse,
+    LoadSummaryRead,
+)
+from app.services.load_queries import check_load_violations, get_delayed_tax, get_load_summary
 
 router = APIRouter(prefix="/api/load", tags=["load"])
 
@@ -32,4 +37,21 @@ async def post_check_violations_route(
         volume_value=payload.volume_value,
         rpe=payload.rpe,
         as_of=payload.as_of,
+    )
+
+
+@router.get("/delayed-tax", response_model=DelayedTaxResponse)
+async def get_delayed_tax_route(
+    session: SessionDep,
+    as_of: date | None = None,
+    risk_window_days: Annotated[int, Query(gt=0)] = 7,
+    baseline_days: Annotated[int, Query(gt=0)] = 14,
+    pain_threshold: int = 3,
+) -> DelayedTaxResponse:
+    return get_delayed_tax(
+        session,
+        as_of=as_of,
+        risk_window_days=risk_window_days,
+        baseline_days=baseline_days,
+        pain_threshold=pain_threshold,
     )
