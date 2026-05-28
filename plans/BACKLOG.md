@@ -17,3 +17,8 @@ Follow-up items that are intentionally out of scope for the current task but sho
 
 - Refactor `check_violations` in `load_engine.py` — radon F-rank complexity; extract per-rule helpers when extending.
 - Add API integration test for `elevated_load` without active block on `GET /api/load/delayed-tax`.
+
+## Phase 5 / 6 follow-ups
+
+- Phase 6 **F1.3**: fetch full Log History via `GET /api/activity-logs` — dashboard returns a 30-day log window only (owner decision 2026-05-28).
+- Phase 6 or 7: wire `recovery_streaks` from dashboard into hook/UI when MOCKUPS compliance section is implemented (field is new vs current `MilestoneEngineResult`).
