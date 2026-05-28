@@ -57,8 +57,6 @@ const FieldGroup: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   </Card>
 );
 
-const SectionGap: React.FC = () => <div className="h-0" />;
-
 // ---------------------------------------------------------------------------
 // Screen
 // ---------------------------------------------------------------------------

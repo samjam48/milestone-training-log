@@ -377,6 +377,21 @@ with minimal screen diffs (label lookups only).
 Log Activity → submit → row appears in Log History on next view;
 Morning Check-In → submit → CTA disappears from Dashboard.
 
+**Development data strategy (owner decision, 2026-05-28):**
+
+| Stage | Approach |
+| --- | --- |
+| **Now (Phase 6 handoff)** | **Manual seeding** is sufficient — run `python -m scripts.seed` (or project seed entrypoint) against the local SQLite file when starting a dev session. Owner verifies the app manually before merge; no automated E2E gate blocks Phase 6. |
+| **Once the app is usable day-to-day** | Introduce a **dedicated local test database** (separate file or env) with **automated seed** in `make test` / CI so integration and manual smoke runs are repeatable without touching owner data. |
+| **Feature updates with schema changes** | Practice **Alembic migrations** on the local live DB: `alembic upgrade head` after pulls that add revisions; document rollback (`alembic downgrade -1`) for failed upgrades. Test migrations against the test DB in CI before applying to a personal live DB. |
+
+Rationale: defer test-DB automation until the product is stable enough to use
+regularly; avoid over-investing in fixture pipelines before the UI loop is
+proven. Revisit when Phase 7+ adds write-heavy settings/goals flows.
+
+**Implementation status:** F1.1–F1.4 implemented on `feat/phase-6-frontend`
+(2026-05-28); owner manual verification pending before merge to `main`.
+
 ---
 
 ### Phase 7 — Frontend Completion
@@ -394,8 +409,9 @@ and wire to API. Surface backend features not yet shown in Tier-3 screens.
 - **Delayed tax / load risk panel** — PRD F4; consume `GET /api/load/delayed-tax`
 - **`CalendarHeatmap`** — block-review grid; wire `dailyScores` from hook on
   Settings / block-review flow (component exists in `export/src/composites/`)
-- **Dynamic load graph title** — replace hardcoded "Foot Load" with graph class
-  name from dashboard payload (partial fix may land in F1.4)
+- **Dynamic load graph title (rule-driven)** — F1.4 derives title from first
+  performance class; full weekly-cap resolution from dashboard payload deferred
+  to Phase 7 if seed scenario needs rule-accurate graph class
 
 | Ticket | Scope |
 |---|---|

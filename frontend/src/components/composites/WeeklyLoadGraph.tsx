@@ -283,7 +283,7 @@ export const WeeklyLoadGraph: React.FC<WeeklyLoadGraphProps> = ({
               className="fill-ink-faint"
               style={{ fontSize: 8 }}
             >
-              {shortLabel(data[i].date)}
+              {shortLabel(data[i]?.date ?? startDate)}
             </text>
           ))}
         </svg>

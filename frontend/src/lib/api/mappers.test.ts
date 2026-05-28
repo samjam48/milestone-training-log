@@ -19,11 +19,18 @@ import {
 } from './testFixtures';
 import { parseApiError } from './client';
 import {
+  buildQuery,
   mapActivityLogFromApi,
   mapActivityLogCreateBody,
+  mapActivityLogPatchBody,
+  mapCheckViolationsRequestBody,
+  mapCheckViolationsResponseFromApi,
   mapDailyCheckInCreateBody,
   mapDailyCheckInFromApi,
   mapDashboardFromApi,
+  mapDelayedTaxResponseFromApi,
+  mapFlareUpIncidentFromApi,
+  mapLoadSummaryFromApi,
   mapRuleViolationFromApi,
 } from './mappers';
 
@@ -287,6 +294,176 @@ describe('mapRuleViolationFromApi', () => {
     const mapped = mapRuleViolationFromApi(ruleViolationReadSnakeDanger);
 
     expect(mapped.severity).toBe('danger');
+  });
+});
+
+describe('mapCheckViolationsRequestBody', () => {
+  it('maps camelCase input to snake_case POST body', () => {
+    expect(
+      mapCheckViolationsRequestBody({
+        activityId: 'act-walk',
+        volumeValue: 2.5,
+        rpe: 5,
+        asOf: '2026-05-25',
+      }),
+    ).toEqual({
+      activity_id: 'act-walk',
+      volume_value: 2.5,
+      rpe: 5,
+      as_of: '2026-05-25',
+    });
+  });
+
+  it('omits as_of when not provided', () => {
+    const body = mapCheckViolationsRequestBody({
+      activityId: 'act-walk',
+      volumeValue: 2.5,
+      rpe: 5,
+    });
+
+    expect(body).not.toHaveProperty('as_of');
+  });
+});
+
+describe('mapCheckViolationsResponseFromApi', () => {
+  it('maps violations array from snake_case', () => {
+    const mapped = mapCheckViolationsResponseFromApi({
+      violations: [ruleViolationReadSnakeCaution],
+    });
+
+    expect(mapped.violations).toEqual([
+      {
+        ruleId: 'rule-rest-foot',
+        ruleType: 'rest_between_class',
+        message: 'Breaks 3-day rest rule for foot load',
+        severity: 'caution',
+      },
+    ]);
+  });
+
+  it('returns empty violations when response violations is not an array', () => {
+    expect(mapCheckViolationsResponseFromApi({ violations: null }).violations).toEqual([]);
+  });
+});
+
+describe('mapLoadSummaryFromApi', () => {
+  it('maps class_statuses, suggestions, and weekly_progress lists', () => {
+    const mapped = mapLoadSummaryFromApi({
+      as_of: '2026-05-25',
+      class_statuses: [
+        {
+          activity_class_id: 'cls-foot',
+          state: 'caution',
+          label: 'Foot load',
+          reason: 'Approaching cap',
+        },
+      ],
+      suggestions: [
+        {
+          id: 'sug-1',
+          label: 'Rest foot class',
+          state: 'caution',
+          reason: 'Cap near limit',
+        },
+      ],
+      weekly_progress: [
+        {
+          weekly_target_id: 'wt-foot',
+          activity_class_id: 'cls-foot',
+          class_name: 'Foot load',
+          value: 80,
+          target: 120,
+          unit: 'load',
+          state: 'caution',
+        },
+      ],
+    });
+
+    expect(mapped.asOf).toBe('2026-05-25');
+    expect(mapped.classStatuses[0]).toMatchObject({
+      activityClassId: 'cls-foot',
+      state: 'caution',
+      label: 'Foot load',
+    });
+    expect(mapped.suggestions[0]?.id).toBe('sug-1');
+    expect(mapped.weeklyProgress[0]?.className).toBe('Foot load');
+  });
+});
+
+describe('mapDelayedTaxResponseFromApi', () => {
+  it('maps hits with snake_case keys converted to camelCase', () => {
+    const mapped = mapDelayedTaxResponseFromApi({
+      as_of: '2026-05-25',
+      risk_window_days: 7,
+      baseline_days: 14,
+      pain_threshold: 3,
+      hits: [{ activity_id: 'act-walk', risk_score: 0.8 }],
+    });
+
+    expect(mapped).toMatchObject({
+      asOf: '2026-05-25',
+      riskWindowDays: 7,
+      baselineDays: 14,
+      painThreshold: 3,
+    });
+    expect(mapped.hits[0]).toMatchObject({ activityId: 'act-walk', riskScore: 0.8 });
+  });
+});
+
+describe('mapActivityLogPatchBody', () => {
+  it('maps only provided camelCase keys to snake_case', () => {
+    expect(
+      mapActivityLogPatchBody({
+        durationMinutes: 30,
+        notes: 'Updated',
+        unusedField: undefined,
+      }),
+    ).toEqual({
+      duration_minutes: 30,
+      notes: 'Updated',
+    });
+  });
+});
+
+describe('mapFlareUpIncidentFromApi', () => {
+  it('maps snake_case incident read shape without userId', () => {
+    const mapped = mapFlareUpIncidentFromApi({
+      id: 'inc-1',
+      incident_date: '2026-05-25',
+      body_part: 'Left heel',
+      severity: 7,
+      activity_class_id: 'cls-foot',
+      daily_check_in_id: null,
+      notes: 'Sharp pain',
+      created_at: '2026-05-25T08:00:00Z',
+      updated_at: '2026-05-25T08:00:00Z',
+    });
+
+    expect(mapped).toMatchObject({
+      id: 'inc-1',
+      incidentDate: '2026-05-25',
+      bodyPart: 'Left heel',
+      severity: 7,
+      activityClassId: 'cls-foot',
+      notes: 'Sharp pain',
+    });
+    expect('userId' in mapped).toBe(false);
+  });
+});
+
+describe('buildQuery', () => {
+  it('builds query string omitting undefined params', () => {
+    expect(
+      buildQuery({
+        from: '2026-05-01',
+        to: undefined,
+        activity_id: 'act-walk',
+      }),
+    ).toBe('?from=2026-05-01&activity_id=act-walk');
+  });
+
+  it('returns empty string when no params provided', () => {
+    expect(buildQuery({})).toBe('');
   });
 });
 

@@ -24,7 +24,10 @@ export const DEFAULT_RPE: RPE = 5;
 
 /** Parse 'YYYY-MM-DD' into a UTC Date at 00:00. Avoids local-tz off-by-one. */
 export function parseISODate(d: ISODate): Date {
-  const [y, m, day] = d.split('-').map(Number);
+  const [yRaw, mRaw, dayRaw] = d.split('-');
+  const y = Number(yRaw);
+  const m = Number(mRaw);
+  const day = Number(dayRaw);
   return new Date(Date.UTC(y, m - 1, day));
 }
 

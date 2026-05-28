@@ -127,7 +127,9 @@ export const LogHistoryScreen: React.FC<Props> = ({ engine, onOpenLogActivity, o
         ) : (
           <div className="flex flex-col gap-4">
             {monthKeys.map(month => {
-              const dayKeys = Object.keys(byMonth[month]).sort((a, b) => b.localeCompare(a));
+              const monthData = byMonth[month];
+              if (!monthData) return null;
+              const dayKeys = Object.keys(monthData).sort((a, b) => b.localeCompare(a));
               return (
                 <section key={month}>
                   {/* Month header */}
@@ -144,7 +146,7 @@ export const LogHistoryScreen: React.FC<Props> = ({ engine, onOpenLogActivity, o
                               {dayLabel(day)}
                             </span>
                           </div>
-                          {byMonth[month][day].map(log => (
+                          {(monthData[day] ?? []).map(log => (
                             <LogRow
                               key={log.id}
                               log={log}

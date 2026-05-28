@@ -4,13 +4,13 @@
 
 import * as React from 'react';
 import { cn } from '../../lib/cn';
-import { Card, CardHeader, CardTitle, CardMeta } from '../ui/Card';
+import { Card } from '../ui/Card';
 import { ProgressBar } from '../ui/ProgressBar';
 import { StatusDot } from '../ui/StatusDot';
 import { SuggestedActivityCard } from '../composites/SuggestedActivityCard';
 import { WeeklyLoadGraph } from '../composites/WeeklyLoadGraph';
 import type { MilestoneEngineResult } from '../../hooks/useMilestoneEngine';
-import type { SafetyState } from '../../types';
+import type { ActivityClass, SafetyState, TrainingBlock } from '../../types';
 
 interface Props {
   engine: MilestoneEngineResult;
@@ -35,6 +35,26 @@ function formatShort(iso: string): string {
 function progressLabel(value: number, unit: string): string {
   if (unit === 'sessions') return `${value} session${value === 1 ? '' : 's'}`;
   return `${value} ${unit}`;
+}
+
+function resolveLoadGraphTitle(
+  block: TrainingBlock,
+  activityClasses: ActivityClass[],
+): string {
+  if (!block.id) {
+    return 'Weekly load';
+  }
+  const performanceClasses = [...activityClasses]
+    .filter((c) => c.type === 'performance')
+    .sort((a, b) => a.id.localeCompare(b.id));
+  return performanceClasses[0]?.name ?? 'Load';
+}
+
+function classStatusLabel(
+  activityClassId: string,
+  activityClasses: ActivityClass[],
+): string {
+  return activityClasses.find((c) => c.id === activityClassId)?.name ?? 'Unknown class';
 }
 
 // ---------------------------------------------------------------------------
@@ -93,8 +113,10 @@ export const DashboardScreen: React.FC<Props> = ({ engine, onOpenCheckIn, onOpen
     todayDate, userName, hasCheckedInToday,
     suggestions, weeklyProgress, classStatuses,
     loadSeries, flareUpDates, weekLoadThreshold, cleanStreak,
-    block,
+    block, activityClasses,
   } = engine;
+
+  const loadGraphTitle = resolveLoadGraphTitle(block, activityClasses);
 
   return (
     <div className="flex flex-col gap-5 px-4 pt-5 pb-4">
@@ -140,7 +162,7 @@ export const DashboardScreen: React.FC<Props> = ({ engine, onOpenCheckIn, onOpen
         series={loadSeries}
         threshold={weekLoadThreshold}
         flareUpDates={flareUpDates}
-        title="Foot Load"
+        title={loadGraphTitle}
         subtitle="Rolling 7-day · full block"
       />
 
@@ -153,7 +175,7 @@ export const DashboardScreen: React.FC<Props> = ({ engine, onOpenCheckIn, onOpen
               <li key={cs.activityClassId} className="flex items-center justify-between gap-3 px-4 py-3">
                 <StatusDot
                   state={cs.state}
-                  label={cs.activityClassId === 'cls-foot' ? 'High-Intensity Foot' : cs.activityClassId === 'cls-recovery' ? 'Low-Impact Recovery' : 'Upper Body'}
+                  label={classStatusLabel(cs.activityClassId, activityClasses)}
                   meta={cs.reason}
                 />
                 {cs.nextSafeDate && (

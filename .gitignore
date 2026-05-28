@@ -6,6 +6,7 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .coverage
+frontend/coverage/
 *.egg-info/
 backend/.venv/
 frontend/node_modules/

@@ -39,13 +39,6 @@ export interface SliderProps {
   className?: string;
 }
 
-const trackFill: Record<NonNullable<SliderProps['state']>, string> = {
-  neutral: 'bg-ink',
-  safe:    'bg-safe',
-  caution: 'bg-caution',
-  danger:  'bg-danger',
-};
-
 const thumbVar: Record<NonNullable<SliderProps['state']>, string> = {
   neutral: '#E8ECF1',
   safe:    '#3DD68C',

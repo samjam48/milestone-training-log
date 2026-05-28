@@ -27,7 +27,6 @@ import type { DailySafetyScore, ISODate, SafetyState } from '../../types';
 import {
   addDays,
   eachDay,
-  formatISODate,
   parseISODate,
 } from '../../lib/load';
 
@@ -90,10 +89,14 @@ function buildColumns(start: ISODate, end: ISODate): Column[] {
   const cols: Column[] = [];
   for (let i = 0; i < days.length; i += 7) {
     const slice = days.slice(i, i + 7);
-    while (slice.length < 7) slice.push(formatISODate(addDays(slice[slice.length - 1], 1)));
+    while (slice.length < 7) {
+      const last = slice[slice.length - 1];
+      if (last === undefined) break;
+      slice.push(addDays(last, 1));
+    }
     cols.push({
       cells: slice.map((d) => (d >= start && d <= end ? d : null)),
-      label: shortDateLabel(slice[0]),
+      label: shortDateLabel(slice[0] ?? start),
     });
   }
   return cols;

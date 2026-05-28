@@ -89,7 +89,9 @@ export const ActivityLogRow: React.FC<ActivityLogRowProps> = ({
       {/* Row 1 — name + feel badge */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 min-w-0">
-          {hasViolation && <ViolationIcon severity={worstViolation.severity} />}
+          {hasViolation && worstViolation !== undefined && (
+            <ViolationIcon severity={worstViolation.severity} />
+          )}
           <span className="text-body font-semibold text-ink truncate">{activityName}</span>
         </div>
         <Pill className={feel.pill}>{feel.label}</Pill>
