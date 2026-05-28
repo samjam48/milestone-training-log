@@ -4,6 +4,7 @@ from app.routers.activities import router as activities_router
 from app.routers.activity_classes import router as activity_classes_router
 from app.routers.activity_logs import router as activity_logs_router
 from app.routers.daily_check_ins import router as daily_check_ins_router
+from app.routers.dashboard import router as dashboard_router
 from app.routers.flare_up_incidents import router as flare_up_incidents_router
 from app.routers.goals import router as goals_router
 from app.routers.health import router as health_router
@@ -34,6 +35,7 @@ def create_app() -> FastAPI:
     app.include_router(weekly_targets_router)
     app.include_router(recovery_targets_router)
     app.include_router(load_router)
+    app.include_router(dashboard_router)
     return app
 
 

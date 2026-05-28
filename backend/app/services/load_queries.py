@@ -63,9 +63,9 @@ def get_load_summary(session: Session, *, as_of: date | None = None) -> LoadSumm
     activities = list_activities(session)
     logs = list_activity_logs(session, end_date=resolved)
 
-    class_dicts = [_activity_class_dict(cls) for cls in activity_classes]
-    activity_dicts = [_activity_dict(activity) for activity in activities]
-    log_dicts = [_log_dict(log) for log in logs]
+    class_dicts = [activity_class_dict(cls) for cls in activity_classes]
+    activity_dicts = [activity_dict(activity) for activity in activities]
+    log_dicts = [log_dict(log) for log in logs]
 
     rules: list[Rule] = []
     weekly_targets: list[WeeklyTarget] = []
@@ -79,8 +79,8 @@ def get_load_summary(session: Session, *, as_of: date | None = None) -> LoadSumm
     except TrainingBlockNotFoundError:
         pass
 
-    rule_dicts = [_rule_dict(rule) for rule in rules]
-    target_dicts = [_weekly_target_dict(target) for target in weekly_targets]
+    rule_dicts = [rule_dict(rule) for rule in rules]
+    target_dicts = [weekly_target_dict(target) for target in weekly_targets]
 
     class_statuses = compute_class_statuses(
         as_of_str,
@@ -135,9 +135,9 @@ def check_load_violations(
     activities = list_activities(session)
     logs = list_activity_logs(session, end_date=resolved)
 
-    activity_dicts = [_activity_dict(activity) for activity in activities]
-    log_dicts = [_log_dict(log) for log in logs]
-    rule_dicts = [_rule_dict(rule) for rule in rules]
+    activity_dicts = [activity_dict(activity) for activity in activities]
+    log_dicts = [log_dict(log) for log in logs]
+    rule_dicts = [rule_dict(rule) for rule in rules]
 
     violations = check_violations(
         activity_id,
@@ -175,11 +175,11 @@ def get_delayed_tax(
         if incident.incident_date <= resolved
     ]
 
-    class_dicts = [_activity_class_dict(cls) for cls in activity_classes]
-    activity_dicts = [_activity_dict(activity) for activity in activities]
-    log_dicts = [_log_dict(log) for log in logs]
-    check_in_dicts = [_check_in_dict(check_in) for check_in in check_ins]
-    incident_dicts = [_incident_dict(incident) for incident in incidents]
+    class_dicts = [activity_class_dict(cls) for cls in activity_classes]
+    activity_dicts = [activity_dict(activity) for activity in activities]
+    log_dicts = [log_dict(log) for log in logs]
+    check_in_dicts = [check_in_dict(check_in) for check_in in check_ins]
+    incident_dicts = [incident_dict(incident) for incident in incidents]
 
     rules: list[Rule] = []
     try:
@@ -188,7 +188,7 @@ def get_delayed_tax(
     except TrainingBlockNotFoundError:
         pass
 
-    rule_dicts = [_rule_dict(rule) for rule in rules]
+    rule_dicts = [rule_dict(rule) for rule in rules]
 
     hits = detect_delayed_tax(
         log_dicts,
@@ -212,7 +212,7 @@ def get_delayed_tax(
     )
 
 
-def _activity_class_dict(activity_class: ActivityClass) -> ActivityClassDict:
+def activity_class_dict(activity_class: ActivityClass) -> ActivityClassDict:
     return {
         "id": activity_class.id,
         "name": activity_class.name,
@@ -221,7 +221,7 @@ def _activity_class_dict(activity_class: ActivityClass) -> ActivityClassDict:
     }
 
 
-def _activity_dict(activity: Activity) -> ActivityDict:
+def activity_dict(activity: Activity) -> ActivityDict:
     return {
         "id": activity.id,
         "activity_class_id": activity.activity_class_id,
@@ -232,7 +232,7 @@ def _activity_dict(activity: Activity) -> ActivityDict:
     }
 
 
-def _log_dict(log: ActivityLog) -> LogDict:
+def log_dict(log: ActivityLog) -> LogDict:
     return {
         "id": log.id,
         "activity_id": log.activity_id,
@@ -246,7 +246,7 @@ def _log_dict(log: ActivityLog) -> LogDict:
     }
 
 
-def _rule_dict(rule: Rule) -> RuleDict:
+def rule_dict(rule: Rule) -> RuleDict:
     return {
         "id": rule.id,
         "training_block_id": rule.training_block_id,
@@ -258,7 +258,7 @@ def _rule_dict(rule: Rule) -> RuleDict:
     }
 
 
-def _weekly_target_dict(target: WeeklyTarget) -> WeeklyTargetDict:
+def weekly_target_dict(target: WeeklyTarget) -> WeeklyTargetDict:
     return {
         "id": target.id,
         "training_block_id": target.training_block_id,
@@ -268,7 +268,7 @@ def _weekly_target_dict(target: WeeklyTarget) -> WeeklyTargetDict:
     }
 
 
-def _check_in_dict(check_in: DailyCheckIn) -> CheckInDict:
+def check_in_dict(check_in: DailyCheckIn) -> CheckInDict:
     return {
         "id": check_in.id,
         "check_in_date": format_iso_date(check_in.check_in_date),
@@ -277,7 +277,7 @@ def _check_in_dict(check_in: DailyCheckIn) -> CheckInDict:
     }
 
 
-def _incident_dict(incident: FlareUpIncident) -> IncidentDict:
+def incident_dict(incident: FlareUpIncident) -> IncidentDict:
     return {
         "id": incident.id,
         "incident_date": format_iso_date(incident.incident_date),

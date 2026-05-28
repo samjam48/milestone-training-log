@@ -11,6 +11,8 @@ from app.tests.helpers.load_engine_fixtures import (
     ACTIVITIES,
     ACTIVITY_CLASSES,
     BLOCK_START,
+    CHECK_INS,
+    INCIDENTS,
     LOGS,
     RULES,
     WEEKLY_TARGETS,
@@ -92,6 +94,33 @@ def seed_load_mock_graph(app_with_test_database: FastAPI) -> None:
             rpe=log.get("rpe"),
             post_activity_feel=log.get("post_activity_feel"),
             rule_violations_at_log=log.get("rule_violations_at_log"),
+        )
+
+
+def seed_dashboard_mock_graph(app_with_test_database: FastAPI) -> None:
+    """Sam Chen mock graph plus check-ins and flare-up incidents for dashboard tests."""
+    seed_load_mock_graph(app_with_test_database)
+
+    for check_in in CHECK_INS:
+        seed_daily_check_in(
+            app_with_test_database,
+            check_in_id=check_in["id"],
+            check_in_date=date.fromisoformat(check_in["check_in_date"]),
+            pain_level=check_in["pain_level"],
+            readiness_level=check_in["readiness_level"],
+            stiffness_level=check_in["stiffness_level"],
+            has_flare_up=check_in["has_flare_up"],
+        )
+
+    for incident in INCIDENTS:
+        seed_flare_up_incident(
+            app_with_test_database,
+            incident_id=incident["id"],
+            incident_date=date.fromisoformat(incident["incident_date"]),
+            body_part=incident["body_part"],
+            severity=incident["severity"],
+            activity_class_id=incident.get("activity_class_id"),
+            daily_check_in_id=incident.get("daily_check_in_id"),
         )
 
 

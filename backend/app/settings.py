@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./data/milestone.db"
     APP_VERSION: str = "0.1.0"
     BACKEND_PORT: int = 8084
+    DEFAULT_USER_NAME: str = "Sam"
 
     model_config = SettingsConfigDict(
         env_file=ENV_FILE,
