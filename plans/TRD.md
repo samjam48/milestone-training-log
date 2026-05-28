@@ -38,7 +38,7 @@ same relative paths work when the built `dist/` is wrapped natively.
 | Frontend framework | React 18 + Vite 5 |
 | Frontend language | TypeScript 5 (strict mode) |
 | Styling | Tailwind CSS 3.4 (custom token theme from `export/tailwind.config.js`) |
-| HTTP client | `fetch` wrapped in typed API client module |
+| HTTP client | `fetch` wrapped in typed API modules under `frontend/src/lib/api/`; snake_case ↔ camelCase mapping at client boundary |
 | Async state | TanStack Query v5 (React Query) |
 | Frontend tests | Vitest + Testing Library |
 
@@ -72,9 +72,9 @@ milestone-training-log/
 ├── frontend/
 │   ├── src/
 │   │   ├── lib/
-│   │   │   ├── api.ts           # Typed fetch wrappers — new in Phase 6
-│   │   │   ├── engine.ts        # Unchanged from export/src/lib/engine.ts
-│   │   │   ├── load.ts          # Unchanged from export/src/lib/load.ts
+│   │   │   ├── api/             # Typed fetch + snake↔camel mappers (Phase 6)
+│   │   │   ├── engine.ts        # Reference / tests only after Phase 6 F1.3
+│   │   │   ├── load.ts          # Reference / tests only after Phase 6 F1.3
 │   │   │   └── cn.ts            # Unchanged from export/src/lib/cn.ts
 │   │   ├── hooks/
 │   │   │   └── useMilestoneEngine.ts  # Rewired in Phase 6 (same interface)
@@ -347,37 +347,71 @@ all its required data. Response must satisfy `MilestoneEngineResult` shape.
 ### Phase 6 — Frontend Scaffold + API Integration
 
 **Goal:** Vite project bootstrapped, all `export/src/` code copied in, hook
-rewired to real API. All existing screens must work unchanged.
+rewired to real API. All five existing Tier-3 screens work against seed data
+with minimal screen diffs (label lookups only).
 
-**Phase 6 planning flags (owner 2026-05-28):**
+**Status:** Phase 5 merged to `main` (2026-05-28). Ticket detail:
+`plans/tickets-phase-6-frontend-2026-05-28.md`.
 
-- **F1.3 must plan:** Log History screen fetches full history via
-  `GET /api/activity-logs` — dashboard `logs` is capped to a 30-day window only
-  (Phase 5 owner decision).
-- **F1.3 must plan:** Map `recovery_streaks` from dashboard into
-  `useMilestoneEngine` / compliance UI when that section is wired (new field vs
-  current `MilestoneEngineResult`).
+**Owner decisions locked (2026-05-28):**
+
+| # | Topic | Decision |
+| --- | --- | --- |
+| 1 | Goals/Settings tabs before Phase 7 | Keep all four tabs; show **"Coming soon"** placeholder screens |
+| 2 | JSON casing | Backend stays **snake_case**; `frontend/src/lib/api/` maps to **camelCase** at the client boundary (no Pydantic alias churn) |
+| 3 | Log History data source | **`GET /api/activity-logs`** for full history; dashboard `logs` remains 30-day window only |
+| 4 | Live rule check | **`POST /api/load/check-violations`** (all five rule types); remove prototype's two-rule inline logic from the hook |
+| 5 | Client IDs on writes | Frontend generates opaque string IDs (`crypto.randomUUID()`) on POST bodies |
+| 6 | Derived state at runtime | **`engine.ts` / `load.ts` not used in the live hook path** once API is wired; backend is authoritative. Keep libs for optional unit tests / reference |
+| 7 | `recovery_streaks` | Map into extended `MilestoneEngineResult` in F1.3; **UI wiring deferred to Phase 7** (Settings / compliance section) |
+| 8 | Delayed tax | **`GET /api/load/delayed-tax`** client wrapper in F1.2; **dashboard UI deferred to Phase 7+** (PRD F4) |
 
 | Ticket | Scope |
 |---|---|
-| F1.1 | `npm create vite@latest frontend -- --template react-ts`; install `tailwindcss`, `@tanstack/react-query`; copy `export/src/` → `frontend/src/`; copy `export/tailwind.config.js`; add Vite proxy in `vite.config.ts`; `tsconfig.json` strict mode |
-| F1.2 | `frontend/src/lib/api.ts`: typed `fetch` wrappers for every endpoint in §5; request and response types from `types.ts`; custom `ApiError` class with status code |
-| F1.3 | Rewrite `frontend/src/hooks/useMilestoneEngine.ts`: replace `useState(LOGS)` etc. with `useQuery` (dashboard endpoint) and `useMutation` (submitLog, submitCheckIn, submitIncident) via `api.ts`; keep `MilestoneEngineResult` return type exactly — no screen changes needed. **Also plan:** full Log History via `GET /api/activity-logs` (not dashboard `logs`); map `recovery_streaks` in hook when compliance UI is wired |
-| F1.4 | TypeScript + lint clean: `tsc --noEmit` passes; `eslint frontend/src` passes; fix any type errors from integration |
+| F1.1 | Vite + Tailwind + React Query scaffold; copy `export/src/`; `App.tsx` tab router + modal flows; Goals/Settings "Coming soon"; docker-compose frontend service; Makefile frontend gates |
+| F1.2 | Typed API client module(s) with snake↔camel mappers, `ApiError`, wrappers for every §5 endpoint |
+| F1.3 | Rewire `useMilestoneEngine`: dashboard query + activity-logs query + mutations + API-backed `checkViolations`; extend result type for `recoveryStreaks` |
+| F1.4 | Replace hardcoded class labels; Vitest + ESLint + `tsc`; Makefile `lint`/`test` include frontend |
 
 **Verification:** App loads in browser showing real seed data on Dashboard;
 Log Activity → submit → row appears in Log History on next view;
 Morning Check-In → submit → CTA disappears from Dashboard.
+
+**Development data strategy (owner decision, 2026-05-28):**
+
+| Stage | Approach |
+| --- | --- |
+| **Now (Phase 6 handoff)** | **Manual seeding** is sufficient — from `backend/`, run `.venv/bin/python3 -m scripts.seed` (after `alembic upgrade head`) against the local SQLite file when starting a dev session. Owner verifies the app manually before merge; no automated E2E gate blocks Phase 6. |
+| **Once the app is usable day-to-day** | Introduce a **dedicated local test database** (separate file or env) with **automated seed** in `make test` / CI so integration and manual smoke runs are repeatable without touching owner data. |
+| **Feature updates with schema changes** | Practice **Alembic migrations** on the local live DB: `alembic upgrade head` after pulls that add revisions; document rollback (`alembic downgrade -1`) for failed upgrades. Test migrations against the test DB in CI before applying to a personal live DB. |
+
+Rationale: defer test-DB automation until the product is stable enough to use
+regularly; avoid over-investing in fixture pipelines before the UI loop is
+proven. Revisit when Phase 7+ adds write-heavy settings/goals flows.
+
+**Implementation status:** F1.1–F1.4 implemented on `feat/phase-6-frontend`
+(2026-05-28); owner manual verification pending before merge to `main`.
 
 ---
 
 ### Phase 7 — Frontend Completion
 
 **Goal:** Port the 3 remaining screens from JSX prototypes to TypeScript
-and wire to API.
+and wire to API. Surface backend features not yet shown in Tier-3 screens.
 
 **Prerequisite:** Owner adds `SettingsScreen.jsx`, `GoalsScreen.jsx`,
 `NewActivitySheet.jsx` to `export/preview/` before this phase starts.
+
+**Deferred from Phase 6 (plan here, implement in Phase 7):**
+
+- **`recovery_streaks` compliance UI** — dashboard currently shows clean streak
+  only; MOCKUPS compliance section should consume `recoveryStreaks` from hook
+- **Delayed tax / load risk panel** — PRD F4; consume `GET /api/load/delayed-tax`
+- **`CalendarHeatmap`** — block-review grid; wire `dailyScores` from hook on
+  Settings / block-review flow (component exists in `export/src/composites/`)
+- **Dynamic load graph title (rule-driven)** — F1.4 derives title from first
+  performance class; full weekly-cap resolution from dashboard payload deferred
+  to Phase 7 if seed scenario needs rule-accurate graph class
 
 | Ticket | Scope |
 |---|---|
@@ -405,6 +439,9 @@ detection, and MCP context stub for future AI integration.
 **Verification:** Kill backend container → Dashboard shows error boundary, not
 blank white screen. Log enough activities to meet milestone conditions →
 `GET /api/training-blocks/active` returns `is_review_milestone_hit: true`.
+
+**Backend follow-up (non-blocking):** Refactor `check_violations` in
+`load_engine.py` (radon F-rank) when next touched — see `plans/BACKLOG.md`.
 
 ---
 
@@ -475,8 +512,8 @@ exists (Phase 0, ticket B0.1).
 
 ## 11. Owner Actions Required Before Implementation
 
-- **Before Phase 6:** Ensure `export/src/` is fully committed and stable in
-  the repo — Phase 6 copies it wholesale into `frontend/src/`
+- ~~**Before Phase 6:** Ensure `export/src/` is fully committed and stable~~
+  (done — copy wholesale into `frontend/src/` on F1.1)
 - **Before Phase 7:** Add `SettingsScreen.jsx`, `GoalsScreen.jsx`,
   `NewActivitySheet.jsx` to `export/preview/` so the implementer can port
   them to TypeScript

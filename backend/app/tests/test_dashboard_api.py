@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 import time
+from collections.abc import AsyncIterator, Iterator
 from datetime import date, timedelta
+from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy import create_engine
+from sqlmodel import Session
 
+from app.database import get_session
+from app.main import create_app
 from app.tests.helpers.load_api_seed import seed_dashboard_mock_graph
 from app.tests.helpers.load_api_test_utils import FROZEN_TODAY, foot_status, freeze_server_today
 from app.tests.helpers.load_engine_fixtures import AS_OF, WEEKLY_TARGETS
@@ -17,6 +23,7 @@ from app.tests.helpers.seed import (
     seed_activity_class,
     seed_recovery_target,
 )
+from app.tests.test_seed_data import PROTOTYPE_TODAY, _make_migrated_engine, _run_seed
 
 DASHBOARD_URL = "/api/dashboard"
 SUMMARY_URL = "/api/load/summary"
@@ -193,3 +200,55 @@ async def test_get_dashboard_seeded_response_completes_under_500ms(
     assert response.status_code == 200
     if elapsed_ms >= 500:
         pytest.skip(f"Dashboard took {elapsed_ms:.0f}ms; soft threshold is 500ms")
+
+
+@pytest.fixture
+def app_with_prototype_seed(tmp_path: Path) -> Iterator[FastAPI]:
+    """Migrated SQLite DB populated via backend/scripts/seed.py (includes violations)."""
+    database_path = tmp_path / "dashboard-prototype-seed.db"
+    database_url = f"sqlite:///{database_path}"
+    _make_migrated_engine(database_path)
+    _run_seed(database_url)
+
+    engine = create_engine(
+        database_url,
+        connect_args={"check_same_thread": False},
+    )
+    app = create_app()
+
+    def override_get_session() -> Iterator[Session]:
+        with Session(engine) as session:
+            yield session
+
+    app.dependency_overrides[get_session] = override_get_session
+    yield app
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+async def prototype_seed_client(
+    app_with_prototype_seed: FastAPI,
+) -> AsyncIterator[AsyncClient]:
+    transport = ASGITransport(app=app_with_prototype_seed)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        yield client
+
+
+async def test_get_dashboard_returns_200_after_prototype_seed_with_violations(
+    prototype_seed_client: AsyncClient,
+) -> None:
+    response = await prototype_seed_client.get(
+        DASHBOARD_URL,
+        params={"as_of": PROTOTYPE_TODAY.isoformat()},
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+
+    violation_rule_ids = [
+        violation["rule_id"]
+        for score in payload["daily_scores"]
+        for violation in score["violations"]
+    ]
+    assert violation_rule_ids
+    assert all(rule_id == "rule-rest-foot" for rule_id in violation_rule_ids)

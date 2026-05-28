@@ -1,0 +1,238 @@
+// =============================================================================
+// LogActivityScreen — Tier 3
+// -----------------------------------------------------------------------------
+// The primary log form. Key behaviour:
+//   • Activity picker grouped by class (radio-style rows)
+//   • Duration + volume number fields (unit auto-populated from activity)
+//   • RPE slider — state tint safe → caution → danger as effort rises
+//   • Post-activity feel — SegmentedControl (Fine / Discomfort / Bad)
+//   • Live rule-violation banner — recomputes on every input change
+//   • Submit without blocking: violations are attached to the log draft and
+//     the button label changes to "Log anyway" — users always own the call
+// =============================================================================
+
+import * as React from 'react';
+import { cn } from '../../lib/cn';
+import { Card } from '../ui/Card';
+import { Slider } from '../ui/Slider';
+import { SegmentedControl } from '../ui/SegmentedControl';
+import { RuleViolationBanner } from '../composites/RuleViolationBanner';
+import type { MilestoneEngineResult, LogDraft } from '../../hooks/useMilestoneEngine';
+import type { Activity, ActivityClass, RPE, PostActivityFeel, SafetyState } from '../../types';
+
+interface Props {
+  engine: MilestoneEngineResult;
+  /** Pre-selected activity (e.g. tapped from SuggestedActivityCard). */
+  initialActivityId?: string;
+  onBack: () => void;
+  onComplete: () => void;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function rpeState(v: number): SafetyState | 'neutral' {
+  if (v === 0) return 'neutral';
+  return v >= 8 ? 'danger' : v >= 5 ? 'caution' : 'safe';
+}
+
+const FEEL_OPTIONS = [
+  { value: 'fine',             label: 'Fine',       tone: 'safe'    as const },
+  { value: 'mild_discomfort',  label: 'Discomfort', tone: 'caution' as const },
+  { value: 'bad',              label: 'Bad',        tone: 'danger'  as const },
+];
+
+// ---------------------------------------------------------------------------
+// Sub-components
+// ---------------------------------------------------------------------------
+
+const BackButton: React.FC<{ onPress: () => void }> = ({ onPress }) => (
+  <button type="button" onClick={onPress}
+    className="flex items-center gap-1.5 text-body text-ink-muted hover:text-ink transition-colors duration-snap py-1">
+    <svg width={20} height={20} viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path d="M12.5 15l-5-5 5-5" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+    Back
+  </button>
+);
+
+const FieldLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <p className="text-body-lg font-semibold text-ink mb-3">{children}</p>
+);
+
+const NumberField: React.FC<{
+  value: number; onChange: (v: number) => void;
+  unit: string; min?: number; placeholder?: string; step?: string | number;
+}> = ({ value, onChange, unit, min = 0, placeholder, step }) => (
+  <div className="flex items-center gap-2">
+    <input
+      type="number" min={min} step={step}
+      value={value === 0 ? '' : value}
+      placeholder={placeholder ?? '0'}
+      onChange={e => onChange(Math.max(min, Number(e.target.value) || 0))}
+      className={cn('flex-1 rounded-md bg-bg-sunken border border-border px-3 py-2.5',
+        'text-body-lg font-metric text-ink placeholder:text-ink-faint',
+        'focus:outline-none focus:border-border-strong')}
+    />
+    <span className="text-body text-ink-muted w-10 shrink-0">{unit}</span>
+  </div>
+);
+
+// Group activities by class for the picker
+interface Group { cls: ActivityClass; acts: Activity[] }
+function groupActivities(classes: ActivityClass[], activities: Activity[]): Group[] {
+  return classes.map(cls => ({
+    cls,
+    acts: activities.filter(a => a.activityClassId === cls.id && a.isActive),
+  })).filter(g => g.acts.length > 0);
+}
+
+// ---------------------------------------------------------------------------
+// Screen
+// ---------------------------------------------------------------------------
+
+export const LogActivityScreen: React.FC<Props> = ({
+  engine, initialActivityId, onBack, onComplete,
+}) => {
+  const { activityClasses, activities, checkViolations, submitLog } = engine;
+
+  const [selectedId,  setSelectedId]  = React.useState<string>(initialActivityId ?? '');
+  const [duration,    setDuration]    = React.useState(0);
+  const [volume,      setVolume]      = React.useState(0);
+  const [rpe,         setRpe]         = React.useState(5);
+  const [feel,        setFeel]        = React.useState<PostActivityFeel>('fine');
+  const [notes,       setNotes]       = React.useState('');
+  const [submitted,   setSubmitted]   = React.useState(false);
+
+  const groups  = React.useMemo(() => groupActivities(activityClasses, activities), [activityClasses, activities]);
+  const selAct  = activities.find(a => a.id === selectedId);
+
+  // Live violation check — updates on every relevant input change
+  const violations = React.useMemo(() => {
+    if (!selectedId || volume <= 0) return [];
+    return checkViolations(selectedId, volume, rpe > 0 ? rpe : 5);
+  }, [selectedId, volume, rpe, checkViolations]);
+
+  const canSubmit = selectedId !== '' && duration > 0;
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!canSubmit) return;
+    const draft: LogDraft = {
+      activityId: selectedId,
+      durationMinutes: duration,
+      volumeValue: volume,
+      volumeUnit: selAct?.defaultVolumeUnit,
+      rpe: rpe > 0 ? rpe as RPE : undefined,
+      postActivityFeel: feel,
+      notes: notes || undefined,
+      ruleViolationsAtLog: violations.length > 0 ? violations : undefined,
+    };
+    submitLog(draft);
+    setSubmitted(true);
+    setTimeout(onComplete, 800);
+  }
+
+  if (submitted) return (
+    <div className="flex flex-col items-center justify-center gap-4 px-4 text-center" style={{ minHeight: '60vh' }}>
+      <span className="flex h-14 w-14 items-center justify-center rounded-full bg-safe/20">
+        <svg width={28} height={28} viewBox="0 0 28 28" fill="none"><path d="M5 14l6 6L23 7" stroke="#3DD68C" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"/></svg>
+      </span>
+      <p className="text-title font-semibold text-safe-fg">Session logged.</p>
+      <p className="text-body text-ink-muted">Your dashboard has been updated.</p>
+    </div>
+  );
+
+  return (
+    <form onSubmit={handleSubmit} className="flex flex-col h-full overflow-y-auto">
+      {/* Header */}
+      <div className="px-4 pt-4 pb-2 shrink-0">
+        <BackButton onPress={onBack} />
+        <h1 className="text-title font-bold text-ink mt-3">Log Activity</h1>
+      </div>
+
+      <div className="flex flex-col gap-4 px-4 pb-6 mt-2">
+        {/* Activity picker */}
+        <Card pad="md">
+          <FieldLabel>What did you do?</FieldLabel>
+          <div className="flex flex-col gap-3">
+            {groups.map(({ cls, acts }) => (
+              <div key={cls.id}>
+                <p className="text-label uppercase font-medium text-ink-muted mb-1.5">{cls.name}</p>
+                <div className="flex flex-col divide-y divide-border-subtle rounded-md border border-border overflow-hidden">
+                  {acts.map(act => (
+                    <button key={act.id} type="button" onClick={() => setSelectedId(act.id)}
+                      className={cn('flex items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors duration-snap',
+                        selectedId === act.id ? 'bg-ink/10' : 'bg-bg-sunken hover:bg-bg-overlay')}>
+                      <span className={cn('text-body font-medium', selectedId === act.id ? 'text-ink' : 'text-ink-muted')}>{act.name}</span>
+                      {selectedId === act.id && (
+                        <svg width={16} height={16} viewBox="0 0 16 16" fill="none" className="text-ink shrink-0">
+                          <path d="M3 8l3.5 3.5L13 4" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        {/* Session details — only show after activity selected */}
+        {selectedId && (
+          <>
+            <Card pad="md">
+              <FieldLabel>Session details</FieldLabel>
+              <div className="flex flex-col gap-4">
+                <div>
+                  <p className="text-body font-medium text-ink mb-2">Duration</p>
+                  <NumberField value={duration} onChange={setDuration} unit="min" min={1} placeholder="20" />
+                </div>
+                {selAct?.defaultVolumeUnit && (
+                  <div>
+                    <p className="text-body font-medium text-ink mb-2">Volume</p>
+                    <NumberField value={volume} onChange={setVolume} unit={selAct.defaultVolumeUnit} placeholder="0" step="any" />
+                  </div>
+                )}
+              </div>
+            </Card>
+
+            <Card pad="md">
+              <FieldLabel>Effort (RPE)</FieldLabel>
+              <Slider value={rpe} onChange={setRpe} min={1} max={10} step={1}
+                leftLabel="Easy" rightLabel="Max" state={rpeState(rpe)} valueSuffix="/10" />
+            </Card>
+
+            <Card pad="md">
+              <FieldLabel>How did it go?</FieldLabel>
+              <SegmentedControl value={feel} onChange={v => setFeel(v as PostActivityFeel)} options={FEEL_OPTIONS} ariaLabel="Post-activity feel" />
+            </Card>
+
+            {/* Live violation banner */}
+            {violations.length > 0 && (
+              <RuleViolationBanner violations={violations} />
+            )}
+
+            <Card pad="md">
+              <label className="block text-body font-medium text-ink mb-2" htmlFor="log-notes">Notes (optional)</label>
+              <textarea id="log-notes" value={notes} onChange={e => setNotes(e.target.value)}
+                placeholder="Anything worth noting…" rows={3}
+                className={cn('w-full rounded-md bg-bg-sunken border border-border px-3 py-2.5 resize-none',
+                  'text-body text-ink placeholder:text-ink-faint focus:outline-none focus:border-border-strong')} />
+            </Card>
+
+            <button type="submit" disabled={!canSubmit}
+              className={cn('h-12 w-full rounded-md text-body-lg font-semibold transition-colors duration-snap',
+                violations.length > 0
+                  ? 'bg-caution text-ink-inverse active:brightness-90'
+                  : 'bg-ink text-ink-inverse active:opacity-80',
+                !canSubmit && 'opacity-40 cursor-not-allowed')}>
+              {violations.length > 0 ? 'Log anyway' : 'Log session'}
+            </button>
+          </>
+        )}
+      </div>
+    </form>
+  );
+};

@@ -223,18 +223,35 @@ def test_seed_preserves_log_violation_snapshots_and_key_log_dates(tmp_path: Path
         assert caution_log.logged_date == date(2026, 5, 15)
         assert caution_log.rule_violations_at_log == [
             {
-                "ruleId": "rule-rest-foot",
-                "ruleType": "rest_between_class",
+                "rule_id": "rule-rest-foot",
+                "rule_type": "rest_between_class",
                 "message": "Breaks 3-day rest rule for foot load — 2 days since last walk",
                 "severity": "caution",
             }
         ]
+        caution_violation = caution_log.rule_violations_at_log[0]
+        assert "ruleId" not in caution_violation
+        assert "ruleType" not in caution_violation
 
         danger_log = session.get(ActivityLog, "log-22")
         assert danger_log is not None
         assert danger_log.post_activity_feel == "bad"
         assert danger_log.rule_violations_at_log is not None
-        assert danger_log.rule_violations_at_log[0]["severity"] == "danger"
+        assert danger_log.rule_violations_at_log[0] == {
+            "rule_id": "rule-rest-foot",
+            "rule_type": "rest_between_class",
+            "message": "Breaks 3-day rest rule for foot load — 1 day since last session",
+            "severity": "danger",
+        }
+
+        for log in logs:
+            if not log.rule_violations_at_log:
+                continue
+            for violation in log.rule_violations_at_log:
+                assert "rule_id" in violation
+                assert "rule_type" in violation
+                assert "ruleId" not in violation
+                assert "ruleType" not in violation
 
 
 def test_seed_links_flare_up_incidents_to_check_ins_and_keeps_today_missing(

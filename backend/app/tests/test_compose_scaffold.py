@@ -26,7 +26,8 @@ def root_env_file() -> Iterator[None]:
     env_path.write_text(
         "DATABASE_URL=sqlite:///./data/milestone.db\n"
         "APP_VERSION=0.1.0\n"
-        "BACKEND_PORT=8084\n",
+        "BACKEND_PORT=8084\n"
+        "FRONTEND_PORT=5151\n",
         encoding="utf-8",
     )
 
@@ -110,15 +111,20 @@ def test_backend_service_matches_scaffold_contract(root_env_file: None) -> None:
 
 
 def test_frontend_service_matches_scaffold_contract(root_env_file: None) -> None:
+    compose_text = _read_required_text(COMPOSE_FILE)
+    assert "FRONTEND_PORT" in compose_text
+
     compose_config = _load_compose_config()
     services = _get_mapping(compose_config["services"])
     frontend_service = _get_mapping(services["frontend"])
 
+    port_specs = _get_list(frontend_service["ports"])
+    assert port_specs
     published_ports = {
-        (_get_mapping(port)["target"], _get_mapping(port)["published"])
-        for port in _get_list(frontend_service["ports"])
+        (_get_mapping(port)["target"], str(_get_mapping(port)["published"]))
+        for port in port_specs
     }
-    assert (5173, "5173") in published_ports
+    assert (5151, "5151") in published_ports
 
     frontend_build = _get_mapping(frontend_service["build"]) if "build" in frontend_service else {}
     uses_frontend_build = str(frontend_build.get("context", "")).endswith("/frontend")

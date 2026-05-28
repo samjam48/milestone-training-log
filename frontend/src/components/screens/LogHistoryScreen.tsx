@@ -1,0 +1,186 @@
+// =============================================================================
+// LogHistoryScreen — Tier 3
+// =============================================================================
+
+import * as React from 'react';
+import { cn } from '../../lib/cn';
+import { Card } from '../ui/Card';
+import type { MilestoneEngineResult } from '../../hooks/useMilestoneEngine';
+import type { ActivityLog } from '../../types';
+
+interface Props {
+  engine: MilestoneEngineResult;
+  onOpenLogActivity: () => void;
+  onOpenLogIncident: () => void;
+}
+
+// ---------------------------------------------------------------------------
+// Formatting helpers
+// ---------------------------------------------------------------------------
+
+function monthLabel(iso: string): string {
+  return new Date(iso + 'T00:00:00Z').toLocaleDateString(undefined, { month: 'long', year: 'numeric', timeZone: 'UTC' });
+}
+
+function dayLabel(iso: string): string {
+  return new Date(iso + 'T00:00:00Z').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
+}
+
+function feelLabel(feel?: string): { label: string; color: string } {
+  if (feel === 'mild_discomfort') return { label: 'Discomfort', color: 'text-caution-fg bg-caution/15' };
+  if (feel === 'bad')             return { label: 'Bad',        color: 'text-danger-fg bg-danger/15' };
+  return                                 { label: 'Fine',       color: 'text-safe-fg bg-safe/15' };
+}
+
+// ---------------------------------------------------------------------------
+// Sub-components
+// ---------------------------------------------------------------------------
+
+const Pill: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className }) => (
+  <span className={cn('inline-flex items-center rounded-pill px-2 py-0.5 text-caption font-medium', className)}>
+    {children}
+  </span>
+);
+
+const LogRow: React.FC<{ log: ActivityLog; activityName: string }> = ({ log, activityName }) => {
+  const feel = feelLabel(log.postActivityFeel);
+  const hasViolation = (log.ruleViolationsAtLog?.length ?? 0) > 0;
+  const worstViolation = log.ruleViolationsAtLog?.[0];
+
+  return (
+    <div className="flex flex-col gap-2 py-3 px-4">
+      <div className="flex items-start justify-between gap-2">
+        <span className="text-body font-semibold text-ink">{activityName}</span>
+        <div className="flex gap-1.5 flex-wrap justify-end">
+          {log.rpe && (
+            <Pill className="bg-bg-sunken text-ink-muted">RPE {log.rpe}</Pill>
+          )}
+          <Pill className={feel.color}>{feel.label}</Pill>
+        </div>
+      </div>
+      <div className="flex items-center gap-3 text-caption text-ink-muted">
+        <span>{log.durationMinutes} min</span>
+        {log.volumeValue > 0 && log.volumeUnit && (
+          <>
+            <span aria-hidden="true">·</span>
+            <span>{log.volumeValue} {log.volumeUnit}</span>
+          </>
+        )}
+      </div>
+      {hasViolation && worstViolation && (
+        <div className={cn(
+          'flex items-start gap-1.5 rounded-md px-2.5 py-1.5 text-caption',
+          worstViolation.severity === 'danger' ? 'bg-danger/10 text-danger-fg' : 'bg-caution/10 text-caution-fg',
+        )}>
+          <span aria-hidden="true">⚠</span>
+          <span>{worstViolation.message}</span>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Grouping logic
+// ---------------------------------------------------------------------------
+
+type ByDay = Record<string, ActivityLog[]>;
+type ByMonth = Record<string, ByDay>;
+
+function groupLogs(logs: ActivityLog[]): { monthKeys: string[]; byMonth: ByMonth } {
+  const byMonth: ByMonth = {};
+  for (const log of [...logs].sort((a, b) => b.loggedDate.localeCompare(a.loggedDate))) {
+    const month = log.loggedDate.substring(0, 7);
+    const day = log.loggedDate;
+    if (!byMonth[month]) byMonth[month] = {};
+    if (!byMonth[month][day]) byMonth[month][day] = [];
+    byMonth[month][day].push(log);
+  }
+  const monthKeys = Object.keys(byMonth).sort((a, b) => b.localeCompare(a));
+  return { monthKeys, byMonth };
+}
+
+// ---------------------------------------------------------------------------
+// Screen
+// ---------------------------------------------------------------------------
+
+export const LogHistoryScreen: React.FC<Props> = ({ engine, onOpenLogActivity, onOpenLogIncident }) => {
+  const { logs, activities } = engine;
+  const activityMap = React.useMemo(
+    () => new Map(activities.map(a => [a.id, a.name])),
+    [activities],
+  );
+  const { monthKeys, byMonth } = React.useMemo(() => groupLogs(logs), [logs]);
+
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      {/* Header */}
+      <div className="px-4 pt-5 pb-3">
+        <h1 className="text-title font-bold text-ink">Log History</h1>
+        <p className="text-caption text-ink-muted mt-0.5">{logs.length} sessions logged</p>
+      </div>
+
+      {/* Scrollable list */}
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-4">
+        {monthKeys.length === 0 ? (
+          <p className="text-body text-ink-muted text-center mt-8">No sessions logged yet.</p>
+        ) : (
+          <div className="flex flex-col gap-4">
+            {monthKeys.map(month => {
+              const monthData = byMonth[month];
+              if (!monthData) return null;
+              const dayKeys = Object.keys(monthData).sort((a, b) => b.localeCompare(a));
+              return (
+                <section key={month}>
+                  {/* Month header */}
+                  <p className="text-label uppercase font-semibold text-ink-muted mb-2">
+                    {monthLabel(month + '-01')}
+                  </p>
+                  <Card pad="none">
+                    <div className="divide-y divide-border-subtle">
+                      {dayKeys.map(day => (
+                        <div key={day}>
+                          {/* Day sub-header */}
+                          <div className="px-4 pt-2.5 pb-1">
+                            <span className="text-caption font-medium text-ink-muted">
+                              {dayLabel(day)}
+                            </span>
+                          </div>
+                          {(monthData[day] ?? []).map(log => (
+                            <LogRow
+                              key={log.id}
+                              log={log}
+                              activityName={activityMap.get(log.activityId) ?? 'Unknown'}
+                            />
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
+                </section>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Bottom action bar */}
+      <div className="shrink-0 border-t border-border bg-bg-raised px-4 py-3 flex gap-3">
+        <button
+          type="button"
+          onClick={onOpenLogActivity}
+          className="flex-1 h-11 rounded-md bg-ink text-ink-inverse text-body font-semibold transition-colors duration-snap active:bg-ink/80"
+        >
+          + Log Activity
+        </button>
+        <button
+          type="button"
+          onClick={onOpenLogIncident}
+          className="flex-1 h-11 rounded-md bg-danger/15 text-danger-fg text-body font-semibold border border-danger-border transition-colors duration-snap active:bg-danger/25"
+        >
+          + Log Incident
+        </button>
+      </div>
+    </div>
+  );
+};
