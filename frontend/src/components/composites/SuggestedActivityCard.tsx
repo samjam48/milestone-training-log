@@ -25,7 +25,7 @@ import { StatusDot } from '../ui/StatusDot';
 import type { ID, ISODate, SafetyState } from '../../types';
 
 export interface Suggestion {
-  /** Activity-class id (or activity id) the suggestion is about. */
+  /** Activity id the suggestion is about. */
   id: ID;
   /** Display name, e.g. "Walking" or "Calf raises". */
   label: string;

@@ -15,7 +15,7 @@ import type { ActivityClass, SafetyState, TrainingBlock } from '../../types';
 interface Props {
   engine: MilestoneEngineResult;
   onOpenCheckIn: () => void;
-  onOpenLogActivity: () => void;
+  onOpenLogActivity: (activityId?: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -132,7 +132,7 @@ export const DashboardScreen: React.FC<Props> = ({ engine, onOpenCheckIn, onOpen
       {/* ── Suggested activities ── */}
       <SuggestedActivityCard
         suggestions={suggestions}
-        onPick={() => onOpenLogActivity()}
+        onPick={(s) => onOpenLogActivity(s.id)}
         asOf="Today"
       />
 

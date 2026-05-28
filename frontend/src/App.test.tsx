@@ -8,7 +8,16 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, within, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from './test/renderWithProviders';
-import { mockEngine } from './test/mockEngine';
+import {
+  mockEngine,
+  resetMockEngine,
+  applyC63DashboardFixtures,
+  c63CautionYogaSuggestion,
+  c63DangerSquatSuggestion,
+  c63SafeStretchSuggestion,
+  c63StretchActivity,
+  c63YogaActivity,
+} from './test/mockEngine';
 import { App } from './App';
 
 vi.mock('./hooks/useMilestoneEngine', () => ({
@@ -19,9 +28,20 @@ function getPrimaryNav(): HTMLElement {
   return screen.getByRole('navigation', { name: 'Primary' });
 }
 
+function expectLogActivityPrefill(activityName: string): void {
+  expect(screen.getByText('Session details')).toBeInTheDocument();
+  const row = screen.getByRole('button', { name: activityName });
+  expect(row.querySelector('svg')).not.toBeNull();
+}
+
+function expectNoLogActivityPrefill(): void {
+  expect(screen.queryByText('Session details')).not.toBeInTheDocument();
+}
+
 describe('App shell (F1.1)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetMockEngine();
   });
 
   afterEach(() => {
@@ -96,5 +116,102 @@ describe('App shell (F1.1)', () => {
     await user.click(screen.getByRole('button', { name: 'Back' }));
     expect(screen.getByRole('heading', { name: 'Log History' })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
+  });
+});
+
+describe('Dashboard suggestion → Log Activity prefill (C6.3)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetMockEngine();
+    applyC63DashboardFixtures();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('opens Log Activity with safe suggestion activity pre-selected when CTA is tapped', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    await user.click(screen.getByRole('button', { name: 'Log stretching' }));
+
+    expect(screen.getByRole('heading', { name: 'Log Activity' })).toBeInTheDocument();
+    expectLogActivityPrefill('Stretching');
+  });
+
+  it('opens Log Activity with caution suggestion activity pre-selected when CTA is tapped', async () => {
+    const user = userEvent.setup();
+    applyC63DashboardFixtures({
+      suggestions: [c63CautionYogaSuggestion],
+      activities: [c63StretchActivity, c63YogaActivity],
+    });
+    renderWithProviders(<App />);
+
+    await user.click(screen.getByRole('button', { name: 'Log lightly' }));
+
+    expect(screen.getByRole('heading', { name: 'Log Activity' })).toBeInTheDocument();
+    expectLogActivityPrefill('Yoga');
+  });
+
+  it('does not apply stale prefill when opening Log Activity from the Log tab', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    await user.click(screen.getByRole('button', { name: 'Log stretching' }));
+    expectLogActivityPrefill('Stretching');
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
+    await user.click(screen.getByRole('button', { name: '+ Log Activity' }));
+
+    expect(screen.getByRole('heading', { name: 'Log Activity' })).toBeInTheDocument();
+    expectNoLogActivityPrefill();
+  });
+
+  it('clears prefill after overlay close so the next Log Activity open has no selection', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    await user.click(screen.getByRole('button', { name: 'Log stretching' }));
+    expectLogActivityPrefill('Stretching');
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+
+    await user.click(screen.getByRole('button', { name: 'Log stretching' }));
+    expectLogActivityPrefill('Stretching');
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
+    await user.click(screen.getByRole('button', { name: '+ Log Activity' }));
+    expectNoLogActivityPrefill();
+  });
+
+  it('overwrites prefill when a second suggestion CTA is opened after closing the overlay', async () => {
+    const user = userEvent.setup();
+    applyC63DashboardFixtures({
+      suggestions: [c63SafeStretchSuggestion, c63CautionYogaSuggestion],
+      activities: [c63StretchActivity, c63YogaActivity],
+    });
+    renderWithProviders(<App />);
+
+    await user.click(screen.getByRole('button', { name: 'Log stretching' }));
+    expectLogActivityPrefill('Stretching');
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+
+    await user.click(screen.getByRole('button', { name: 'Log lightly' }));
+    expectLogActivityPrefill('Yoga');
+    expect(screen.queryByRole('button', { name: 'Stretching' })?.querySelector('svg')).toBeNull();
+  });
+
+  it('renders danger suggestions without a Log CTA on the dashboard', () => {
+    applyC63DashboardFixtures({
+      suggestions: [c63DangerSquatSuggestion],
+      activities: [c63StretchActivity],
+    });
+    renderWithProviders(<App />);
+
+    expect(screen.getByText('Heavy squat')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Log heavy squat/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Log lightly' })).not.toBeInTheDocument();
   });
 });

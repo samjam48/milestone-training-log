@@ -24,11 +24,20 @@ export function App(): React.ReactElement {
   const engine = useMilestoneEngine();
   const [activeTab, setActiveTab] = React.useState<TabKey>('dashboard');
   const [overlay, setOverlay] = React.useState<OverlayKey | null>(null);
+  const [logActivityPrefillId, setLogActivityPrefillId] = React.useState<
+    string | undefined
+  >(undefined);
 
   const showTabBar = overlay === null;
 
   const closeOverlay = (): void => {
     setOverlay(null);
+    setLogActivityPrefillId(undefined);
+  };
+
+  const openLogActivity = (activityId?: string): void => {
+    setLogActivityPrefillId(activityId);
+    setOverlay('log-activity');
   };
 
   let mainContent: React.ReactElement;
@@ -44,6 +53,7 @@ export function App(): React.ReactElement {
     mainContent = (
       <LogActivityScreen
         engine={engine}
+        initialActivityId={logActivityPrefillId}
         onBack={closeOverlay}
         onComplete={closeOverlay}
       />
@@ -61,14 +71,14 @@ export function App(): React.ReactElement {
       <DashboardScreen
         engine={engine}
         onOpenCheckIn={() => setOverlay('check-in')}
-        onOpenLogActivity={() => setOverlay('log-activity')}
+        onOpenLogActivity={openLogActivity}
       />
     );
   } else if (activeTab === 'log') {
     mainContent = (
       <LogHistoryScreen
         engine={engine}
-        onOpenLogActivity={() => setOverlay('log-activity')}
+        onOpenLogActivity={() => openLogActivity()}
         onOpenLogIncident={() => setOverlay('log-incident')}
       />
     );
