@@ -63,11 +63,11 @@ const FieldLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
 
 const NumberField: React.FC<{
   value: number; onChange: (v: number) => void;
-  unit: string; min?: number; placeholder?: string;
-}> = ({ value, onChange, unit, min = 0, placeholder }) => (
+  unit: string; min?: number; placeholder?: string; step?: string | number;
+}> = ({ value, onChange, unit, min = 0, placeholder, step }) => (
   <div className="flex items-center gap-2">
     <input
-      type="number" min={min}
+      type="number" min={min} step={step}
       value={value === 0 ? '' : value}
       placeholder={placeholder ?? '0'}
       onChange={e => onChange(Math.max(min, Number(e.target.value) || 0))}
@@ -192,7 +192,7 @@ export const LogActivityScreen: React.FC<Props> = ({
                 {selAct?.defaultVolumeUnit && (
                   <div>
                     <p className="text-body font-medium text-ink mb-2">Volume</p>
-                    <NumberField value={volume} onChange={setVolume} unit={selAct.defaultVolumeUnit} placeholder="0" />
+                    <NumberField value={volume} onChange={setVolume} unit={selAct.defaultVolumeUnit} placeholder="0" step="any" />
                   </div>
                 )}
               </div>

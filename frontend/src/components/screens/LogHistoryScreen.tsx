@@ -113,7 +113,7 @@ export const LogHistoryScreen: React.FC<Props> = ({ engine, onOpenLogActivity, o
   const { monthKeys, byMonth } = React.useMemo(() => groupLogs(logs), [logs]);
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-h-0">
       {/* Header */}
       <div className="px-4 pt-5 pb-3">
         <h1 className="text-title font-bold text-ink">Log History</h1>
@@ -121,7 +121,7 @@ export const LogHistoryScreen: React.FC<Props> = ({ engine, onOpenLogActivity, o
       </div>
 
       {/* Scrollable list */}
-      <div className="flex-1 overflow-y-auto px-4 pb-4">
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-4">
         {monthKeys.length === 0 ? (
           <p className="text-body text-ink-muted text-center mt-8">No sessions logged yet.</p>
         ) : (
@@ -165,7 +165,7 @@ export const LogHistoryScreen: React.FC<Props> = ({ engine, onOpenLogActivity, o
       </div>
 
       {/* Bottom action bar */}
-      <div className="border-t border-border bg-bg-raised px-4 py-3 flex gap-3">
+      <div className="shrink-0 border-t border-border bg-bg-raised px-4 py-3 flex gap-3">
         <button
           type="button"
           onClick={onOpenLogActivity}

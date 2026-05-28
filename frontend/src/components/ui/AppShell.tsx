@@ -31,8 +31,8 @@ export const AppShell = React.forwardRef<HTMLDivElement, AppShellProps>(
       <div
         ref={ref}
         className={cn(
-          // Canvas
-          'min-h-screen w-full bg-bg text-ink font-sans antialiased',
+          // Canvas — bounded viewport column so Tier-3 screens can use h-full + internal scroll
+          'flex min-h-screen h-dvh w-full flex-col bg-bg text-ink font-sans antialiased',
           // Safe-area top inset (status bar on notched devices)
           'pt-safe-top',
           // Reserve bottom space when tab bar is mounted (+ device home indicator)
