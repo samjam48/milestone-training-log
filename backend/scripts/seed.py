@@ -215,8 +215,8 @@ def _violation(
     severity: str,
 ) -> dict[str, str]:
     return {
-        "ruleId": rule_id,
-        "ruleType": rule_type,
+        "rule_id": rule_id,
+        "rule_type": rule_type,
         "message": message,
         "severity": severity,
     }
