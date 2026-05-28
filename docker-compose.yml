@@ -27,11 +27,18 @@ services:
 
   frontend:
     image: node:20-alpine
-    # Create repo-root .env from backend/.env.example before first compose run.
+    working_dir: /app/frontend
+    volumes:
+      - ./frontend:/app/frontend
+    environment:
+      BACKEND_PORT: ${BACKEND_PORT:-8084}
+      BACKEND_HOST: backend
     command:
       - sh
       - -c
-      - echo "frontend placeholder" && tail -f /dev/null
+      - npm install && npm run dev -- --host 0.0.0.0
     ports:
       - "5173:5173"
-    restart: "no"
+    depends_on:
+      backend:
+        condition: service_healthy

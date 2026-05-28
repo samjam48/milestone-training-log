@@ -3,6 +3,7 @@ BACKEND_DIR := backend
 .PHONY: dev test lint
 
 dev:
+	@echo "Frontend dev server: http://localhost:5173 (after compose up)"
 	docker compose up
 
 test:
