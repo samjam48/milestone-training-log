@@ -53,19 +53,19 @@ npx eslint frontend/src
 npm --prefix frontend run test -- --coverage  # >= 70%
 ```
 
-Before `frontend/` exists, backend gates are required and frontend gates are not
-applicable. PR checks must run backend commands through `make` or from
-`backend/` so `backend/pyproject.toml` is loaded.
+Once `frontend/` exists, `make lint` and `make test` must run both backend and
+frontend quality gates. PR checks must run backend commands through `make` or
+from `backend/` so `backend/pyproject.toml` is loaded.
 
 `make lint` and `make test` should wrap the canonical commands once the repo bootstrap is in place.
 ---
 ## Current Sprint —
-**Goal:** Build the Phase 5 Dashboard aggregate endpoint (`GET /api/dashboard`).
-**Status (2026-05-28):** Phase 0–4 complete on `main`; Phase 5 tickets signed off; implementation not started.
-**Branch:** `feat/phase-5-dashboard`
-**Ticket source:** `plans/tickets-phase-5-dashboard-2026-05-28.md`
-**Primary references:** `plans/TRD.md`, `plans/PRD.md`, `DESIGN.md`, `docs/api-map.md`, `export/src/hooks/useMilestoneEngine.ts`, Phase 4 `load_engine.py` / `load_queries.py`
-**Out of scope:** Frontend scaffold + API client (Phase 6), remaining frontend screens (Phase 7), review-milestone auto-detection (Phase 8), auth, multi-user support
+**Goal:** Frontend scaffold + API integration — Vite app wired to backend via typed client and React Query.
+**Status (2026-05-28):** Phase 0–5 complete on `main`; Phase 6 tickets signed off; implementation not started.
+**Branch:** `feat/phase-6-frontend`
+**Ticket source:** `plans/tickets-phase-6-frontend-2026-05-28.md`
+**Primary references:** `plans/TRD.md`, `plans/PRD.md`, `DESIGN.md`, `docs/api-map.md`, `export/src/hooks/useMilestoneEngine.ts`, `GET /api/dashboard`
+**Out of scope:** Goals/Settings/NewActivity screens (Phase 7), loading/error polish + review milestone + MCP stub (Phase 8), auth, multi-user support
 
 ---
 ## Definition of Done
