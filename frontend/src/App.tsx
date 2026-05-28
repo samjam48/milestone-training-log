@@ -12,6 +12,14 @@ import { useMilestoneEngine } from './hooks/useMilestoneEngine';
 
 type OverlayKey = 'check-in' | 'log-activity' | 'log-incident';
 
+function resolveLogActivityPrefill(
+  prefillId: string | undefined,
+  activities: { id: string }[],
+): string | undefined {
+  if (prefillId == null || prefillId === '') return undefined;
+  return activities.some((a) => a.id === prefillId) ? prefillId : undefined;
+}
+
 function ComingSoonPlaceholder(): React.ReactElement {
   return (
     <div className="flex min-h-[50vh] items-center justify-center px-4">
@@ -53,7 +61,10 @@ export function App(): React.ReactElement {
     mainContent = (
       <LogActivityScreen
         engine={engine}
-        initialActivityId={logActivityPrefillId}
+        initialActivityId={resolveLogActivityPrefill(
+          logActivityPrefillId,
+          engine.activities,
+        )}
         onBack={closeOverlay}
         onComplete={closeOverlay}
       />

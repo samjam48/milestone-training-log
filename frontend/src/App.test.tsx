@@ -203,6 +203,20 @@ describe('Dashboard suggestion → Log Activity prefill (C6.3)', () => {
     expect(screen.queryByRole('button', { name: 'Stretching' })?.querySelector('svg')).toBeNull();
   });
 
+  it('ignores prefill when suggestion id is not in activities', async () => {
+    const user = userEvent.setup();
+    applyC63DashboardFixtures({
+      suggestions: [{ ...c63SafeStretchSuggestion, id: 'act-deleted' }],
+      activities: [c63StretchActivity],
+    });
+    renderWithProviders(<App />);
+
+    await user.click(screen.getByRole('button', { name: 'Log stretching' }));
+
+    expect(screen.getByRole('heading', { name: 'Log Activity' })).toBeInTheDocument();
+    expectNoLogActivityPrefill();
+  });
+
   it('renders danger suggestions without a Log CTA on the dashboard', () => {
     applyC63DashboardFixtures({
       suggestions: [c63DangerSquatSuggestion],
