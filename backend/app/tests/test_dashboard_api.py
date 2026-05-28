@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import time
 from datetime import date, timedelta
-from typing import Any
 
 import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
 
 from app.tests.helpers.load_api_seed import seed_dashboard_mock_graph
+from app.tests.helpers.load_api_test_utils import FROZEN_TODAY, foot_status, freeze_server_today
 from app.tests.helpers.load_engine_fixtures import AS_OF, WEEKLY_TARGETS
 from app.tests.helpers.seed import (
     seed_activity,
@@ -21,7 +21,6 @@ from app.tests.helpers.seed import (
 DASHBOARD_URL = "/api/dashboard"
 SUMMARY_URL = "/api/load/summary"
 
-FROZEN_TODAY = date.fromisoformat(AS_OF)
 LOG_RESPONSE_WINDOW_START = FROZEN_TODAY - timedelta(days=29)
 
 EXPECTED_TOP_LEVEL_KEYS = {
@@ -45,19 +44,6 @@ EXPECTED_TOP_LEVEL_KEYS = {
 }
 
 
-def _freeze_server_today(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "app.services.load_queries._server_local_today",
-        lambda: FROZEN_TODAY,
-    )
-
-
-def _foot_status(payload: dict[str, Any]) -> dict[str, Any]:
-    return next(
-        status for status in payload["class_statuses"] if status["activity_class_id"] == "cls-foot"
-    )
-
-
 async def test_get_dashboard_seed_parity_at_as_of(
     app_with_test_database: FastAPI,
     client: AsyncClient,
@@ -77,8 +63,8 @@ async def test_get_dashboard_seed_parity_at_as_of(
     assert payload["has_checked_in_today"] is False
     assert payload["user_name"] == "Sam"
 
-    foot = _foot_status(payload)
-    assert foot["state"] == _foot_status(summary_response.json())["state"]
+    foot = foot_status(payload)
+    assert foot["state"] == foot_status(summary_response.json())["state"]
 
     assert len(payload["weekly_progress"]) == len(WEEKLY_TARGETS)
 
@@ -164,7 +150,7 @@ async def test_get_dashboard_defaults_as_of_to_server_today(
     client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _freeze_server_today(monkeypatch)
+    freeze_server_today(monkeypatch)
     seed_dashboard_mock_graph(app_with_test_database)
 
     response = await client.get(DASHBOARD_URL)
@@ -172,14 +158,14 @@ async def test_get_dashboard_defaults_as_of_to_server_today(
     assert response.status_code == 200
     payload = response.json()
     assert payload["as_of"] == AS_OF
-    assert _foot_status(payload)["state"] == "caution"
+    assert foot_status(payload)["state"] == "caution"
 
 
 async def test_get_dashboard_empty_database_returns_neutral_payload(
     client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _freeze_server_today(monkeypatch)
+    freeze_server_today(monkeypatch)
 
     response = await client.get(DASHBOARD_URL)
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
+from typing import Literal
 
 from sqlmodel import Session
 
@@ -40,14 +41,14 @@ from app.services.load_engine import (
     format_iso_date,
 )
 from app.services.load_queries import (
-    _activity_class_dict,
-    _activity_dict,
-    _check_in_dict,
-    _incident_dict,
-    _log_dict,
-    _rule_dict,
-    _weekly_target_dict,
+    activity_class_dict,
+    activity_dict,
+    check_in_dict,
+    incident_dict,
+    log_dict,
     resolve_as_of,
+    rule_dict,
+    weekly_target_dict,
 )
 from app.services.recovery_targets import list_recovery_targets
 from app.services.rules import list_rules
@@ -71,11 +72,11 @@ def get_dashboard(session: Session, *, as_of: date | None = None) -> DashboardRe
         if incident.incident_date <= resolved
     ]
 
-    class_dicts = [_activity_class_dict(cls) for cls in activity_classes]
-    activity_dicts = [_activity_dict(activity) for activity in activities]
-    log_dicts = [_log_dict(log) for log in all_logs]
-    check_in_dicts = [_check_in_dict(check_in) for check_in in check_ins]
-    incident_dicts = [_incident_dict(incident) for incident in incidents]
+    class_dicts = [activity_class_dict(cls) for cls in activity_classes]
+    activity_dicts = [activity_dict(activity) for activity in activities]
+    log_dicts = [log_dict(log) for log in all_logs]
+    check_in_dicts = [check_in_dict(check_in) for check_in in check_ins]
+    incident_dicts = [incident_dict(incident) for incident in incidents]
 
     response_logs = [
         log for log in all_logs if log_window_start <= log.logged_date <= resolved
@@ -97,8 +98,8 @@ def get_dashboard(session: Session, *, as_of: date | None = None) -> DashboardRe
     except TrainingBlockNotFoundError:
         pass
 
-    rule_dicts = [_rule_dict(rule) for rule in rules]
-    target_dicts = [_weekly_target_dict(target) for target in weekly_targets]
+    rule_dicts = [rule_dict(rule) for rule in rules]
+    target_dicts = [weekly_target_dict(target) for target in weekly_targets]
 
     class_statuses = compute_class_statuses(
         as_of_str,
@@ -237,6 +238,13 @@ def _build_recovery_streaks(
         activity = activity_by_id.get(target.activity_id)
         if activity is None:
             continue
+        unit = target.frequency_unit
+        if unit == "daily":
+            frequency_unit: Literal["daily", "weekly"] = "daily"
+        elif unit == "weekly":
+            frequency_unit = "weekly"
+        else:
+            continue
         streaks.append(
             RecoveryStreakRead(
                 recovery_target_id=target.id,
@@ -244,7 +252,7 @@ def _build_recovery_streaks(
                 activity_name=activity.name,
                 activity_class_id=activity.activity_class_id,
                 target_frequency=target.target_frequency,
-                frequency_unit=target.frequency_unit,  # type: ignore[arg-type]
+                frequency_unit=frequency_unit,
                 current_streak_days=target.current_streak_days,
             )
         )

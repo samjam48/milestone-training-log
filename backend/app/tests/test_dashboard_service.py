@@ -30,6 +30,7 @@ from app.tests.helpers.load_engine_fixtures import (
 from app.tests.helpers.seed import (
     seed_activity,
     seed_activity_class,
+    seed_activity_log,
     seed_recovery_target,
     with_session,
 )
@@ -98,6 +99,8 @@ def test_get_dashboard_cls_foot_status_matches_compute_class_statuses(
     foot = _foot_status(dashboard)
     assert foot.state == _expected_foot_state()
     assert foot.state == "caution"
+    assert dashboard.user_name == "Sam"
+    assert dashboard.week_load_threshold == 120
 
 
 def test_get_dashboard_has_checked_in_today_false_without_as_of_check_in(
@@ -228,3 +231,75 @@ def test_get_dashboard_without_active_block_returns_neutral_empty_payload(
     assert dashboard.daily_scores == []
     assert dashboard.load_series == []
     assert all(status.state == "safe" for status in dashboard.class_statuses)
+
+
+def test_get_dashboard_empty_database_returns_neutral_payload(
+    app_with_test_database: FastAPI,
+    session: Session,
+) -> None:
+    dashboard = get_dashboard(session, as_of=FROZEN_AS_OF)
+
+    assert dashboard.block is None
+    assert dashboard.activity_classes == []
+    assert dashboard.activities == []
+    assert dashboard.logs == []
+    assert dashboard.incidents == []
+    assert dashboard.has_checked_in_today is False
+    assert dashboard.recovery_streaks == []
+    assert dashboard.weekly_progress == []
+    assert dashboard.daily_scores == []
+    assert dashboard.load_series == []
+    assert dashboard.clean_streak == 0
+    assert dashboard.week_load_threshold == 0
+
+
+def test_get_dashboard_excludes_records_after_as_of(
+    app_with_test_database: FastAPI,
+    session: Session,
+) -> None:
+    seed_dashboard_mock_graph(app_with_test_database)
+    baseline = get_dashboard(session, as_of=FROZEN_AS_OF)
+
+    seed_activity_log(
+        app_with_test_database,
+        log_id="log-future",
+        activity_id="act-walk",
+        logged_date=date(2026, 5, 26),
+        volume_value=99.0,
+    )
+
+    dashboard = get_dashboard(session, as_of=FROZEN_AS_OF)
+
+    assert all(log.id != "log-future" for log in dashboard.logs)
+    assert dashboard.clean_streak == baseline.clean_streak
+    assert _foot_status(dashboard).state == _foot_status(baseline).state
+
+
+def test_get_dashboard_skips_recovery_streak_when_activity_missing(
+    app_with_test_database: FastAPI,
+    session: Session,
+) -> None:
+    seed_dashboard_mock_graph(app_with_test_database)
+    seed_recovery_target(
+        app_with_test_database,
+        target_id="rt-missing-activity",
+        training_block_id="blk-1",
+        activity_id="act-does-not-exist",
+        target_frequency=1,
+        frequency_unit="daily",
+        current_streak_days=2,
+    )
+    seed_recovery_target(
+        app_with_test_database,
+        target_id="rt-stretch",
+        training_block_id="blk-1",
+        activity_id="act-stretch",
+        target_frequency=3,
+        frequency_unit="daily",
+        current_streak_days=5,
+    )
+
+    dashboard = get_dashboard(session, as_of=FROZEN_AS_OF)
+
+    assert len(dashboard.recovery_streaks) == 1
+    assert dashboard.recovery_streaks[0].recovery_target_id == "rt-stretch"

@@ -349,11 +349,20 @@ all its required data. Response must satisfy `MilestoneEngineResult` shape.
 **Goal:** Vite project bootstrapped, all `export/src/` code copied in, hook
 rewired to real API. All existing screens must work unchanged.
 
+**Phase 6 planning flags (owner 2026-05-28):**
+
+- **F1.3 must plan:** Log History screen fetches full history via
+  `GET /api/activity-logs` — dashboard `logs` is capped to a 30-day window only
+  (Phase 5 owner decision).
+- **F1.3 must plan:** Map `recovery_streaks` from dashboard into
+  `useMilestoneEngine` / compliance UI when that section is wired (new field vs
+  current `MilestoneEngineResult`).
+
 | Ticket | Scope |
 |---|---|
 | F1.1 | `npm create vite@latest frontend -- --template react-ts`; install `tailwindcss`, `@tanstack/react-query`; copy `export/src/` → `frontend/src/`; copy `export/tailwind.config.js`; add Vite proxy in `vite.config.ts`; `tsconfig.json` strict mode |
 | F1.2 | `frontend/src/lib/api.ts`: typed `fetch` wrappers for every endpoint in §5; request and response types from `types.ts`; custom `ApiError` class with status code |
-| F1.3 | Rewrite `frontend/src/hooks/useMilestoneEngine.ts`: replace `useState(LOGS)` etc. with `useQuery` (dashboard endpoint) and `useMutation` (submitLog, submitCheckIn, submitIncident) via `api.ts`; keep `MilestoneEngineResult` return type exactly — no screen changes needed |
+| F1.3 | Rewrite `frontend/src/hooks/useMilestoneEngine.ts`: replace `useState(LOGS)` etc. with `useQuery` (dashboard endpoint) and `useMutation` (submitLog, submitCheckIn, submitIncident) via `api.ts`; keep `MilestoneEngineResult` return type exactly — no screen changes needed. **Also plan:** full Log History via `GET /api/activity-logs` (not dashboard `logs`); map `recovery_streaks` in hook when compliance UI is wired |
 | F1.4 | TypeScript + lint clean: `tsc --noEmit` passes; `eslint frontend/src` passes; fix any type errors from integration |
 
 **Verification:** App loads in browser showing real seed data on Dashboard;
@@ -455,7 +464,7 @@ exists (Phase 0, ticket B0.1).
 | B5.2 | 5 Dashboard | GET /api/dashboard route + integration test |
 | F1.1 | 6 FE Scaffold | Vite project + export/src copy-in |
 | F1.2 | 6 FE Scaffold | api.ts typed fetch client |
-| F1.3 | 6 FE Scaffold | useMilestoneEngine rewired to real API |
+| F1.3 | 6 FE Scaffold | useMilestoneEngine rewired to real API; plan Log History via activity-logs + recovery_streaks mapping |
 | F1.4 | 6 FE Scaffold | TypeScript + ESLint clean |
 | F2.1 | 7 FE Complete | NewActivitySheet.tsx |
 | F2.2 | 7 FE Complete | GoalsScreen.tsx |

@@ -16,6 +16,7 @@ from app.tests.helpers.load_api_seed import (
     seed_flare_up_incident,
     seed_load_mock_graph,
 )
+from app.tests.helpers.load_api_test_utils import foot_status, freeze_server_today
 from app.tests.helpers.load_engine_fixtures import (
     ACTIVITIES,
     ACTIVITY_CLASSES,
@@ -33,21 +34,6 @@ from app.tests.helpers.seed import (
 SUMMARY_URL = "/api/load/summary"
 CHECK_VIOLATIONS_URL = "/api/load/check-violations"
 DELAYED_TAX_URL = "/api/load/delayed-tax"
-
-FROZEN_TODAY = date.fromisoformat(AS_OF)
-
-
-def _freeze_server_today(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "app.services.load_queries._server_local_today",
-        lambda: FROZEN_TODAY,
-    )
-
-
-def _foot_status(payload: dict[str, Any]) -> dict[str, Any]:
-    return next(
-        s for s in payload["class_statuses"] if s["activity_class_id"] == "cls-foot"
-    )
 
 
 def _hits_of_type(payload: dict[str, Any], hit_type: str) -> list[dict[str, Any]]:
@@ -80,7 +66,7 @@ async def test_get_load_summary_with_mock_seed_asserts_cls_foot_caution(
     assert "suggestions" in payload
     assert "weekly_progress" in payload
 
-    foot = _foot_status(payload)
+    foot = foot_status(payload)
     assert foot["state"] == "caution"
     assert foot["last_done_date"] == "2026-05-22"
     assert "rest" in foot["reason"].lower()
@@ -98,7 +84,7 @@ async def test_get_load_summary_response_uses_snake_case_fields(
     payload = response.json()
     assert set(payload.keys()) >= {"as_of", "class_statuses", "suggestions", "weekly_progress"}
 
-    foot = _foot_status(payload)
+    foot = foot_status(payload)
     assert "activity_class_id" in foot
     assert "state" in foot
     assert "reason" in foot
@@ -155,7 +141,7 @@ async def test_get_load_summary_without_active_block_returns_neutral_payload(
     payload = response.json()
     assert payload["as_of"] == AS_OF
     assert payload["weekly_progress"] == []
-    foot = _foot_status(payload)
+    foot = foot_status(payload)
     assert foot["state"] == "safe"
     assert payload["suggestions"]
 
@@ -164,7 +150,7 @@ async def test_get_load_summary_empty_database_returns_safe_defaults(
     client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _freeze_server_today(monkeypatch)
+    freeze_server_today(monkeypatch)
 
     response = await client.get(SUMMARY_URL)
 
@@ -181,7 +167,7 @@ async def test_get_load_summary_defaults_as_of_to_server_today(
     client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _freeze_server_today(monkeypatch)
+    freeze_server_today(monkeypatch)
     seed_load_mock_graph(app_with_test_database)
 
     response = await client.get(SUMMARY_URL)
@@ -189,7 +175,7 @@ async def test_get_load_summary_defaults_as_of_to_server_today(
     assert response.status_code == 200
     payload = response.json()
     assert payload["as_of"] == AS_OF
-    foot = _foot_status(payload)
+    foot = foot_status(payload)
     assert foot["state"] == "caution"
 
 
@@ -218,7 +204,7 @@ async def test_get_load_summary_excludes_logs_after_as_of(
     response = await client.get(SUMMARY_URL, params={"as_of": AS_OF})
 
     assert response.status_code == 200
-    foot = _foot_status(response.json())
+    foot = foot_status(response.json())
     assert foot["last_done_date"] == "2026-05-22"
 
 
@@ -226,7 +212,7 @@ async def test_post_check_violations_empty_database_returns_empty_violations(
     client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _freeze_server_today(monkeypatch)
+    freeze_server_today(monkeypatch)
 
     response = await client.post(
         CHECK_VIOLATIONS_URL,
@@ -242,7 +228,7 @@ async def test_post_check_violations_defaults_as_of_to_server_today(
     client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _freeze_server_today(monkeypatch)
+    freeze_server_today(monkeypatch)
     seed_load_mock_graph(app_with_test_database)
     seed_activity_log(
         app_with_test_database,
@@ -520,7 +506,7 @@ async def test_get_delayed_tax_empty_database_returns_empty_hits(
     client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _freeze_server_today(monkeypatch)
+    freeze_server_today(monkeypatch)
 
     response = await client.get(DELAYED_TAX_URL)
 
@@ -535,7 +521,7 @@ async def test_get_delayed_tax_defaults_as_of_to_server_today(
     client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _freeze_server_today(monkeypatch)
+    freeze_server_today(monkeypatch)
     seed_load_mock_graph(app_with_test_database)
 
     response = await client.get(DELAYED_TAX_URL)
