@@ -4,7 +4,7 @@ FRONTEND_DIR := frontend
 .PHONY: dev test lint
 
 dev:
-	@echo "Frontend dev server: http://localhost:$${FRONTEND_PORT:-5173} (after compose up)"
+	@echo "Frontend dev server: http://localhost:$${FRONTEND_PORT:-5151} (after compose up)"
 	docker compose up
 
 test:

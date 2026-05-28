@@ -39,7 +39,7 @@ cp backend/.env.example .env
 docker compose up backend
 
 # Backend: http://localhost:8084 (Swagger UI: /docs)
-# Frontend: http://localhost:${FRONTEND_PORT:-5173} (set FRONTEND_PORT in repo-root .env)
+# Frontend: http://localhost:${FRONTEND_PORT:-5151} (set FRONTEND_PORT in repo-root .env)
 ```
 
 Default backend port is **8084** (not 8000) to avoid clashing with other local apps. Change `BACKEND_PORT` in `.env` if needed.

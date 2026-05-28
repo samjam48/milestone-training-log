@@ -26,7 +26,8 @@ def root_env_file() -> Iterator[None]:
     env_path.write_text(
         "DATABASE_URL=sqlite:///./data/milestone.db\n"
         "APP_VERSION=0.1.0\n"
-        "BACKEND_PORT=8084\n",
+        "BACKEND_PORT=8084\n"
+        "FRONTEND_PORT=5151\n",
         encoding="utf-8",
     )
 
@@ -123,7 +124,7 @@ def test_frontend_service_matches_scaffold_contract(root_env_file: None) -> None
         (_get_mapping(port)["target"], str(_get_mapping(port)["published"]))
         for port in port_specs
     }
-    assert (5173, "5173") in published_ports
+    assert (5151, "5151") in published_ports
 
     frontend_build = _get_mapping(frontend_service["build"]) if "build" in frontend_service else {}
     uses_frontend_build = str(frontend_build.get("context", "")).endswith("/frontend")

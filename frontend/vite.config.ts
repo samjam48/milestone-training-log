@@ -5,7 +5,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const backendPort = env.BACKEND_PORT ?? '8084';
   const backendHost = env.BACKEND_HOST ?? 'localhost';
-  const frontendPort = Number(env.FRONTEND_PORT ?? '5173');
+  const frontendPort = Number(env.FRONTEND_PORT ?? '5151');
 
   return {
     plugins: [react()],
