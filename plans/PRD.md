@@ -38,7 +38,9 @@ to see whether this week's volume is sustainable given last week's pattern.
 - Optional fields: RPE 1–10, post-activity feel (fine / mild_discomfort / bad),
   notes
 - Lazy activity setup: log first, configure rules later
-- Rule violations surface live before submission (rest window, load cap)
+- Rule violations surface live before submission against all enabled block rules
+  (rest window, weekly load cap, frequency limit, consecutive-day limit, cross-class
+  weekly activity count)
 - Log anyway: violations stored as a snapshot on the log entry for history
   display — user is never blocked, only informed
 - Log history grouped by month, sorted newest-first, with feel pill and
@@ -71,6 +73,11 @@ to see whether this week's volume is sustainable given last week's pattern.
   showing rest window status and load cap status
 - Clean streak counter: consecutive activity log entries with no danger
   rule violations and no "bad" post-activity feel
+- **Delayed tax / load risk:** proactive flags for elevated daily load (vs a
+  14-day median baseline) and under-rested activity in the last 7 days; when the
+  user logs elevated pain (`pain_level > 3`), flare on check-in, or a flare-up
+  incident, attribute likely causes (isolated return after long rest vs earlier
+  stacked load in the same week)
 
 ### F5: Training Block Management
 

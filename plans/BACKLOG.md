@@ -12,3 +12,8 @@ Follow-up items that are intentionally out of scope for the current task but sho
 - Revisit the canonical file examples in `docs/patterns.md` once the actual frontend and backend folder names land, and update the doc in the same scaffolding change if naming differs.
 - Decide whether Phase 1 keeps a `user_id = "local"` field on persisted entities or omits `user_id` entirely until multi-user support exists. Keep the choice consistent across models, migrations, and docs.
 - Confirm whether flare-up incidents need many-to-many links to likely triggering activity classes. If yes, plan a join table rather than arrays or JSON.
+
+## Phase 4 follow-ups
+
+- Refactor `check_violations` in `load_engine.py` — radon F-rank complexity; extract per-rule helpers when extending.
+- Add API integration test for `elevated_load` without active block on `GET /api/load/delayed-tax`.

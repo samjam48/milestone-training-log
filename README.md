@@ -7,7 +7,7 @@ A solo health and performance tracking app bridging clinical rehabilitation (pos
 - **Log Activities**: Track exercises with volume, duration, and perceived exertion (RPE 1-10)
 - **Morning Check-ins**: Log next-day pain, readiness, and stiffness levels
 - **Rolling Load Warnings**: See 3-day and 7-day cumulative load scores per activity
-- **Delayed Tax Correlation**: Detect when today's pain correlates to activity spikes 24–72 hours prior
+- **Delayed tax / load risk**: Proactive 7-day elevated-load and rest-debt flags; when you log pain or flare, attribute likely causes (return-after-rest vs earlier stacked load)
 - **Recovery Rules**: Define personal thresholds (e.g., "no more than 3 consecutive walking days")
 - **Mobile-First Design**: Built for phone-first usage with Capacitor readiness for iOS/Android
 
