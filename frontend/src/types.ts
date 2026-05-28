@@ -214,10 +214,21 @@ export interface Goal extends Timestamped {
 /** Per-day rollup used by the calendar heatmap. */
 export interface DailySafetyScore {
   date: ISODate;
-  state: SafetyState;
+  state: SafetyState | 'neutral';
   violations: RuleViolationSnapshot[];
   hadFlareUp: boolean;
   painLevel?: Score0to10;
+}
+
+/** Recovery streak surfaced on the dashboard from active block targets. */
+export interface RecoveryStreak {
+  recoveryTargetId: ID;
+  activityId: ID;
+  activityName: string;
+  activityClassId: ID;
+  targetFrequency: number;
+  frequencyUnit: 'daily' | 'weekly';
+  currentStreakDays: number;
 }
 
 /** Per-class status shown on the dashboard traffic light. */
