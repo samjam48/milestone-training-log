@@ -31,6 +31,7 @@ import type { LoadPoint } from '../lib/load';
 import {
   getDashboard,
   listActivityLogs,
+  listActivities,
   createActivityLog,
   createDailyCheckIn,
   createFlareUpIncident,
@@ -129,10 +130,15 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     queryFn: () => listActivityLogs(),
   });
 
+  const activitiesQuery = useQuery({
+    queryKey: ['activities'],
+    queryFn: () => listActivities(),
+  });
+
   const dashboard = dashboardQuery.data;
   const todayDate = dashboard?.todayDate ?? ('' as ISODate);
 
-  const [violationResults, setViolationResults] = React.useState<RuleViolationSnapshot[]>([]);
+  const [liveViolations, setLiveViolations] = React.useState<RuleViolationSnapshot[]>([]);
   const violationDebounceRef = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const submitLogMutation = useMutation({
@@ -147,11 +153,12 @@ export function useMilestoneEngine(): MilestoneEngineResult {
         rpe: draft.rpe,
         postActivityFeel: draft.postActivityFeel,
         notes: draft.notes,
-        ruleViolationsAtLog: draft.ruleViolationsAtLog ?? violationResults,
+        ruleViolationsAtLog: draft.ruleViolationsAtLog ?? liveViolations,
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       void queryClient.invalidateQueries({ queryKey: ['activity-logs'] });
+      void queryClient.invalidateQueries({ queryKey: ['activities'] });
     },
   });
 
@@ -207,13 +214,22 @@ export function useMilestoneEngine(): MilestoneEngineResult {
         queryClient.getQueryData<Awaited<ReturnType<typeof getDashboard>>>(['dashboard'])
           ?.todayDate ?? todayDate;
 
-      void checkViolationsApi({ activityId, volumeValue, rpe, asOf }).then((response) => {
-        setViolationResults(response.violations);
-      });
+      void checkViolationsApi({ activityId, volumeValue, rpe, asOf })
+        .then((response) => {
+          setLiveViolations(response.violations);
+        })
+        .catch(() => {
+          setLiveViolations([]);
+        });
     }, VIOLATION_DEBOUNCE_MS);
 
-    return violationResults;
-  }, [queryClient, todayDate, violationResults]);
+    return liveViolations;
+  }, [queryClient, todayDate, liveViolations]);
+
+  const dashboardActivities = dashboard?.activities ?? [];
+  const resolvedActivities = (
+    dashboardActivities.length > 0 ? dashboardActivities : (activitiesQuery.data ?? [])
+  ) as Activity[];
 
   const submitCheckIn = React.useCallback((draft: CheckInDraft) => {
     submitCheckInMutation.mutate(draft);
@@ -232,7 +248,7 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     userName: dashboard?.userName ?? '',
     block: (dashboard?.block ?? EMPTY_BLOCK) as TrainingBlock,
     activityClasses: (dashboard?.activityClasses ?? []) as ActivityClass[],
-    activities: (dashboard?.activities ?? []) as Activity[],
+    activities: resolvedActivities,
     logs: (activityLogsQuery.data ?? []) as ActivityLog[],
     incidents: (dashboard?.incidents ?? []) as FlareUpIncident[],
     hasCheckedInToday: dashboard?.hasCheckedInToday ?? false,

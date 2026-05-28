@@ -114,11 +114,9 @@ def test_frontend_service_matches_scaffold_contract(root_env_file: None) -> None
     services = _get_mapping(compose_config["services"])
     frontend_service = _get_mapping(services["frontend"])
 
-    published_ports = {
-        (_get_mapping(port)["target"], _get_mapping(port)["published"])
-        for port in _get_list(frontend_service["ports"])
-    }
-    assert (5173, "5173") in published_ports
+    port_specs = _get_list(frontend_service["ports"])
+    assert port_specs
+    assert "${FRONTEND_PORT" in str(port_specs[0])
 
     frontend_build = _get_mapping(frontend_service["build"]) if "build" in frontend_service else {}
     uses_frontend_build = str(frontend_build.get("context", "")).endswith("/frontend")

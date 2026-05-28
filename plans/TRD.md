@@ -381,7 +381,7 @@ Morning Check-In → submit → CTA disappears from Dashboard.
 
 | Stage | Approach |
 | --- | --- |
-| **Now (Phase 6 handoff)** | **Manual seeding** is sufficient — run `python -m scripts.seed` (or project seed entrypoint) against the local SQLite file when starting a dev session. Owner verifies the app manually before merge; no automated E2E gate blocks Phase 6. |
+| **Now (Phase 6 handoff)** | **Manual seeding** is sufficient — from `backend/`, run `.venv/bin/python3 -m scripts.seed` (after `alembic upgrade head`) against the local SQLite file when starting a dev session. Owner verifies the app manually before merge; no automated E2E gate blocks Phase 6. |
 | **Once the app is usable day-to-day** | Introduce a **dedicated local test database** (separate file or env) with **automated seed** in `make test` / CI so integration and manual smoke runs are repeatable without touching owner data. |
 | **Feature updates with schema changes** | Practice **Alembic migrations** on the local live DB: `alembic upgrade head` after pulls that add revisions; document rollback (`alembic downgrade -1`) for failed upgrades. Test migrations against the test DB in CI before applying to a personal live DB. |
 

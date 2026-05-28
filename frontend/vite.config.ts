@@ -5,11 +5,13 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const backendPort = env.BACKEND_PORT ?? '8084';
   const backendHost = env.BACKEND_HOST ?? 'localhost';
+  const frontendPort = Number(env.FRONTEND_PORT ?? '5173');
 
   return {
     plugins: [react()],
     server: {
-      port: 5173,
+      port: frontendPort,
+      strictPort: true,
       proxy: {
         '/api': {
           target: `http://${backendHost}:${backendPort}`,
