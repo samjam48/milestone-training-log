@@ -96,6 +96,15 @@ export function mapRuleViolationFromApi(raw: Record<string, unknown>): RuleViola
   };
 }
 
+function mapRuleViolationForApi(violation: RuleViolationSnapshot): Record<string, unknown> {
+  return {
+    rule_id: violation.ruleId,
+    rule_type: violation.ruleType,
+    message: violation.message,
+    severity: violation.severity,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Activity logs
 // ---------------------------------------------------------------------------
@@ -127,7 +136,7 @@ export function mapActivityLogFromApi(raw: Record<string, unknown>): ActivityLog
 export function mapActivityLogCreateBody(
   draft: Record<string, unknown>,
 ): Record<string, unknown> {
-  return {
+  const body: Record<string, unknown> = {
     id: draft.id,
     activity_id: draft.activityId,
     logged_date: draft.loggedDate,
@@ -138,6 +147,15 @@ export function mapActivityLogCreateBody(
     post_activity_feel: draft.postActivityFeel,
     notes: draft.notes,
   };
+
+  if (draft.ruleViolationsAtLog !== undefined) {
+    const violations = draft.ruleViolationsAtLog;
+    body.rule_violations_at_log = Array.isArray(violations)
+      ? violations.map((item) => mapRuleViolationForApi(item as RuleViolationSnapshot))
+      : violations;
+  }
+
+  return body;
 }
 
 export function mapActivityLogPatchBody(

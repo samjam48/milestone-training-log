@@ -27,6 +27,7 @@ export const mockEngine: MilestoneEngineResult = {
   flareUpDates: [],
   weekLoadThreshold: 0,
   cleanStreak: 0,
+  recoveryStreaks: [],
   submitLog: () => undefined,
   submitCheckIn: () => undefined,
   submitIncident: () => undefined,

@@ -1,36 +1,55 @@
 // =============================================================================
-// useMilestoneEngine — Tier 4 mock hook
+// useMilestoneEngine — Tier 4 data hook
 // -----------------------------------------------------------------------------
-// Wires the seed data (lib/mockData) through the rules engine (lib/engine) and
-// exposes a fully-reactive state object to Tier-3 screens.
-//
-// All "writes" (submitCheckIn, submitLog) update local React state; derived
-// values are recomputed via useMemo on every change. There is no persistence
-// beyond the session — this is the mock implementation for the prototype.
-// The real implementation will swap useState for a local-first DB (e.g. SQLite
-// via expo-sqlite) without changing any screen code.
+// Loads dashboard + activity logs via React Query and exposes mutations that
+// invalidate the correct cache keys. Derived fields come from GET /dashboard;
+// logs come from GET /api/activity-logs (full list).
 // =============================================================================
 
 import * as React from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
-  ActivityLog, DailyCheckIn, FlareUpIncident,
-  ActivityClassStatus, DailySafetyScore,
-  Score0to10, RPE, PostActivityFeel, VolumeUnit, ISODate, ID,
+  Activity,
+  ActivityClass,
+  ActivityClassStatus,
+  ActivityLog,
+  DailySafetyScore,
+  FlareUpIncident,
+  ID,
+  ISODate,
+  ISODateTime,
+  PostActivityFeel,
+  RecoveryStreak,
+  RPE,
   RuleViolationSnapshot,
+  Score0to10,
+  TrainingBlock,
+  VolumeUnit,
 } from '../types';
-import {
-  TODAY, PERIOD_START, USER_ID, USER_NAME,
-  BLOCK, ACTIVITY_CLASSES, ACTIVITIES, LOGS, RULES,
-  WEEKLY_TARGETS, CHECK_INS, INCIDENTS,
-} from '../lib/mockData';
-import { parseISODate, addDays, DEFAULT_RPE } from '../lib/load';
-import {
-  computeClassStatuses, computeDailySafetyScores,
-  computeSuggestions, computeWeeklyProgress,
-  computeCleanStreak, computeLoadSeries,
-  WeeklyProgress, Suggestion,
-} from '../lib/engine';
+import type { WeeklyProgress, Suggestion } from '../lib/engine';
 import type { LoadPoint } from '../lib/load';
+import {
+  getDashboard,
+  listActivityLogs,
+  createActivityLog,
+  createDailyCheckIn,
+  createFlareUpIncident,
+  checkViolations as checkViolationsApi,
+} from '../lib/api';
+
+type EntityWithoutUserId<T extends { userId: string }> = Omit<T, 'userId'>;
+
+const VIOLATION_DEBOUNCE_MS = 300;
+
+const EMPTY_BLOCK: EntityWithoutUserId<TrainingBlock> = {
+  id: '',
+  name: '',
+  startDate: '1970-01-01' as ISODate,
+  endDate: '1970-01-01' as ISODate,
+  status: 'active',
+  isReviewMilestoneHit: false,
+  createdAt: '1970-01-01T00:00:00Z' as ISODateTime,
+};
 
 // ---------------------------------------------------------------------------
 // Mutation drafts — what screens pass to the hook
@@ -70,17 +89,13 @@ export interface IncidentDraft {
 // ---------------------------------------------------------------------------
 
 export interface MilestoneEngineResult {
-  // Identity
   todayDate: ISODate;
   userName: string;
-  // Block
-  block: typeof BLOCK;
-  // Raw data (screens may need these for ad-hoc renders)
-  activityClasses: typeof ACTIVITY_CLASSES;
-  activities: typeof ACTIVITIES;
+  block: TrainingBlock;
+  activityClasses: ActivityClass[];
+  activities: Activity[];
   logs: ActivityLog[];
   incidents: FlareUpIncident[];
-  // Derived
   hasCheckedInToday: boolean;
   classStatuses: ActivityClassStatus[];
   suggestions: Suggestion[];
@@ -90,11 +105,10 @@ export interface MilestoneEngineResult {
   flareUpDates: ISODate[];
   weekLoadThreshold: number;
   cleanStreak: number;
-  // Mutations
+  recoveryStreaks: RecoveryStreak[];
   submitCheckIn: (draft: CheckInDraft) => void;
   submitLog: (draft: LogDraft) => void;
   submitIncident: (draft: IncidentDraft) => void;
-  /** Live rule check — call with draft inputs; returns violations without side-effects. */
   checkViolations: (activityId: ID, volumeValue: number, rpe: number) => RuleViolationSnapshot[];
 }
 
@@ -102,175 +116,138 @@ export interface MilestoneEngineResult {
 // Hook
 // ---------------------------------------------------------------------------
 
-let logCounter = 100; // Monotonic id for new mock logs
-let ciCounter = 100;
-let incCounter = 100;
-
 export function useMilestoneEngine(): MilestoneEngineResult {
-  const [logs, setLogs] = React.useState<ActivityLog[]>(LOGS);
-  const [checkIns, setCheckIns] = React.useState<DailyCheckIn[]>(CHECK_INS);
-  const [incidents, setIncidents] = React.useState<FlareUpIncident[]>(INCIDENTS);
+  const queryClient = useQueryClient();
 
-  const hasCheckedInToday = React.useMemo(
-    () => checkIns.some(c => c.checkInDate === TODAY),
-    [checkIns],
-  );
+  const dashboardQuery = useQuery({
+    queryKey: ['dashboard'],
+    queryFn: () => getDashboard(),
+  });
 
-  const classStatuses = React.useMemo(
-    () => computeClassStatuses(TODAY, ACTIVITY_CLASSES, ACTIVITIES, logs, RULES),
-    [logs],
-  );
+  const activityLogsQuery = useQuery({
+    queryKey: ['activity-logs'],
+    queryFn: () => listActivityLogs(),
+  });
 
-  const suggestions = React.useMemo(
-    () => computeSuggestions(classStatuses, ACTIVITIES, ACTIVITY_CLASSES),
-    [classStatuses],
-  );
+  const dashboard = dashboardQuery.data;
+  const todayDate = dashboard?.todayDate ?? ('' as ISODate);
 
-  const weeklyProgress = React.useMemo(
-    () => computeWeeklyProgress(WEEKLY_TARGETS, ACTIVITY_CLASSES, ACTIVITIES, logs, PERIOD_START, TODAY),
-    [logs],
-  );
+  const [violationResults, setViolationResults] = React.useState<RuleViolationSnapshot[]>([]);
+  const violationDebounceRef = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  const dailyScores = React.useMemo(
-    () => computeDailySafetyScores(BLOCK.startDate, TODAY, logs, checkIns, incidents),
-    [logs, checkIns, incidents],
-  );
+  const submitLogMutation = useMutation({
+    mutationFn: (draft: LogDraft) =>
+      createActivityLog({
+        id: crypto.randomUUID(),
+        activityId: draft.activityId,
+        loggedDate: todayDate,
+        durationMinutes: draft.durationMinutes,
+        volumeValue: draft.volumeValue,
+        volumeUnit: draft.volumeUnit,
+        rpe: draft.rpe,
+        postActivityFeel: draft.postActivityFeel,
+        notes: draft.notes,
+        ruleViolationsAtLog: draft.ruleViolationsAtLog ?? violationResults,
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['activity-logs'] });
+    },
+  });
 
-  const loadSeries = React.useMemo(
-    () => computeLoadSeries('cls-foot', ACTIVITIES, logs, BLOCK.startDate, TODAY),
-    [logs],
-  );
+  const submitCheckInMutation = useMutation({
+    mutationFn: (draft: CheckInDraft) =>
+      createDailyCheckIn({
+        id: crypto.randomUUID(),
+        checkInDate: todayDate,
+        painLevel: draft.painLevel,
+        readinessLevel: draft.readinessLevel,
+        stiffnessLevel: draft.stiffnessLevel,
+        hasFlareUp: draft.hasFlareUp,
+        flareUp: draft.hasFlareUp
+          ? {
+              bodyPart: draft.flareUpBodyPart ?? 'Unknown',
+              severity: draft.flareUpSeverity ?? 5,
+              likelyCauseActivityClassIds: [],
+            }
+          : undefined,
+        notes: draft.notes,
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+  });
 
-  const flareUpDates = React.useMemo(
-    () => incidents.map(i => i.incidentDate),
-    [incidents],
-  );
-
-  const weekLoadThreshold = RULES.find(
-    r => r.activityClassId === 'cls-foot' && r.ruleType === 'weekly_load_cap',
-  )?.thresholdValue ?? 120;
-
-  const cleanStreak = React.useMemo(() => computeCleanStreak(logs), [logs]);
-
-  const submitCheckIn = React.useCallback((draft: CheckInDraft) => {
-    const now = new Date().toISOString();
-    const newCi: DailyCheckIn = {
-      id: `ci-${ciCounter++}`, userId: USER_ID,
-      checkInDate: TODAY,
-      painLevel: draft.painLevel,
-      readinessLevel: draft.readinessLevel,
-      stiffnessLevel: draft.stiffnessLevel,
-      hasFlareUp: draft.hasFlareUp,
-      flareUp: draft.hasFlareUp ? {
-        bodyPart: draft.flareUpBodyPart ?? 'Unknown',
-        severity: draft.flareUpSeverity ?? 5,
-        likelyCauseActivityClassIds: [],
-      } : undefined,
-      notes: draft.notes,
-      createdAt: now,
-    };
-    setCheckIns(prev => [...prev, newCi]);
-
-    if (draft.hasFlareUp) {
-      const newInc: FlareUpIncident = {
-        id: `inc-${incCounter++}`, userId: USER_ID,
-        incidentDate: TODAY,
-        bodyPart: draft.flareUpBodyPart ?? 'Unknown',
-        severity: draft.flareUpSeverity ?? 5,
-        dailyCheckInId: newCi.id,
-        createdAt: now,
-      };
-      setIncidents(prev => [...prev, newInc]);
-    }
-  }, []);
-
-  const submitLog = React.useCallback((draft: LogDraft) => {
-    const now = new Date().toISOString();
-    const newLog: ActivityLog = {
-      id: `log-${logCounter++}`, userId: USER_ID,
-      activityId: draft.activityId,
-      loggedDate: TODAY,
-      durationMinutes: draft.durationMinutes,
-      volumeValue: draft.volumeValue,
-      volumeUnit: draft.volumeUnit,
-      rpe: draft.rpe,
-      postActivityFeel: draft.postActivityFeel,
-      notes: draft.notes,
-      ruleViolationsAtLog: draft.ruleViolationsAtLog,
-      createdAt: now,
-    };
-    setLogs(prev => [...prev, newLog]);
-  }, []);
-
-  const submitIncident = React.useCallback((draft: IncidentDraft) => {
-    setIncidents(prev => [...prev, {
-      id: `inc-${incCounter++}`, userId: USER_ID,
-      incidentDate: TODAY,
-      bodyPart: draft.bodyPart,
-      severity: draft.severity,
-      activityClassId: draft.activityClassId,
-      notes: draft.notes,
-      createdAt: new Date().toISOString(),
-    }]);
-  }, []);
+  const submitIncidentMutation = useMutation({
+    mutationFn: (draft: IncidentDraft) =>
+      createFlareUpIncident({
+        id: crypto.randomUUID(),
+        incidentDate: todayDate,
+        bodyPart: draft.bodyPart,
+        severity: draft.severity,
+        activityClassId: draft.activityClassId,
+        notes: draft.notes,
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+  });
 
   const checkViolations = React.useCallback((
-    activityId: ID, volumeValue: number, rpe: number,
+    activityId: ID,
+    volumeValue: number,
+    rpe: number,
   ): RuleViolationSnapshot[] => {
-    const activity = ACTIVITIES.find(a => a.id === activityId);
-    if (!activity) return [];
-    const clsIds = ACTIVITIES.filter(a => a.activityClassId === activity.activityClassId).map(a => a.id);
-    const result: RuleViolationSnapshot[] = [];
-
-    const restRule = RULES.find(
-      r => r.activityClassId === activity.activityClassId && r.ruleType === 'rest_between_class' && r.enabled,
-    );
-    if (restRule) {
-      const last = [...logs]
-        .filter(l => clsIds.includes(l.activityId) && l.loggedDate < TODAY)
-        .sort((a, b) => b.loggedDate.localeCompare(a.loggedDate))[0];
-      if (last) {
-        const daysSince = Math.round(
-          (parseISODate(TODAY).getTime() - parseISODate(last.loggedDate).getTime()) / 86_400_000,
-        );
-        if (daysSince <= restRule.thresholdValue) {
-          result.push({
-            ruleId: restRule.id, ruleType: 'rest_between_class',
-            message: `Breaks ${restRule.thresholdValue}-day rest rule — ${daysSince} day${daysSince === 1 ? '' : 's'} since last session`,
-            severity: daysSince <= 1 ? 'danger' : 'caution',
-          });
-        }
-      }
+    if (violationDebounceRef.current !== undefined) {
+      clearTimeout(violationDebounceRef.current);
     }
 
-    if (volumeValue > 0 && rpe > 0) {
-      const capRule = RULES.find(
-        r => r.activityClassId === activity.activityClassId && r.ruleType === 'weekly_load_cap' && r.enabled,
-      );
-      if (capRule) {
-        const winStart = addDays(TODAY, -(capRule.windowDays - 1));
-        const currentLoad = logs
-          .filter(l => clsIds.includes(l.activityId) && l.loggedDate >= winStart && l.loggedDate <= TODAY)
-          .reduce((s, l) => s + l.volumeValue * (l.rpe ?? DEFAULT_RPE), 0);
-        const projected = currentLoad + volumeValue * rpe;
-        if (projected >= capRule.thresholdValue) {
-          result.push({ ruleId: capRule.id, ruleType: 'weekly_load_cap', severity: 'danger',
-            message: `Projected load ${Math.round(projected)} / ${capRule.thresholdValue} cap` });
-        } else if (projected >= capRule.thresholdValue * 0.8) {
-          result.push({ ruleId: capRule.id, ruleType: 'weekly_load_cap', severity: 'caution',
-            message: `Approaching cap — ${Math.round(projected)} / ${capRule.thresholdValue}` });
-        }
-      }
-    }
-    return result;
-  }, [logs]);
+    violationDebounceRef.current = setTimeout(() => {
+      const asOf =
+        queryClient.getQueryData<Awaited<ReturnType<typeof getDashboard>>>(['dashboard'])
+          ?.todayDate ?? todayDate;
+
+      void checkViolationsApi({ activityId, volumeValue, rpe, asOf }).then((response) => {
+        setViolationResults(response.violations);
+      });
+    }, VIOLATION_DEBOUNCE_MS);
+
+    return violationResults;
+  }, [queryClient, todayDate, violationResults]);
+
+  const submitCheckIn = React.useCallback((draft: CheckInDraft) => {
+    submitCheckInMutation.mutate(draft);
+  }, [submitCheckInMutation]);
+
+  const submitLog = React.useCallback((draft: LogDraft) => {
+    submitLogMutation.mutate(draft);
+  }, [submitLogMutation]);
+
+  const submitIncident = React.useCallback((draft: IncidentDraft) => {
+    submitIncidentMutation.mutate(draft);
+  }, [submitIncidentMutation]);
 
   return {
-    todayDate: TODAY, userName: USER_NAME,
-    block: BLOCK,
-    activityClasses: ACTIVITY_CLASSES, activities: ACTIVITIES, logs, incidents,
-    hasCheckedInToday, classStatuses, suggestions, weeklyProgress,
-    dailyScores, loadSeries, flareUpDates, weekLoadThreshold, cleanStreak,
-    submitCheckIn, submitLog, submitIncident, checkViolations,
+    todayDate,
+    userName: dashboard?.userName ?? '',
+    block: (dashboard?.block ?? EMPTY_BLOCK) as TrainingBlock,
+    activityClasses: (dashboard?.activityClasses ?? []) as ActivityClass[],
+    activities: (dashboard?.activities ?? []) as Activity[],
+    logs: (activityLogsQuery.data ?? []) as ActivityLog[],
+    incidents: (dashboard?.incidents ?? []) as FlareUpIncident[],
+    hasCheckedInToday: dashboard?.hasCheckedInToday ?? false,
+    classStatuses: dashboard?.classStatuses ?? [],
+    suggestions: dashboard?.suggestions ?? [],
+    weeklyProgress: dashboard?.weeklyProgress ?? [],
+    dailyScores: dashboard?.dailyScores ?? [],
+    loadSeries: dashboard?.loadSeries ?? [],
+    flareUpDates: dashboard?.flareUpDates ?? [],
+    weekLoadThreshold: dashboard?.weekLoadThreshold ?? 0,
+    cleanStreak: dashboard?.cleanStreak ?? 0,
+    recoveryStreaks: dashboard?.recoveryStreaks ?? [],
+    submitCheckIn,
+    submitLog,
+    submitIncident,
+    checkViolations,
   };
 }
