@@ -121,7 +121,7 @@ Use this alongside:
 | `GET` | `/api/load/summary` | Class statuses, suggestions, weekly progress; optional `?as_of=` (default server-local today); snake_case JSON; 200 with neutral payloads when no active block |
 | `POST` | `/api/load/check-violations` | Dry-run all five rule types for a proposed log; body `activity_id`, `volume_value`, `rpe`, optional `as_of`; no DB write |
 | `GET` | `/api/load/delayed-tax` | Proactive 7-day load/rest risk plus symptom attribution when pain/flare recorded; optional `?as_of=`, `?risk_window_days=`, `?baseline_days=`, `?pain_threshold=` (default 3) |
-| `GET` | `/api/dashboard` | Aggregate dashboard payload for weekly targets, streaks, suggestions, and status cards |
+| `GET` | `/api/dashboard` | Aggregate dashboard payload; optional `?as_of=YYYY-MM-DD` (default server-local today). Returns `activity_classes`, `activities`, `logs` (30-day window ending on `as_of`), `incidents`, `class_statuses`, `suggestions`, `weekly_progress`, `daily_scores`, `load_series`, `flare_up_dates`, `recovery_streaks`, `clean_streak`, and related block/status fields |
 
 ## Notes For Initial Backend Build
 
