@@ -60,12 +60,13 @@ from `backend/` so `backend/pyproject.toml` is loaded.
 `make lint` and `make test` should wrap the canonical commands once the repo bootstrap is in place.
 ---
 ## Current Sprint —
-**Goal:** Frontend scaffold + API integration — Vite app wired to backend via typed client and React Query.
-**Status (2026-05-28):** Phase 0–5 complete on `main`; Phase 6 tickets signed off; implementation not started.
-**Branch:** `feat/phase-6-frontend`
-**Ticket source:** `plans/tickets-phase-6-frontend-2026-05-28.md`
-**Primary references:** `plans/TRD.md`, `plans/PRD.md`, `DESIGN.md`, `docs/api-map.md`, `export/src/hooks/useMilestoneEngine.ts`, `GET /api/dashboard`
-**Out of scope:** Goals/Settings/NewActivity screens (Phase 7), loading/error polish + review milestone + MCP stub (Phase 8), auth, multi-user support
+**Goal:** Frontend completion — port the 3 remaining screens (NewActivitySheet, GoalsScreen, SettingsScreen) from JSX prototypes to TypeScript and wire to the existing API.
+**Status (2026-05-30):** Phase 0–6 complete and merged to `main`; Phase 7 tickets being planned.
+**Branch:** `feat/phase-7-frontend-completion`
+**Ticket source:** `plans/tickets-phase-7-frontend-completion-2026-05-30.md`
+**Primary references:** `plans/TRD.md` §Phase 7, `plans/PRD.md`, `MOCKUPS.md` §Screens 4/5/5b/6b, `export/preview/*.jsx`, `frontend/src/hooks/useMilestoneEngine.ts`, `docs/api-map.md`
+**Deferred-item routing (owner 2026-05-30):** `CalendarHeatmap` block-review → Phase 7.5; `recovery_streaks` UI, delayed-tax panel, dynamic load-graph title → Phase 8.
+**Out of scope:** CalendarHeatmap / block-review grid (Phase 7.5), recovery-streaks + delayed-tax + load-graph-title dashboard surfacing (Phase 8), loading/error polish + review milestone + MCP stub (Phase 8), auth, multi-user support
 
 ---
 ## Definition of Done

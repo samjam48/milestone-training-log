@@ -402,16 +402,20 @@ and wire to API. Surface backend features not yet shown in Tier-3 screens.
 **Prerequisite:** Owner adds `SettingsScreen.jsx`, `GoalsScreen.jsx`,
 `NewActivitySheet.jsx` to `export/preview/` before this phase starts.
 
-**Deferred from Phase 6 (plan here, implement in Phase 7):**
+**Deferred-item routing (owner decision 2026-05-30).** Phase 7's scope is the
+3 screen ports only. The 4 items previously parked under Phase 7 are re-routed
+by how close they sit to that scope:
 
-- **`recovery_streaks` compliance UI** — dashboard currently shows clean streak
-  only; MOCKUPS compliance section should consume `recoveryStreaks` from hook
-- **Delayed tax / load risk panel** — PRD F4; consume `GET /api/load/delayed-tax`
-- **`CalendarHeatmap`** — block-review grid; wire `dailyScores` from hook on
-  Settings / block-review flow (component exists in `export/src/composites/`)
-- **Dynamic load graph title (rule-driven)** — F1.4 derives title from first
-  performance class; full weekly-cap resolution from dashboard payload deferred
-  to Phase 7 if seed scenario needs rule-accurate graph class
+- **`CalendarHeatmap` block-review grid → Phase 7.5.** Its home is the Settings
+  "Review block" flow, which *is* built in Phase 7, so it is worth doing right
+  after the Settings port rather than waiting for Phase 8. Wire `dailyScores`
+  from hook; component exists in `export/src/composites/`.
+- **`recovery_streaks` compliance UI → Phase 8.** Dashboard compliance section
+  consuming `recoveryStreaks` from hook — outside the screen-port scope.
+- **Delayed tax / load risk panel → Phase 8.** PRD F4; consume
+  `GET /api/load/delayed-tax`. Dashboard surface, not a ported screen.
+- **Dynamic load graph title (rule-driven) → Phase 8.** Full weekly-cap class
+  resolution from dashboard payload; Dashboard polish, not in Phase 7 scope.
 
 | Ticket | Scope |
 |---|---|
