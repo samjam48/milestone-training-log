@@ -69,18 +69,19 @@ describe('App shell (F1.1)', () => {
     expect(screen.getByRole('heading', { name: 'Log History' })).toBeInTheDocument();
   });
 
-  it('shows Coming soon placeholder on Goals tab', async () => {
+  it('shows Goals screen on Goals tab', async () => {
     const user = userEvent.setup();
     renderWithProviders(<App />);
     await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Goals' }));
-    expect(screen.getByText('Coming soon')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /goals/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /\+ new goal/i })).toBeInTheDocument();
   });
 
-  it('shows Coming soon placeholder on Settings tab', async () => {
+  it('shows Settings screen on Settings tab', async () => {
     const user = userEvent.setup();
     renderWithProviders(<App />);
     await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Settings' }));
-    expect(screen.getByText('Coming soon')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /settings/i })).toBeInTheDocument();
   });
 
   it('opens Morning Check-In full-screen flow and returns to prior tab on back', async () => {
