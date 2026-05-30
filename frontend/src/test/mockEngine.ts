@@ -33,6 +33,21 @@ function createBaseline(): MilestoneEngineResult {
     weekLoadThreshold: 0,
     cleanStreak: 0,
     recoveryStreaks: [],
+    // F2.0 read fields
+    goals: [],
+    rules: [],
+    weeklyTargets: [],
+    previousBlocks: [],
+    // F2.0 mutations
+    submitNewActivity: () => undefined,
+    createGoal: () => undefined,
+    updateGoal: () => undefined,
+    archiveGoal: () => undefined,
+    createRule: () => undefined,
+    updateRule: () => undefined,
+    deleteRule: () => undefined,
+    createTrainingBlock: () => undefined,
+    // F1.3 mutations
     submitLog: () => undefined,
     submitCheckIn: () => undefined,
     submitIncident: () => undefined,
