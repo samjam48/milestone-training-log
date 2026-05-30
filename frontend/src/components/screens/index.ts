@@ -3,3 +3,4 @@ export { LogHistoryScreen } from './LogHistoryScreen';
 export { MorningCheckInScreen } from './MorningCheckInScreen';
 export { LogActivityScreen } from './LogActivityScreen';
 export { LogIncidentScreen } from './LogIncidentScreen';
+export { NewActivitySheet } from './NewActivitySheet';
