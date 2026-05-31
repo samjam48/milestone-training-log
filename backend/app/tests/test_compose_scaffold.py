@@ -72,11 +72,13 @@ def test_compose_uses_repo_env_file_without_inline_app_settings() -> None:
     assert "APP_VERSION=" not in compose_text
 
 
-def test_compose_config_defines_backend_and_frontend_services(root_env_file: None) -> None:
+def test_compose_config_defines_backend_service_only(root_env_file: None) -> None:
+    # Frontend runs locally via `npm run dev`; only backend is in compose.
     compose_config = _load_compose_config()
     services = _get_mapping(compose_config["services"])
 
-    assert set(services) == {"backend", "frontend"}
+    assert "backend" in services
+    assert "frontend" not in services
 
 
 def test_backend_service_matches_scaffold_contract(root_env_file: None) -> None:
@@ -110,32 +112,10 @@ def test_backend_service_matches_scaffold_contract(root_env_file: None) -> None:
     }
 
 
-def test_frontend_service_matches_scaffold_contract(root_env_file: None) -> None:
+def test_frontend_not_in_compose(root_env_file: None) -> None:
+    # Frontend was intentionally removed from compose (runs locally via npm run dev).
     compose_text = _read_required_text(COMPOSE_FILE)
-    assert "FRONTEND_PORT" in compose_text
-
-    compose_config = _load_compose_config()
-    services = _get_mapping(compose_config["services"])
-    frontend_service = _get_mapping(services["frontend"])
-
-    port_specs = _get_list(frontend_service["ports"])
-    assert port_specs
-    published_ports = {
-        (_get_mapping(port)["target"], str(_get_mapping(port)["published"]))
-        for port in port_specs
-    }
-    assert (5151, "5151") in published_ports
-
-    frontend_build = _get_mapping(frontend_service["build"]) if "build" in frontend_service else {}
-    uses_frontend_build = str(frontend_build.get("context", "")).endswith("/frontend")
-    uses_placeholder_image = frontend_service.get("image") == "node:20-alpine"
-    assert uses_frontend_build or uses_placeholder_image
-
-    assert (
-        "healthcheck" in frontend_service
-        or "depends_on" in frontend_service
-        or frontend_service.get("restart") == "no"
-    )
+    assert "frontend:" not in compose_text
 
 
 def test_backend_dockerfile_matches_scaffold_contract() -> None:
