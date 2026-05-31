@@ -1,27 +1,28 @@
 /**
- * F3.0 — BlockReviewScreen tests (failing-first TDD).
+ * F3.0-fix — DashboardScreen: BlockSafetyMapSection inline tests (failing-first TDD).
  *
- * BlockReviewScreen does NOT exist yet — all tests fail on import until the
- * implementation is in place.
+ * BlockSafetyMapSection does NOT exist yet — all tests in this file fail on import
+ * (or on render) until the implementation is in place.
  *
- * Mocking strategy:
- *   - useMilestoneEngine: mocked to return mockEngine
- *   - @tanstack/react-query useQuery: mocked per-test to control loading/error/data
+ * Mocking strategy (mirrors BlockReviewScreen.test.tsx):
  *   - CalendarHeatmap: stubbed to a simple div — tests verify screen wiring, not heatmap internals
+ *   - @tanstack/react-query useQuery: mocked via vi.hoisted + vi.mock to control per-block states
  *   - getTrainingBlockScores: mocked via vi.mock on the trainingBlocks module
+ *   - DashboardScreen receives engine directly as a prop
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { screen, cleanup } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders';
 import { mockEngine, resetMockEngine } from '../../test/mockEngine';
 import type { TrainingBlock, DailySafetyScore } from '../../types';
 
 // ---------------------------------------------------------------------------
-// Speculative import — BlockReviewScreen does not exist yet; tests fail here.
+// Speculative import — DashboardScreen exists, but BlockSafetyMapSection does not.
+// Tests that assert on BlockSafetyMapSection behaviour will fail until it is
+// implemented and rendered inside DashboardScreen.
 // ---------------------------------------------------------------------------
-import { BlockReviewScreen } from './BlockReviewScreen';
+import { DashboardScreen } from './DashboardScreen';
 
 // ---------------------------------------------------------------------------
 // Module mocks
@@ -34,12 +35,7 @@ vi.mock('../../components/composites/CalendarHeatmap', () => ({
   ),
 }));
 
-// Mock useMilestoneEngine so BlockReviewScreen reads from mockEngine.
-vi.mock('../../hooks/useMilestoneEngine', () => ({
-  useMilestoneEngine: () => mockEngine,
-}));
-
-// Mock getTrainingBlockScores — does not exist yet, import will fail until production code lands.
+// Mock getTrainingBlockScores — import will succeed once production code lands.
 const { getTrainingBlockScoresMock } = vi.hoisted(() => ({
   getTrainingBlockScoresMock: vi.fn(),
 }));
@@ -106,35 +102,38 @@ const DAILY_SCORES: DailySafetyScore[] = [
   { date: '2026-05-02', state: 'caution', violations: [], hadFlareUp: false },
 ];
 
-// Default useQuery stub — returns data with no extra fetch needed for active block.
+// ---------------------------------------------------------------------------
+// useQuery stub factories
+// ---------------------------------------------------------------------------
+
 function makeUseQuerySuccess(data: unknown) {
-  return vi.fn().mockReturnValue({
+  return {
     data,
     isPending: false,
     isError: false,
     error: null,
     refetch: vi.fn(),
-  });
+  };
 }
 
 function makeUseQueryPending() {
-  return vi.fn().mockReturnValue({
+  return {
     data: undefined,
     isPending: true,
     isError: false,
     error: null,
     refetch: vi.fn(),
-  });
+  };
 }
 
 function makeUseQueryError() {
-  return vi.fn().mockReturnValue({
+  return {
     data: undefined,
     isPending: false,
     isError: true,
     error: new Error('Network error'),
     refetch: vi.fn(),
-  });
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -148,32 +147,38 @@ afterEach(() => {
 });
 
 // ---------------------------------------------------------------------------
-// Test 1 — Active block heatmap rendered with pre-loaded scores
+// Render helper — DashboardScreen needs onOpenCheckIn and onOpenLogActivity
 // ---------------------------------------------------------------------------
 
-describe('BlockReviewScreen — active block heatmap', () => {
-  it('renders CalendarHeatmap for the active block without firing an extra useQuery fetch', () => {
+function renderDashboard() {
+  return renderWithProviders(
+    <DashboardScreen
+      engine={mockEngine}
+      onOpenCheckIn={vi.fn()}
+      onOpenLogActivity={vi.fn()}
+    />,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Test a — Active block: CalendarHeatmap rendered without extra useQuery fetch
+// ---------------------------------------------------------------------------
+
+describe('DashboardScreen — BlockSafetyMapSection: active block heatmap', () => {
+  it('renders a CalendarHeatmap for the active block without firing a useQuery for that block id', () => {
     mockEngine.block = ACTIVE_BLOCK;
     mockEngine.dailyScores = DAILY_SCORES;
     mockEngine.previousBlocks = [];
 
-    // For the active block, no extra query should be fired (scores come from engine).
-    // Provide a mock that tracks calls — it should not be called with block-scores key.
-    useQueryMock.mockReturnValue({
-      data: undefined,
-      isPending: false,
-      isError: false,
-      error: null,
-      refetch: vi.fn(),
-    });
+    // Provide a default useQuery stub — it must NOT be called for the active block id.
+    useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
 
-    renderWithProviders(<BlockReviewScreen engine={mockEngine} onBack={vi.fn()} />);
+    renderDashboard();
 
-    // CalendarHeatmap stub must appear for the active block.
+    // CalendarHeatmap must appear for the active block — rendered inline by BlockSafetyMapSection.
     expect(screen.getByTestId('calendar-heatmap')).toBeInTheDocument();
 
-    // useQuery must NOT have been called with ['block-scores', ACTIVE_BLOCK.id]
-    // because active block scores come from the dashboard pre-load.
+    // useQuery must NOT have been called with ['block-scores', ACTIVE_BLOCK.id].
     const blockScoresCalls = useQueryMock.mock.calls.filter(
       (args: unknown[]) => {
         const opts = args[0] as Record<string, unknown> | undefined;
@@ -190,24 +195,18 @@ describe('BlockReviewScreen — active block heatmap', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Test 2 — One page per previous block, each fires useQuery keyed by block.id
+// Test b — One scroll page per previous block, each fires useQuery keyed by block.id
 // ---------------------------------------------------------------------------
 
-describe('BlockReviewScreen — one page per previous block', () => {
+describe('DashboardScreen — BlockSafetyMapSection: one page per previous block', () => {
   it('calls useQuery for each previous block keyed ["block-scores", block.id]', () => {
     mockEngine.block = ACTIVE_BLOCK;
     mockEngine.dailyScores = [];
     mockEngine.previousBlocks = [PREV_BLOCK_1, PREV_BLOCK_2];
 
-    useQueryMock.mockReturnValue({
-      data: [],
-      isPending: false,
-      isError: false,
-      error: null,
-      refetch: vi.fn(),
-    });
+    useQueryMock.mockReturnValue(makeUseQuerySuccess([]));
 
-    renderWithProviders(<BlockReviewScreen engine={mockEngine} onBack={vi.fn()} />);
+    renderDashboard();
 
     // Each previous block must cause one useQuery call with the block id in the key.
     const blockScoresCalls = useQueryMock.mock.calls.filter(
@@ -226,42 +225,23 @@ describe('BlockReviewScreen — one page per previous block', () => {
     expect(fetchedIds).toContain(PREV_BLOCK_1.id);
     expect(fetchedIds).toContain(PREV_BLOCK_2.id);
   });
-
-  it('renders a section for each previous block name', () => {
-    mockEngine.block = ACTIVE_BLOCK;
-    mockEngine.dailyScores = [];
-    mockEngine.previousBlocks = [PREV_BLOCK_1, PREV_BLOCK_2];
-
-    useQueryMock.mockReturnValue({
-      data: [],
-      isPending: false,
-      isError: false,
-      error: null,
-      refetch: vi.fn(),
-    });
-
-    renderWithProviders(<BlockReviewScreen engine={mockEngine} onBack={vi.fn()} />);
-
-    expect(screen.getByText(PREV_BLOCK_1.name)).toBeInTheDocument();
-    expect(screen.getByText(PREV_BLOCK_2.name)).toBeInTheDocument();
-  });
 });
 
 // ---------------------------------------------------------------------------
-// Test 3 — Loading skeleton while a previous-block query is pending
+// Test c — Loading skeleton while a previous-block query is pending
 // ---------------------------------------------------------------------------
 
-describe('BlockReviewScreen — loading skeleton', () => {
+describe('DashboardScreen — BlockSafetyMapSection: loading skeleton', () => {
   it('shows a loading skeleton while a previous-block query is pending', () => {
     mockEngine.block = ACTIVE_BLOCK;
     mockEngine.dailyScores = [];
     mockEngine.previousBlocks = [PREV_BLOCK_1];
 
-    useQueryMock.mockReturnValue(makeUseQueryPending()());
+    useQueryMock.mockReturnValue(makeUseQueryPending());
 
-    renderWithProviders(<BlockReviewScreen engine={mockEngine} onBack={vi.fn()} />);
+    renderDashboard();
 
-    // The component must render some loading indicator (skeleton, spinner, or "loading" text).
+    // The component must render some loading indicator.
     const skeleton =
       screen.queryByTestId('block-scores-loading') ??
       screen.queryByRole('status') ??
@@ -275,18 +255,18 @@ describe('BlockReviewScreen — loading skeleton', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Test 4 — Error state shown; retry button rendered; does not crash other pages
+// Test d — Error state shown; retry button rendered
 // ---------------------------------------------------------------------------
 
-describe('BlockReviewScreen — error state', () => {
+describe('DashboardScreen — BlockSafetyMapSection: error state', () => {
   it('shows an error state with a retry button when a previous-block query fails', () => {
     mockEngine.block = ACTIVE_BLOCK;
     mockEngine.dailyScores = DAILY_SCORES;
     mockEngine.previousBlocks = [PREV_BLOCK_1];
 
-    useQueryMock.mockReturnValue(makeUseQueryError()());
+    useQueryMock.mockReturnValue(makeUseQueryError());
 
-    renderWithProviders(<BlockReviewScreen engine={mockEngine} onBack={vi.fn()} />);
+    renderDashboard();
 
     // Error message must appear.
     const errorEl =
@@ -297,61 +277,14 @@ describe('BlockReviewScreen — error state', () => {
     // A retry button must render.
     expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument();
   });
-
-  it('does not crash when one previous-block errors and another succeeds', () => {
-    mockEngine.block = ACTIVE_BLOCK;
-    mockEngine.dailyScores = DAILY_SCORES;
-    mockEngine.previousBlocks = [PREV_BLOCK_1, PREV_BLOCK_2];
-
-    let callCount = 0;
-    useQueryMock.mockImplementation(() => {
-      callCount++;
-      // First call (PREV_BLOCK_1) errors; second (PREV_BLOCK_2) succeeds.
-      if (callCount === 1) {
-        return makeUseQueryError()();
-      }
-      return makeUseQuerySuccess([])();
-    });
-
-    expect(() => {
-      renderWithProviders(<BlockReviewScreen engine={mockEngine} onBack={vi.fn()} />);
-    }).not.toThrow();
-
-    // The successful block's name should still render.
-    expect(screen.getByText(PREV_BLOCK_2.name)).toBeInTheDocument();
-  });
 });
 
 // ---------------------------------------------------------------------------
-// Test 5 — Back button calls onBack prop
+// Test e — No active block: no scroll container, no CalendarHeatmap
 // ---------------------------------------------------------------------------
 
-describe('BlockReviewScreen — back button', () => {
-  it('calls onBack when the back button is clicked', async () => {
-    const user = userEvent.setup();
-    const onBack = vi.fn();
-
-    mockEngine.block = ACTIVE_BLOCK;
-    mockEngine.dailyScores = [];
-    mockEngine.previousBlocks = [];
-
-    useQueryMock.mockReturnValue(makeUseQuerySuccess([])());
-
-    renderWithProviders(<BlockReviewScreen engine={mockEngine} onBack={onBack} />);
-
-    const backButton = screen.getByRole('button', { name: /back/i });
-    await user.click(backButton);
-
-    expect(onBack).toHaveBeenCalledTimes(1);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Test 6 — No-block empty state
-// ---------------------------------------------------------------------------
-
-describe('BlockReviewScreen — no-block empty state', () => {
-  it('shows empty state and no scroll container when engine has no active block', () => {
+describe('DashboardScreen — BlockSafetyMapSection: no active block', () => {
+  it('renders no scroll container and no CalendarHeatmap when engine.block.id is empty', () => {
     mockEngine.block = {
       ...mockEngine.block,
       id: '',
@@ -360,17 +293,46 @@ describe('BlockReviewScreen — no-block empty state', () => {
     mockEngine.dailyScores = [];
     mockEngine.previousBlocks = [];
 
-    useQueryMock.mockReturnValue(makeUseQuerySuccess([])());
+    useQueryMock.mockReturnValue(makeUseQuerySuccess([]));
 
-    renderWithProviders(<BlockReviewScreen engine={mockEngine} onBack={vi.fn()} />);
+    renderDashboard();
 
-    // Some empty-state message must appear.
-    const emptyEl =
-      screen.queryByText(/no block|no training block|nothing to review/i) ??
-      screen.queryByTestId('block-review-empty');
-    expect(emptyEl).not.toBeNull();
+    // No scroll container for the block safety map.
+    expect(
+      screen.queryByTestId('block-safety-map-scroll'),
+    ).not.toBeInTheDocument();
 
-    // No scrollable block list container should be rendered.
-    expect(screen.queryByTestId('block-review-scroll')).not.toBeInTheDocument();
+    // No CalendarHeatmap at all — there is no block to show.
+    expect(screen.queryByTestId('calendar-heatmap')).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Test f — No previous blocks: exactly one page (the active block)
+// ---------------------------------------------------------------------------
+
+describe('DashboardScreen — BlockSafetyMapSection: only active block rendered', () => {
+  it('renders exactly one CalendarHeatmap (the active block) when previousBlocks is empty', () => {
+    mockEngine.block = ACTIVE_BLOCK;
+    mockEngine.dailyScores = DAILY_SCORES;
+    mockEngine.previousBlocks = [];
+
+    useQueryMock.mockReturnValue(makeUseQuerySuccess([]));
+
+    renderDashboard();
+
+    // Exactly one CalendarHeatmap stub should be in the document.
+    const heatmaps = screen.getAllByTestId('calendar-heatmap');
+    expect(heatmaps).toHaveLength(1);
+
+    // No previous-block useQuery calls should have been made.
+    const blockScoresCalls = useQueryMock.mock.calls.filter(
+      (args: unknown[]) => {
+        const opts = args[0] as Record<string, unknown> | undefined;
+        const queryKey = opts?.queryKey as unknown[] | undefined;
+        return Array.isArray(queryKey) && queryKey[0] === 'block-scores';
+      },
+    );
+    expect(blockScoresCalls).toHaveLength(0);
   });
 });

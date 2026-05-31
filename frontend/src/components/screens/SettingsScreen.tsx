@@ -18,7 +18,6 @@ import type { ActivityClass, ActivityLog, Rule, RuleType, WeeklyTarget, Training
 // ---------------------------------------------------------------------------
 
 export interface SettingsScreenProps {
-  onReview?: () => void;
   engine: MilestoneEngineResult;
 }
 
@@ -741,7 +740,8 @@ function NewTrainingBlockSheet({
 // SettingsScreen
 // ---------------------------------------------------------------------------
 
-export function SettingsScreen({ engine, onReview = () => undefined }: SettingsScreenProps): React.ReactElement {
+export function SettingsScreen({ engine }: SettingsScreenProps): React.ReactElement {
+  const onReview = () => undefined;
   const {
     block,
     rules,

@@ -1389,32 +1389,3 @@ describe('SettingsScreen — edge cases', () => {
     expect(screen.queryByText(/previous blocks/i)).not.toBeInTheDocument();
   });
 });
-
-// ---------------------------------------------------------------------------
-// F3.0 — onReview passthrough to BlockSummaryCard
-// ---------------------------------------------------------------------------
-// This test MUST FAIL until:
-//   1. SettingsScreenProps gains an optional `onReview` prop
-//   2. SettingsScreen passes onReview to BlockSummaryCard (or equivalent)
-//   3. The "Block summary" button exists in the rendered output
-// ---------------------------------------------------------------------------
-
-describe('SettingsScreen — onReview passthrough (F3.0)', () => {
-  it('calls the onReview prop when the Block summary button is clicked', async () => {
-    const user = userEvent.setup();
-    const onReview = vi.fn();
-    const engine = makeEngine({
-      block: ACTIVE_BLOCK,
-      rules: [],
-      weeklyTargets: [],
-      activityClasses: [],
-    });
-
-    renderWithProviders(<SettingsScreen engine={engine} onReview={onReview} />);
-
-    const blockSummaryButton = screen.getByRole('button', { name: /block summary/i });
-    await user.click(blockSummaryButton);
-
-    expect(onReview).toHaveBeenCalledTimes(1);
-  });
-});

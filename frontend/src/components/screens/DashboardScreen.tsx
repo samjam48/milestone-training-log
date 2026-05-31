@@ -9,6 +9,7 @@ import { ProgressBar } from '../ui/ProgressBar';
 import { StatusDot } from '../ui/StatusDot';
 import { SuggestedActivityCard } from '../composites/SuggestedActivityCard';
 import { WeeklyLoadGraph } from '../composites/WeeklyLoadGraph';
+import { BlockSafetyMapSection } from '../composites/BlockSafetyMapSection';
 import type { MilestoneEngineResult } from '../../hooks/useMilestoneEngine';
 import type { ActivityClass, SafetyState, TrainingBlock } from '../../types';
 
@@ -165,6 +166,11 @@ export const DashboardScreen: React.FC<Props> = ({ engine, onOpenCheckIn, onOpen
         title={loadGraphTitle}
         subtitle="Rolling 7-day · full block"
       />
+
+      {/* ── Block safety map ── */}
+      {block.id !== '' && (
+        <BlockSafetyMapSection engine={engine} />
+      )}
 
       {/* ── Activity class status ── */}
       <div>
