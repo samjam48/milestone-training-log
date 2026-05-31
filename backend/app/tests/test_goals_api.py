@@ -602,6 +602,34 @@ async def test_patch_goal_linked_from_active_block_does_not_change_block_status(
     assert active_block_response.json()["related_goal_id"] == "goal-active-link"
 
 
+# ---------------------------------------------------------------------------
+# F2.5 Bug 1 — POST /api/goals must accept a body that omits description entirely.
+# Currently GoalCreate.description has no default (str, not str = ""), so any
+# POST without description returns 422. After the fix it must return 201.
+# ---------------------------------------------------------------------------
+
+async def test_create_goal_without_description_returns_201(
+    client: AsyncClient,
+) -> None:
+    """POST with no description field must succeed (Bug 1)."""
+    response = await client.post(
+        "/api/goals",
+        json={
+            "id": "goal-no-desc",
+            "title": "No description goal",
+            "target_date": "2026-06-30",
+            "timeframe": "monthly",
+        },
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["id"] == "goal-no-desc"
+    assert payload["title"] == "No description goal"
+    # description should default to empty string, not raise validation error
+    assert payload["description"] == ""
+
+
 @pytest.mark.parametrize(
     ("invalid_status", "invalid_timeframe"),
     [

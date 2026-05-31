@@ -424,6 +424,129 @@ verification matrix.
 
 ---
 
+## F2.5 — Phase 7 bug-fix cleanup
+
+**Type:** full-stack (one backend schema change + two frontend fixes)
+**Branch:** `feat/phase-7-frontend-completion`
+**Depends on:** F2.3 (SettingsScreen), F2.2 (GoalsScreen)
+
+### Context
+
+Three bugs surfaced during manual verification of Phase 7 screens. All are regressions introduced in this phase, not pre-existing backend issues.
+
+### Acceptance criteria
+
+**Bug 1 — Goals POST always returns 422**
+- `GoalCreate` in `backend/app/schemas/goals.py` currently requires `description: str` (non-optional, no default). The NewGoalForm has no description field and the mapper drops `undefined` fields via `omitUndefined: true`, so every POST is missing `description` → 422.
+- Change `description` to `description: str = ""` in `GoalCreate`. No Alembic migration needed (column already nullable / has default in the model).
+- Test: existing `test_goals_api.py` POST test must pass with a body that omits `description`; add a case if one does not exist.
+
+**Bug 2 — EditRulesForm: editing after deleting a rule mutates the wrong entry**
+- `visibleRules` is derived as `ruleStates.filter(r => !r.isDeleted)`. The form iterates `visibleRules` with `(rs, idx)` and passes `idx` to `handleThresholdChange(idx, …)`, `handleDelete(idx, …)`, and `handleNewRuleType(idx, …)`. Those handlers update `ruleStates` by position in the *full* array, not the filtered one. After deleting index 0, filtered index 0 is `ruleStates[1]`, but the handler writes to `ruleStates[0]` (the deleted entry).
+- Fix: change all three handlers to look up by `rs.id` rather than by positional index. Replace `prev.map((r, i) => (i === idx ? ... : r))` with `prev.map(r => (r.id === id ? ... : r))` and update call-sites accordingly.
+- Tests in `SettingsScreen.test.tsx`: add a test that (a) opens EditRulesForm with two rules, (b) deletes the first, (c) edits the threshold of the remaining rule, (d) saves — confirm only one delete call and one update call with the correct rule id.
+
+**Bug 3 — Archive goal silently removes goal with no confirmation and no recovery path**
+- `archiveGoal` patches `status → 'paused'`. GoalsScreen shows only `'active'` and `'achieved'` goals; `'paused'` is invisible with no way to find or restore the goal.
+- Add a confirmation step before archive: either a `window.confirm` prompt (acceptable for Phase 7) or a small inline confirmation row replacing the Archive button. Must not close the dialog without an explicit confirm/cancel action.
+- Add a "Paused" (or "Archived") collapsible section below "Achieved" in GoalsScreen listing goals with `status === 'paused'`. Each row shows the goal title and a "Restore" action that calls `engine.updateGoal(id, { status: 'active' })`.
+- Tests: add a test that confirms the paused section renders for a `paused`-status goal, and that the Restore button calls `engine.updateGoal`.
+
+### Edge cases to handle
+
+- `description` default on `GoalCreate`: existing records in the database are unaffected; new goals with no description get `""` (empty string, not null).
+- Rules form: if all rules are deleted `visibleRules` is empty; Add rule still works; save is a no-op for creates if the list is empty.
+- Archive confirmation: confirm the UX resets if the sheet is closed without confirming (no half-state).
+
+### Reuse / extend
+
+- `backend/app/schemas/goals.py` — `GoalCreate.description`
+- `backend/app/tests/test_goals_api.py` — extend POST test
+- `frontend/src/components/screens/SettingsScreen.tsx` — `EditRulesForm` handlers
+- `frontend/src/components/screens/SettingsScreen.test.tsx` — new EditRulesForm tests
+- `frontend/src/components/screens/GoalsScreen.tsx` — archive confirmation + paused section
+- `frontend/src/components/screens/GoalsScreen.test.tsx` — paused section tests
+
+### Files to create / modify
+
+- `backend/app/schemas/goals.py`
+- `backend/app/tests/test_goals_api.py`
+- `frontend/src/components/screens/SettingsScreen.tsx`
+- `frontend/src/components/screens/SettingsScreen.test.tsx`
+- `frontend/src/components/screens/GoalsScreen.tsx`
+- `frontend/src/components/screens/GoalsScreen.test.tsx`
+
+### Out of scope
+
+- Full inline goal edit (Phase 9, requires design)
+- Activity edit / deactivate (Phase 9, requires design)
+- Any backend schema migration
+
+---
+
+## F2.6 — Reset mock data + dev-mode guard
+
+**Type:** full-stack
+**Branch:** `feat/phase-7-frontend-completion`
+**Depends on:** F2.5 (for a stable, working settings screen)
+
+### Context
+
+The "Reset mock data" button in SettingsScreen renders but has no `onClick` handler and is wired to nothing. During development this button is needed to restore the seeded database to a known state after testing. It must never be reachable in production.
+
+The guard is an environment flag, not runtime user-auth: if `APP_DEV_MODE` is not set to `true` in the environment, the endpoint does not exist and the button does not render.
+
+### Acceptance criteria
+
+**Backend — dev reset endpoint**
+- Add `APP_DEV_MODE: bool = False` to `backend/app/core/config.py` (the existing settings module), read from `APP_DEV_MODE` env var. No hardcoded value in the router or service.
+- Add `backend/app/services/dev_reset.py`: a `reset_to_seed_data(session)` service function that truncates all user-data tables (activity logs, check-ins, incidents, goals, rules, weekly targets, training blocks, activities, activity classes) and re-runs the seed scenario from `backend/scripts/seed.py`. Seed logic must be importable as a function — refactor `seed.py` to expose a `run_seed(session)` entry-point if it does not already exist.
+- Add `backend/app/routers/dev.py`: `POST /api/dev/reset` calls `dev_reset.reset_to_seed_data`. This router is only included in `main.py` when `settings.APP_DEV_MODE is True`. If `APP_DEV_MODE` is `False`, the route does not exist (404, not 403).
+- Tests: `backend/app/tests/test_dev_reset_api.py` — with `APP_DEV_MODE=True`, `POST /api/dev/reset` returns 200 and the database contains seeded data; with `APP_DEV_MODE=False` (or unset), the route returns 404.
+
+**Frontend — dev-mode guard + button wiring**
+- Add `VITE_DEV_MODE` to `.env.example` (value `false`). Local `.env` sets it to `true` for development.
+- In `SettingsScreen.tsx`: wrap the Reset mock data button in a conditional — `import.meta.env.VITE_DEV_MODE === 'true'`. The button renders only in dev mode; in production the section is absent entirely.
+- Wire the button `onClick`: call `POST /api/dev/reset` via `apiFetch`, then `queryClient.invalidateQueries()` (invalidate all) so every screen refreshes to seeded state. Show no loading state — fire-and-forget is acceptable for a dev tool.
+- Tests in `SettingsScreen.test.tsx`: confirm the button renders when `VITE_DEV_MODE` is `'true'` (mock `import.meta.env`) and does not render when it is `'false'` or unset. Confirm the button triggers the reset call.
+
+### Edge cases to handle
+
+- `APP_DEV_MODE` defaults to `False` — silence equals production-safe.
+- `VITE_DEV_MODE` absent or any value other than the string `'true'` → button hidden.
+- Reset endpoint must be idempotent: calling it twice returns 200 both times and leaves DB in seed state.
+- Seed script must not duplicate data if called twice: truncate before insert, not insert-only.
+- `.env` (with `VITE_DEV_MODE=true`) is already gitignored; `.env.example` documents the flag but sets it to `false`.
+
+### Reuse / extend
+
+- `backend/app/core/config.py` — add `APP_DEV_MODE`
+- `backend/scripts/seed.py` — expose `run_seed(session)` callable
+- `backend/app/main.py` — conditional router registration pattern (check if any exist already)
+- `frontend/src/lib/api/client.ts` — `apiFetch` for the reset call
+- `frontend/src/components/screens/SettingsScreen.tsx` — button wiring + guard
+- `frontend/src/components/screens/SettingsScreen.test.tsx` — dev-mode render tests
+
+### Files to create / modify
+
+- `backend/app/core/config.py`
+- `backend/scripts/seed.py`
+- `backend/app/services/dev_reset.py` (new)
+- `backend/app/routers/dev.py` (new)
+- `backend/app/main.py`
+- `backend/app/tests/test_dev_reset_api.py` (new)
+- `frontend/.env.example`
+- `frontend/src/components/screens/SettingsScreen.tsx`
+- `frontend/src/components/screens/SettingsScreen.test.tsx`
+
+### Out of scope
+
+- Any UI for resetting individual data types (all-or-nothing seed restore only)
+- Preference persistence (notifications / units) — assumption E from Phase 7 planning still applies
+- Auth or user-scoped resets
+
+---
+
 ## Out of scope (explicit)
 
 - `CalendarHeatmap` / block-review grid — **Phase 7.5**

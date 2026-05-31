@@ -53,9 +53,13 @@ interface GoalCardProps {
   activityClassName: string | null;
   onEdit?: () => void;
   onArchive?: (id: string) => void;
+  /** When true, show inline confirm/cancel UI instead of the Archive button. */
+  confirmingArchive?: boolean;
+  onArchiveConfirm?: (id: string) => void;
+  onArchiveCancel?: () => void;
 }
 
-function GoalCard({ goal, activityClassName, onEdit, onArchive }: GoalCardProps): React.ReactElement {
+function GoalCard({ goal, activityClassName, onEdit, onArchive, confirmingArchive, onArchiveConfirm, onArchiveCancel }: GoalCardProps): React.ReactElement {
   const hasProgress =
     goal.progressValue != null &&
     goal.progressTarget != null &&
@@ -108,23 +112,45 @@ function GoalCard({ goal, activityClassName, onEdit, onArchive }: GoalCardProps)
           {dueFmt != null ? `Due ${dueFmt}` : ''}
         </span>
         <div className="flex gap-1.5 shrink-0">
-          {onEdit != null && (
-            <button
-              type="button"
-              onClick={onEdit}
-              className="h-8 px-3 rounded-md text-caption font-medium text-ink-muted bg-bg-sunken hover:bg-bg-overlay transition-colors duration-snap"
-            >
-              Edit
-            </button>
-          )}
-          {onArchive != null && (
-            <button
-              type="button"
-              onClick={() => onArchive(goal.id)}
-              className="h-8 px-3 rounded-md text-caption font-medium text-ink-faint hover:text-ink-muted transition-colors duration-snap"
-            >
-              Archive
-            </button>
+          {confirmingArchive ? (
+            <>
+              <span className="text-caption text-ink-muted">Confirm archive?</span>
+              <button
+                type="button"
+                onClick={() => onArchiveCancel?.()}
+                className="h-8 px-3 rounded-md text-caption font-medium text-ink-muted bg-bg-sunken hover:bg-bg-overlay transition-colors duration-snap"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => onArchiveConfirm?.(goal.id)}
+                className="h-8 px-3 rounded-md text-caption font-medium text-danger-fg hover:bg-danger/10 transition-colors duration-snap"
+              >
+                Confirm
+              </button>
+            </>
+          ) : (
+            <>
+              {onEdit != null && (
+                <button
+                  type="button"
+                  onClick={onEdit}
+                  className="h-8 px-3 rounded-md text-caption font-medium text-ink-muted bg-bg-sunken hover:bg-bg-overlay transition-colors duration-snap"
+                >
+                  Edit
+                </button>
+              )}
+              {onArchive != null && (
+                <button
+                  type="button"
+                  onClick={() => onArchive(goal.id)}
+                  className="h-8 px-3 rounded-md text-caption font-medium text-ink-faint hover:text-ink-muted transition-colors duration-snap"
+                >
+                  Archive
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -424,7 +450,7 @@ function NewGoalForm({ open, onClose, activityClasses, onCreate }: NewGoalFormPr
 // ---------------------------------------------------------------------------
 
 export function GoalsScreen({ engine }: GoalsScreenProps): React.ReactElement {
-  const { goals, activityClasses, archiveGoal, createGoal } = engine;
+  const { goals, activityClasses, archiveGoal, createGoal, updateGoal } = engine;
 
   const classMap = React.useMemo(
     () => new Map(activityClasses.map((c) => [c.id, c])),
@@ -443,9 +469,14 @@ export function GoalsScreen({ engine }: GoalsScreenProps): React.ReactElement {
     () => goals.filter((g) => g.status === 'achieved'),
     [goals],
   );
+  const paused = React.useMemo(
+    () => goals.filter((g) => g.status === 'paused'),
+    [goals],
+  );
   const hasActive = monthly.length > 0 || quarterly.length > 0;
 
   const [showAchieved, setShowAchieved] = React.useState(false);
+  const [confirmArchiveId, setConfirmArchiveId] = React.useState<string | null>(null);
   const [formOpen, setFormOpen] = React.useState(false);
 
   function resolveClassName(goal: Omit<Goal, 'userId'>): string | null {
@@ -455,6 +486,23 @@ export function GoalsScreen({ engine }: GoalsScreenProps): React.ReactElement {
 
   function handleCreate(draft: GoalDraft): void {
     createGoal(draft);
+  }
+
+  function handleArchiveRequest(id: string): void {
+    setConfirmArchiveId(id);
+  }
+
+  function handleArchiveConfirm(id: string): void {
+    archiveGoal(id);
+    setConfirmArchiveId(null);
+  }
+
+  function handleArchiveCancel(): void {
+    setConfirmArchiveId(null);
+  }
+
+  function handleRestore(id: string): void {
+    updateGoal(id, { status: 'active' });
   }
 
   return (
@@ -493,7 +541,10 @@ export function GoalsScreen({ engine }: GoalsScreenProps): React.ReactElement {
                       goal={g}
                       activityClassName={resolveClassName(g)}
                       onEdit={() => undefined}
-                      onArchive={archiveGoal}
+                      onArchive={handleArchiveRequest}
+                      confirmingArchive={confirmArchiveId === g.id}
+                      onArchiveConfirm={handleArchiveConfirm}
+                      onArchiveCancel={handleArchiveCancel}
                     />
                   ))}
                 </div>
@@ -513,7 +564,10 @@ export function GoalsScreen({ engine }: GoalsScreenProps): React.ReactElement {
                       goal={g}
                       activityClassName={resolveClassName(g)}
                       onEdit={() => undefined}
-                      onArchive={archiveGoal}
+                      onArchive={handleArchiveRequest}
+                      confirmingArchive={confirmArchiveId === g.id}
+                      onArchiveConfirm={handleArchiveConfirm}
+                      onArchiveCancel={handleArchiveCancel}
                     />
                   ))}
                 </div>
@@ -566,6 +620,29 @@ export function GoalsScreen({ engine }: GoalsScreenProps): React.ReactElement {
                 ))}
               </div>
             )}
+          </section>
+        )}
+
+        {/* Paused — always visible */}
+        {paused.length > 0 && (
+          <section className="mt-6">
+            <p className="text-label uppercase font-medium text-ink-muted mb-3">
+              Archived ({paused.length})
+            </p>
+            <div className="flex flex-col gap-3">
+              {paused.map((g) => (
+                <div key={g.id} className="flex items-center justify-between gap-3 px-4 py-3 rounded-md bg-bg-sunken border border-border">
+                  <p className="text-body font-medium text-ink truncate">{g.title}</p>
+                  <button
+                    type="button"
+                    onClick={() => handleRestore(g.id)}
+                    className="shrink-0 h-8 px-3 rounded-md text-caption font-medium text-ink-muted bg-bg-raised hover:bg-bg-overlay transition-colors duration-snap"
+                  >
+                    Restore
+                  </button>
+                </div>
+              ))}
+            </div>
           </section>
         )}
       </div>

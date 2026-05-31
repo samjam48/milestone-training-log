@@ -449,6 +449,26 @@ blank white screen. Log enough activities to meet milestone conditions →
 
 ---
 
+### Phase 9 — UI Interaction Completeness
+
+**Goal:** Implement the stub interactions left as `() => undefined` no-ops after Phase 7. Each item requires a design screen or mockup before a ticket can be written. This section is a design backlog, not an implementation plan.
+
+**Owner action required:** Produce mockups/designs for each item below before Phase 9 tickets are written. Use the same `export/preview/*.jsx` prototype convention so the implementer has a reference spec.
+
+| Item | Current state | Screen | Notes |
+|---|---|---|---|
+| Edit goal | `onEdit={() => undefined}` stub | GoalsScreen | Needs an edit sheet (reuse NewGoalForm shell). Fields: title, target date, timeframe, class, progress target/unit. PATCH via `engine.updateGoal`. |
+| Edit activity | `onEdit={() => undefined}` stub | SettingsScreen — Activities Manager | Needs an edit sheet. Fields: name, class (read-only?), type, default volume unit. PATCH via a new `engine.updateActivity` mutation (not yet in the hook). |
+| Deactivate activity | `onDeactivate={() => undefined}` stub | SettingsScreen — Activities Manager | Needs confirmation dialog. On confirm: PATCH `isActive: false` via `engine.updateActivity`. Row should grey out or disappear per design decision. |
+| View previous block | No `onClick` | SettingsScreen — Previous Blocks list | Blocked on Phase 7.5 (CalendarHeatmap / block-review grid). Design the block-review screen first; this button routes to it. |
+| Block summary (current block) | `onReview={() => undefined}` stub | SettingsScreen — Active Block card | Same blocker as above — Phase 7.5 block-review screen. |
+
+**Dependencies:**
+- Edit activity and Deactivate activity both require a new `updateActivity(activityId, patch)` mutation added to `useMilestoneEngine` (hook extension, similar to the F2.0 pattern).
+- View previous block and Block summary both depend on the Phase 7.5 CalendarHeatmap / block-review work which already appears in the Phase 7 out-of-scope list.
+
+---
+
 ## 8. Quality Gates (from AGENTS.md)
 
 ```bash
@@ -510,6 +530,8 @@ exists (Phase 0, ticket B0.1).
 | F2.1 | 7 FE Complete | NewActivitySheet.tsx |
 | F2.2 | 7 FE Complete | GoalsScreen.tsx |
 | F2.3 | 7 FE Complete | SettingsScreen.tsx |
+| F2.5 | 7 Cleanup | Bug fixes: goals 422, rules indexing, archive UX |
+| F2.6 | 7 Cleanup | Reset mock data + dev-mode guard |
 | F3.1 | 8 Polish | Loading + empty states + error boundary |
 | F3.2 | 8 Polish | Review milestone auto-detection |
 | B6.1 | 8 Polish | GET /api/mcp/context stub |

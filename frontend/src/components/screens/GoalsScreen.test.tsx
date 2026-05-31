@@ -485,7 +485,12 @@ describe('GoalsScreen — GoalCard Archive action', () => {
 
     renderWithProviders(<GoalsScreen engine={engine} />);
 
+    // Step 1: click Archive — shows confirmation UI, does NOT call archiveGoal yet
     await user.click(screen.getByRole('button', { name: /archive/i }));
+    expect(archiveGoal).not.toHaveBeenCalled();
+
+    // Step 2: click Confirm — archiveGoal is now called with the correct id
+    await user.click(screen.getByRole('button', { name: /confirm/i }));
 
     expect(archiveGoal).toHaveBeenCalledTimes(1);
     expect(archiveGoal).toHaveBeenCalledWith(GOAL_MONTHLY_NUMERIC.id);
@@ -895,16 +900,149 @@ describe('GoalsScreen — edge cases', () => {
 
     renderWithProviders(<GoalsScreen engine={engine} />);
 
-    // There should be 2 Archive buttons
+    // There should be 2 Archive buttons initially
     const archiveButtons = screen.getAllByRole('button', { name: /archive/i });
     expect(archiveButtons).toHaveLength(2);
 
-    // Click the first one
+    // Archive the first goal: click Archive then Confirm
     await user.click(archiveButtons[0]!);
+    expect(archiveGoal).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: /confirm/i }));
     expect(archiveGoal).toHaveBeenCalledTimes(1);
 
-    // Click the second one
-    await user.click(archiveButtons[1]!);
+    // Archive the second goal: click its Archive button then Confirm
+    // Both Archive buttons are visible again after the first confirmation resolves
+    const archiveButtons2 = screen.getAllByRole('button', { name: /archive/i });
+    await user.click(archiveButtons2[0]!);
+    expect(archiveGoal).toHaveBeenCalledTimes(1); // still 1 until Confirm
+    await user.click(screen.getByRole('button', { name: /confirm/i }));
     expect(archiveGoal).toHaveBeenCalledTimes(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F2.5 Bug 3 — Archive goal UX: confirmation step + paused section + Restore
+// ---------------------------------------------------------------------------
+
+// Shared fixture: a paused goal (status === 'paused')
+const GOAL_PAUSED: Omit<Goal, 'userId'> = {
+  id: 'goal-paused-1',
+  title: 'Paused running goal',
+  targetDate: '2026-05-31',
+  timeframe: 'monthly',
+  status: 'paused',
+  createdAt: '2026-05-01T00:00:00Z',
+};
+
+describe('GoalsScreen — Bug 3a: Archive requires confirmation before calling archiveGoal', () => {
+  it('does NOT immediately call archiveGoal when Archive is clicked (confirmation required first)', async () => {
+    const user = userEvent.setup();
+    const archiveGoal = vi.fn();
+    const engine = makeEngine({
+      goals: [GOAL_MONTHLY_NUMERIC],
+      activityClasses: [CLASS_RUNNING],
+      archiveGoal,
+    });
+
+    renderWithProviders(<GoalsScreen engine={engine} />);
+
+    await user.click(screen.getByRole('button', { name: /archive/i }));
+
+    // archiveGoal must NOT have been called yet — a confirmation UI must appear first
+    expect(archiveGoal).not.toHaveBeenCalled();
+  });
+
+  it('shows a confirmation UI element after clicking Archive (before archiveGoal is called)', async () => {
+    const user = userEvent.setup();
+    const archiveGoal = vi.fn();
+    const engine = makeEngine({
+      goals: [GOAL_MONTHLY_NUMERIC],
+      activityClasses: [CLASS_RUNNING],
+      archiveGoal,
+    });
+
+    renderWithProviders(<GoalsScreen engine={engine} />);
+
+    await user.click(screen.getByRole('button', { name: /archive/i }));
+
+    // A confirmation button/text must appear (e.g. "Confirm", "Yes", or similar)
+    const confirmElement =
+      screen.queryByRole('button', { name: /confirm/i }) ??
+      screen.queryByRole('button', { name: /yes/i }) ??
+      screen.queryByText(/are you sure/i) ??
+      screen.queryByText(/confirm archive/i);
+
+    expect(confirmElement).not.toBeNull();
+  });
+});
+
+describe('GoalsScreen — Bug 3b: Paused goals appear in a "Paused" / "Archived" section', () => {
+  it('renders a "Paused" or "Archived" section when a goal has status "paused"', () => {
+    const engine = makeEngine({
+      goals: [GOAL_MONTHLY_NUMERIC, GOAL_PAUSED],
+      activityClasses: [CLASS_RUNNING],
+    });
+
+    renderWithProviders(<GoalsScreen engine={engine} />);
+
+    // A "Paused" or "Archived" section heading must appear
+    const pausedSection =
+      screen.queryByText(/paused/i) ??
+      screen.queryByText(/archived/i);
+
+    expect(pausedSection).not.toBeNull();
+  });
+
+  it('renders the paused goal title inside the Paused/Archived section', () => {
+    const engine = makeEngine({
+      goals: [GOAL_MONTHLY_NUMERIC, GOAL_PAUSED],
+      activityClasses: [CLASS_RUNNING],
+    });
+
+    renderWithProviders(<GoalsScreen engine={engine} />);
+
+    expect(screen.getByText(GOAL_PAUSED.title)).toBeInTheDocument();
+  });
+
+  it('renders a "Restore" button for each paused goal', () => {
+    const engine = makeEngine({
+      goals: [GOAL_MONTHLY_NUMERIC, GOAL_PAUSED],
+      activityClasses: [CLASS_RUNNING],
+    });
+
+    renderWithProviders(<GoalsScreen engine={engine} />);
+
+    expect(screen.getByRole('button', { name: /restore/i })).toBeInTheDocument();
+  });
+
+  it('does NOT show the paused goal in the active "This month" section', () => {
+    const engine = makeEngine({
+      goals: [GOAL_PAUSED],
+      activityClasses: [CLASS_RUNNING],
+    });
+
+    renderWithProviders(<GoalsScreen engine={engine} />);
+
+    // The paused goal must not appear as an active goal in "This month"
+    expect(screen.queryByText(/this month/i)).not.toBeInTheDocument();
+  });
+});
+
+describe('GoalsScreen — Bug 3c: Restore button calls engine.updateGoal with status active', () => {
+  it('clicking Restore calls engine.updateGoal with the goal id and { status: "active" }', async () => {
+    const user = userEvent.setup();
+    const updateGoal = vi.fn();
+    const engine = makeEngine({
+      goals: [GOAL_PAUSED],
+      activityClasses: [],
+      updateGoal,
+    });
+
+    renderWithProviders(<GoalsScreen engine={engine} />);
+
+    await user.click(screen.getByRole('button', { name: /restore/i }));
+
+    expect(updateGoal).toHaveBeenCalledTimes(1);
+    expect(updateGoal).toHaveBeenCalledWith(GOAL_PAUSED.id, { status: 'active' });
   });
 });

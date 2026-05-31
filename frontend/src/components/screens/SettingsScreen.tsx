@@ -358,17 +358,17 @@ function EditRulesForm({
 
   if (!open) return null;
 
-  function handleThresholdChange(idx: number, value: string): void {
+  function handleThresholdChange(id: string, value: string): void {
     const num = Number(value);
     if (isNaN(num)) return;
     setRuleStates((prev) =>
-      prev.map((r, i) => (i === idx ? { ...r, thresholdValue: num } : r)),
+      prev.map((r) => (r.id === id ? { ...r, thresholdValue: num } : r)),
     );
   }
 
-  function handleDelete(idx: number): void {
+  function handleDelete(id: string): void {
     setRuleStates((prev) =>
-      prev.map((r, i) => (i === idx ? { ...r, isDeleted: true } : r)),
+      prev.map((r) => (r.id === id ? { ...r, isDeleted: true } : r)),
     );
   }
 
@@ -386,9 +386,9 @@ function EditRulesForm({
     setRuleStates((prev) => [...prev, newRule]);
   }
 
-  function handleNewRuleType(idx: number, ruleType: RuleType): void {
+  function handleNewRuleType(id: string, ruleType: RuleType): void {
     setRuleStates((prev) =>
-      prev.map((r, i) => (i === idx ? { ...r, ruleType } : r)),
+      prev.map((r) => (r.id === id ? { ...r, ruleType } : r)),
     );
   }
 
@@ -468,7 +468,7 @@ function EditRulesForm({
           </div>
 
           <div className="flex flex-col gap-4">
-            {visibleRules.map((rs, idx) => {
+            {visibleRules.map((rs) => {
               // Use the field label for the <label> element associated with the input.
               // Do NOT also set aria-label on the input since it already has a <label>.
               const fieldLabel = RULE_FIELD_LABELS[rs.ruleType] ?? rs.ruleType;
@@ -491,7 +491,7 @@ function EditRulesForm({
                         id={`rule-type-${rs.id}`}
                         value={rs.ruleType}
                         onChange={(e) =>
-                          handleNewRuleType(idx, e.target.value as RuleType)
+                          handleNewRuleType(rs.id, e.target.value as RuleType)
                         }
                         aria-label="Rule type"
                         className="w-full rounded-md bg-bg-raised border border-border px-3 py-2 text-body text-ink"
@@ -519,7 +519,7 @@ function EditRulesForm({
                       min={0}
                       step={1}
                       value={rs.thresholdValue}
-                      onChange={(e) => handleThresholdChange(idx, e.target.value)}
+                      onChange={(e) => handleThresholdChange(rs.id, e.target.value)}
                       className="w-full rounded-md bg-bg-raised border border-border px-3 py-2 text-body text-ink"
                     />
                   </div>
@@ -527,7 +527,7 @@ function EditRulesForm({
                   <div className="flex justify-end">
                     <button
                       type="button"
-                      onClick={() => handleDelete(idx)}
+                      onClick={() => handleDelete(rs.id)}
                       className="text-caption text-danger-fg hover:underline"
                     >
                       Delete

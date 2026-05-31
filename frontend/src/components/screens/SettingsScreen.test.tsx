@@ -1146,6 +1146,57 @@ describe('SettingsScreen — Activity row stub actions', () => {
 });
 
 // ---------------------------------------------------------------------------
+// F2.5 Bug 2 — EditRulesForm: deleting a rule then editing the remaining rule
+// must update the *remaining* rule's id, not the deleted rule's position.
+// ---------------------------------------------------------------------------
+
+describe('EditRulesForm — delete-then-edit uses correct rule id (Bug 2)', () => {
+  it('after deleting rule[0], editing and saving updates the second rule id, not the first', async () => {
+    const user = userEvent.setup();
+    const onDeleteRule = vi.fn();
+    const onUpdateRule = vi.fn();
+
+    // Two rules: RULE_REST (id='rule-rest-1') and RULE_FREQ (id='rule-freq-1')
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      rules: [RULE_REST, RULE_FREQ],
+      weeklyTargets: [],
+      activityClasses: [CLASS_RUNNING],
+      deleteRule: onDeleteRule,
+      updateRule: onUpdateRule,
+    });
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+    await user.click(screen.getByRole('button', { name: /edit rules/i }));
+
+    // Both rules are visible; delete the first one (RULE_REST)
+    const deleteButtons = screen.getAllByRole('button', { name: /delete/i });
+    expect(deleteButtons).toHaveLength(2);
+    await user.click(deleteButtons[0]!);
+
+    // After deleting RULE_REST, only RULE_FREQ remains visible.
+    // The remaining visible rule's threshold input should show RULE_FREQ's value (3).
+    const remainingInput = screen.getByDisplayValue('3');
+
+    // Edit the threshold of the remaining (second) rule
+    await user.clear(remainingInput);
+    await user.type(remainingInput, '5');
+
+    await user.click(screen.getByRole('button', { name: /save/i }));
+
+    // deleteRule must be called with the FIRST rule's id
+    expect(onDeleteRule).toHaveBeenCalledTimes(1);
+    expect(onDeleteRule).toHaveBeenCalledWith(RULE_REST.id);
+
+    // updateRule must be called with the SECOND rule's id (rule-freq-1), NOT rule-rest-1
+    expect(onUpdateRule).toHaveBeenCalledTimes(1);
+    const [updatedRuleId, patch] = onUpdateRule.mock.calls[0] as [string, RulePatch];
+    expect(updatedRuleId).toBe(RULE_FREQ.id); // 'rule-freq-1' — currently FAILS (writes to ruleStates[0] = deleted rule)
+    expect(patch.thresholdValue).toBe(5);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Edge cases
 // ---------------------------------------------------------------------------
 
