@@ -34,6 +34,7 @@ services:
       BACKEND_PORT: ${BACKEND_PORT:-8084}
       BACKEND_HOST: backend
       FRONTEND_PORT: ${FRONTEND_PORT:-5151}
+      VITE_DEV_MODE: ${VITE_DEV_MODE:-false}
     command:
       - sh
       - -c

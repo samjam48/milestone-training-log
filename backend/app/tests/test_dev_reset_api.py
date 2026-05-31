@@ -105,8 +105,8 @@ async def dev_client(dev_mode_app: FastAPI) -> AsyncIterator[AsyncClient]:
 
 @pytest.fixture
 def prod_mode_app(monkeypatch: pytest.MonkeyPatch) -> Iterator[FastAPI]:
-    """Build an app with APP_DEV_MODE absent/false (production default)."""
-    monkeypatch.delenv("APP_DEV_MODE", raising=False)
+    """Build an app with APP_DEV_MODE=false (production default)."""
+    monkeypatch.setenv("APP_DEV_MODE", "false")
 
     engine = _make_engine()
     SQLModel.metadata.create_all(engine)  # type: ignore[arg-type]
