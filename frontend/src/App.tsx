@@ -2,6 +2,7 @@ import * as React from 'react';
 import { AppShell } from './components/ui/AppShell';
 import { BottomTabBar, type TabKey } from './components/ui/BottomTabBar';
 import {
+  BlockReviewScreen,
   DashboardScreen,
   LogHistoryScreen,
   MorningCheckInScreen,
@@ -12,7 +13,7 @@ import {
 } from './components/screens';
 import { useMilestoneEngine } from './hooks/useMilestoneEngine';
 
-type OverlayKey = 'check-in' | 'log-activity' | 'log-incident';
+type OverlayKey = 'check-in' | 'log-activity' | 'log-incident' | 'block-review';
 
 function resolveLogActivityPrefill(
   prefillId: string | undefined,
@@ -79,6 +80,8 @@ export function App(): React.ReactElement {
         onComplete={closeOverlay}
       />
     );
+  } else if (overlay === 'block-review') {
+    mainContent = <BlockReviewScreen engine={engine} onBack={closeOverlay} />;
   } else if (activeTab === 'dashboard') {
     mainContent = (
       <DashboardScreen
@@ -98,7 +101,12 @@ export function App(): React.ReactElement {
   } else if (activeTab === 'goals') {
     mainContent = <GoalsScreen engine={engine} />;
   } else if (activeTab === 'settings') {
-    mainContent = <SettingsScreen engine={engine} />;
+    mainContent = (
+      <SettingsScreen
+        engine={engine}
+        onReview={() => setOverlay('block-review')}
+      />
+    );
   } else {
     mainContent = <ComingSoonPlaceholder />;
   }

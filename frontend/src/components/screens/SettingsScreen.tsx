@@ -18,6 +18,7 @@ import type { ActivityClass, ActivityLog, Rule, RuleType, WeeklyTarget, Training
 // ---------------------------------------------------------------------------
 
 export interface SettingsScreenProps {
+  onReview?: () => void;
   engine: MilestoneEngineResult;
 }
 
@@ -740,7 +741,7 @@ function NewTrainingBlockSheet({
 // SettingsScreen
 // ---------------------------------------------------------------------------
 
-export function SettingsScreen({ engine }: SettingsScreenProps): React.ReactElement {
+export function SettingsScreen({ engine, onReview = () => undefined }: SettingsScreenProps): React.ReactElement {
   const {
     block,
     rules,
@@ -830,7 +831,7 @@ export function SettingsScreen({ engine }: SettingsScreenProps): React.ReactElem
               activityClasses={activityClasses}
               showEditRules={showEditRules}
               onEditRules={() => setEditRulesOpen(true)}
-              onReview={() => undefined}
+              onReview={onReview}
             />
           ) : (
             <Card pad="md">
