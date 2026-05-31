@@ -113,7 +113,7 @@ export function App(): React.ReactElement {
 
   return (
     <AppShell withTabBar={showTabBar}>
-      <div className="flex min-h-0 flex-1 flex-col">{mainContent}</div>
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">{mainContent}</div>
       {showTabBar && (
         <BottomTabBar active={activeTab} onChange={setActiveTab} />
       )}
