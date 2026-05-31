@@ -402,16 +402,20 @@ and wire to API. Surface backend features not yet shown in Tier-3 screens.
 **Prerequisite:** Owner adds `SettingsScreen.jsx`, `GoalsScreen.jsx`,
 `NewActivitySheet.jsx` to `export/preview/` before this phase starts.
 
-**Deferred from Phase 6 (plan here, implement in Phase 7):**
+**Deferred-item routing (owner decision 2026-05-30).** Phase 7's scope is the
+3 screen ports only. The 4 items previously parked under Phase 7 are re-routed
+by how close they sit to that scope:
 
-- **`recovery_streaks` compliance UI** — dashboard currently shows clean streak
-  only; MOCKUPS compliance section should consume `recoveryStreaks` from hook
-- **Delayed tax / load risk panel** — PRD F4; consume `GET /api/load/delayed-tax`
-- **`CalendarHeatmap`** — block-review grid; wire `dailyScores` from hook on
-  Settings / block-review flow (component exists in `export/src/composites/`)
-- **Dynamic load graph title (rule-driven)** — F1.4 derives title from first
-  performance class; full weekly-cap resolution from dashboard payload deferred
-  to Phase 7 if seed scenario needs rule-accurate graph class
+- **`CalendarHeatmap` block-review grid → Phase 7.5.** Its home is the Settings
+  "Review block" flow, which *is* built in Phase 7, so it is worth doing right
+  after the Settings port rather than waiting for Phase 8. Wire `dailyScores`
+  from hook; component exists in `export/src/composites/`.
+- **`recovery_streaks` compliance UI → Phase 8.** Dashboard compliance section
+  consuming `recoveryStreaks` from hook — outside the screen-port scope.
+- **Delayed tax / load risk panel → Phase 8.** PRD F4; consume
+  `GET /api/load/delayed-tax`. Dashboard surface, not a ported screen.
+- **Dynamic load graph title (rule-driven) → Phase 8.** Full weekly-cap class
+  resolution from dashboard payload; Dashboard polish, not in Phase 7 scope.
 
 | Ticket | Scope |
 |---|---|
@@ -442,6 +446,26 @@ blank white screen. Log enough activities to meet milestone conditions →
 
 **Backend follow-up (non-blocking):** Refactor `check_violations` in
 `load_engine.py` (radon F-rank) when next touched — see `plans/BACKLOG.md`.
+
+---
+
+### Phase 9 — UI Interaction Completeness
+
+**Goal:** Implement the stub interactions left as `() => undefined` no-ops after Phase 7. Each item requires a design screen or mockup before a ticket can be written. This section is a design backlog, not an implementation plan.
+
+**Owner action required:** Produce mockups/designs for each item below before Phase 9 tickets are written. Use the same `export/preview/*.jsx` prototype convention so the implementer has a reference spec.
+
+| Item | Current state | Screen | Notes |
+|---|---|---|---|
+| Edit goal | `onEdit={() => undefined}` stub | GoalsScreen | Needs an edit sheet (reuse NewGoalForm shell). Fields: title, target date, timeframe, class, progress target/unit. PATCH via `engine.updateGoal`. |
+| Edit activity | `onEdit={() => undefined}` stub | SettingsScreen — Activities Manager | Needs an edit sheet. Fields: name, class (read-only?), type, default volume unit. PATCH via a new `engine.updateActivity` mutation (not yet in the hook). |
+| Deactivate activity | `onDeactivate={() => undefined}` stub | SettingsScreen — Activities Manager | Needs confirmation dialog. On confirm: PATCH `isActive: false` via `engine.updateActivity`. Row should grey out or disappear per design decision. |
+| View previous block | No `onClick` | SettingsScreen — Previous Blocks list | Blocked on Phase 7.5 (CalendarHeatmap / block-review grid). Design the block-review screen first; this button routes to it. |
+| Block summary (current block) | `onReview={() => undefined}` stub | SettingsScreen — Active Block card | Same blocker as above — Phase 7.5 block-review screen. |
+
+**Dependencies:**
+- Edit activity and Deactivate activity both require a new `updateActivity(activityId, patch)` mutation added to `useMilestoneEngine` (hook extension, similar to the F2.0 pattern).
+- View previous block and Block summary both depend on the Phase 7.5 CalendarHeatmap / block-review work which already appears in the Phase 7 out-of-scope list.
 
 ---
 
@@ -506,6 +530,8 @@ exists (Phase 0, ticket B0.1).
 | F2.1 | 7 FE Complete | NewActivitySheet.tsx |
 | F2.2 | 7 FE Complete | GoalsScreen.tsx |
 | F2.3 | 7 FE Complete | SettingsScreen.tsx |
+| F2.5 | 7 Cleanup | Bug fixes: goals 422, rules indexing, archive UX |
+| F2.6 | 7 Cleanup | Reset mock data + dev-mode guard |
 | F3.1 | 8 Polish | Loading + empty states + error boundary |
 | F3.2 | 8 Polish | Review milestone auto-detection |
 | B6.1 | 8 Polish | GET /api/mcp/context stub |

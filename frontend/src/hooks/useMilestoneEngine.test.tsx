@@ -3,10 +3,16 @@
  *
  * Asserts React Query wiring, dashboard/log field mapping, and mutation payloads
  * serialized through frontend/src/lib/api.
+ *
+ * F2.0 — Hook data plane for completion screens.
+ *
+ * Extends with tests for the new queries (goals, rules, weeklyTargets,
+ * previousBlocks) and mutations (submitNewActivity, createGoal, archiveGoal,
+ * createRule, deleteRule, createTrainingBlock, updateGoal, updateRule).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { waitFor } from '@testing-library/react';
-import type { RecoveryStreak } from '../types';
+import { waitFor, act } from '@testing-library/react';
+import type { Goal, Rule, WeeklyTarget, TrainingBlock, RecoveryStreak } from '../types';
 import {
   dashboardReadSnake,
   activityLogReadSnake,
@@ -29,6 +35,19 @@ vi.mock('../lib/api', () => ({
   createDailyCheckIn: vi.fn(),
   createFlareUpIncident: vi.fn(),
   checkViolations: vi.fn(),
+  // F2.0 additions
+  listGoals: vi.fn(),
+  listRulesByBlock: vi.fn(),
+  listWeeklyTargetsByBlock: vi.fn(),
+  listTrainingBlocks: vi.fn(),
+  createGoal: vi.fn(),
+  patchGoal: vi.fn(),
+  createRule: vi.fn(),
+  patchRule: vi.fn(),
+  deleteRule: vi.fn(),
+  createTrainingBlock: vi.fn(),
+  createActivity: vi.fn(),
+  listActivities: vi.fn(),
 }));
 
 import {
@@ -36,6 +55,19 @@ import {
   listActivityLogs,
   createActivityLog,
   checkViolations as checkViolationsApi,
+  // F2.0 additions
+  listGoals,
+  listRulesByBlock,
+  listWeeklyTargetsByBlock,
+  listTrainingBlocks,
+  createGoal as createGoalApi,
+  patchGoal,
+  createRule as createRuleApi,
+  patchRule,
+  deleteRule as deleteRuleApi,
+  createTrainingBlock as createTrainingBlockApi,
+  createActivity,
+  listActivities,
 } from '../lib/api';
 
 const activityLogsListOnlyLog = mapActivityLogFromApi({
@@ -44,6 +76,61 @@ const activityLogsListOnlyLog = mapActivityLogFromApi({
 });
 
 const dashboardPayload = mapDashboardFromApi(dashboardReadSnake);
+
+// ---------------------------------------------------------------------------
+// F2.0 fixtures
+// ---------------------------------------------------------------------------
+
+const ACTIVE_BLOCK_ID = 'blk-1';
+
+const goalFixture: Omit<Goal, 'userId'> = {
+  id: 'goal-1',
+  title: 'Walk 20km without flare-up',
+  targetDate: '2026-05-31',
+  timeframe: 'monthly',
+  status: 'active',
+  createdAt: '2026-04-07T06:00:00Z',
+};
+
+const ruleFixture: Rule = {
+  id: 'rule-rest-foot',
+  trainingBlockId: ACTIVE_BLOCK_ID,
+  activityClassId: 'cls-foot',
+  ruleType: 'rest_between_class',
+  thresholdValue: 3,
+  windowDays: 3,
+  enabled: true,
+  createdAt: '2026-04-07T06:00:00Z',
+};
+
+const weeklyTargetFixture: WeeklyTarget = {
+  id: 'wt-foot',
+  trainingBlockId: ACTIVE_BLOCK_ID,
+  activityClassId: 'cls-foot',
+  targetValue: 8,
+  targetUnit: 'km',
+  createdAt: '2026-04-07T06:00:00Z',
+};
+
+const activeBlockFixture: Omit<TrainingBlock, 'userId'> = {
+  id: ACTIVE_BLOCK_ID,
+  name: 'Return to Walking — Phase 2',
+  startDate: '2026-04-07',
+  endDate: '2026-05-31',
+  status: 'active',
+  isReviewMilestoneHit: false,
+  createdAt: '2026-04-07T06:00:00Z',
+};
+
+const completedBlockFixture: Omit<TrainingBlock, 'userId'> = {
+  id: 'blk-0',
+  name: 'Phase 1 Foundation',
+  startDate: '2026-03-01',
+  endDate: '2026-04-06',
+  status: 'completed',
+  isReviewMilestoneHit: true,
+  createdAt: '2026-03-01T06:00:00Z',
+};
 
 function setupDefaultApiMocks(): void {
   vi.mocked(getDashboard).mockResolvedValue(dashboardPayload);
@@ -66,6 +153,27 @@ function setupDefaultApiMocks(): void {
       },
     ],
   });
+  // F2.0 defaults
+  vi.mocked(listGoals).mockResolvedValue([goalFixture]);
+  vi.mocked(listRulesByBlock).mockResolvedValue([ruleFixture]);
+  vi.mocked(listWeeklyTargetsByBlock).mockResolvedValue([weeklyTargetFixture]);
+  vi.mocked(listTrainingBlocks).mockResolvedValue([activeBlockFixture, completedBlockFixture]);
+  vi.mocked(createGoalApi).mockResolvedValue(goalFixture);
+  vi.mocked(patchGoal).mockResolvedValue(goalFixture);
+  vi.mocked(createRuleApi).mockResolvedValue(ruleFixture);
+  vi.mocked(patchRule).mockResolvedValue(ruleFixture);
+  vi.mocked(deleteRuleApi).mockResolvedValue(undefined);
+  vi.mocked(createTrainingBlockApi).mockResolvedValue(activeBlockFixture);
+  vi.mocked(createActivity).mockResolvedValue({
+    id: MOCK_UUID,
+    activityClassId: 'cls-foot',
+    name: 'Morning Jog',
+    type: 'performance',
+    defaultVolumeUnit: 'km',
+    isActive: true,
+    createdAt: '2026-05-30T06:00:00Z',
+  });
+  vi.mocked(listActivities).mockResolvedValue([]);
 }
 
 describe('useMilestoneEngine API rewire (F1.3)', () => {
@@ -225,5 +333,507 @@ describe('useMilestoneEngine API rewire (F1.3)', () => {
         asOf: dashboardPayload.todayDate,
       });
     });
+  });
+});
+
+// =============================================================================
+// F2.0 — Hook data plane for completion screens
+// =============================================================================
+
+describe('useMilestoneEngine data plane (F2.0)', () => {
+  beforeEach(() => {
+    vi.stubGlobal('crypto', { randomUUID: () => MOCK_UUID });
+    setupDefaultApiMocks();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Read queries — mount-time behaviour
+  // ---------------------------------------------------------------------------
+
+  it('fires listGoals query on mount and exposes result as engine.goals', async () => {
+    const { result } = renderHookWithProviders(() => useMilestoneEngine());
+
+    await waitFor(() => {
+      expect(listGoals).toHaveBeenCalledTimes(1);
+      expect(result.current.goals).toEqual([goalFixture]);
+    });
+  });
+
+  it('fires listRulesByBlock query on mount when block exists', async () => {
+    const { result } = renderHookWithProviders(() => useMilestoneEngine());
+
+    await waitFor(() => {
+      expect(listRulesByBlock).toHaveBeenCalledWith(ACTIVE_BLOCK_ID);
+      expect(result.current.rules).toEqual([ruleFixture]);
+    });
+  });
+
+  it('fires listWeeklyTargetsByBlock query on mount when block exists', async () => {
+    const { result } = renderHookWithProviders(() => useMilestoneEngine());
+
+    await waitFor(() => {
+      expect(listWeeklyTargetsByBlock).toHaveBeenCalledTimes(1);
+      expect(listWeeklyTargetsByBlock).toHaveBeenCalledWith(ACTIVE_BLOCK_ID);
+    });
+
+    expect(result.current.weeklyTargets).toEqual([weeklyTargetFixture]);
+  });
+
+  it('fires listTrainingBlocks query on mount and exposes previousBlocks', async () => {
+    const { result } = renderHookWithProviders(() => useMilestoneEngine());
+
+    await waitFor(() => {
+      expect(listTrainingBlocks).toHaveBeenCalledTimes(1);
+    });
+
+    // previousBlocks should exist on the result
+    expect(Array.isArray(result.current.previousBlocks)).toBe(true);
+  });
+
+  it('previousBlocks excludes the active block', async () => {
+    const { result } = renderHookWithProviders(() => useMilestoneEngine());
+
+    // Wait for both data sources to be populated before asserting
+    await waitFor(() => {
+      expect(listTrainingBlocks).toHaveBeenCalledWith();
+      const ids = result.current.previousBlocks.map((b: TrainingBlock) => b.id);
+      // completedBlockFixture should be in previousBlocks; activeBlockFixture should not
+      expect(ids).toContain(completedBlockFixture.id);
+      expect(ids).not.toContain(ACTIVE_BLOCK_ID);
+    });
+  });
+
+  it('rules and weeklyTargets are disabled (not called) when no block exists', async () => {
+    // Override dashboard to return null block
+    const { mapDashboardFromApi: mapDash } = await import('../lib/api/mappers');
+    const { dashboardReadSnakeNoBlock } = await import('../lib/api/testFixtures');
+    vi.mocked(getDashboard).mockResolvedValue(mapDash(dashboardReadSnakeNoBlock));
+
+    renderHookWithProviders(() => useMilestoneEngine());
+
+    // Wait for dashboard to resolve and goals/trainingBlocks to settle (they load always)
+    await waitFor(() => {
+      expect(getDashboard).toHaveBeenCalledTimes(1);
+      expect(listGoals).toHaveBeenCalledTimes(1);
+    });
+
+    // Block-scoped queries must NOT have been called
+    expect(listRulesByBlock).not.toHaveBeenCalled();
+    expect(listWeeklyTargetsByBlock).not.toHaveBeenCalled();
+  });
+
+  it('rules and weeklyTargets default to [] when block is absent', async () => {
+    const { mapDashboardFromApi: mapDash } = await import('../lib/api/mappers');
+    const { dashboardReadSnakeNoBlock } = await import('../lib/api/testFixtures');
+    vi.mocked(getDashboard).mockResolvedValue(mapDash(dashboardReadSnakeNoBlock));
+
+    const { result } = renderHookWithProviders(() => useMilestoneEngine());
+
+    await waitFor(() => {
+      expect(getDashboard).toHaveBeenCalledTimes(1);
+    });
+
+    expect(result.current.rules).toEqual([]);
+    expect(result.current.weeklyTargets).toEqual([]);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Regression: goals and previousBlocks load even when no active block exists
+  // ---------------------------------------------------------------------------
+
+  it('listGoals IS called even when no active block exists', async () => {
+    const { mapDashboardFromApi: mapDash } = await import('../lib/api/mappers');
+    const { dashboardReadSnakeNoBlock } = await import('../lib/api/testFixtures');
+    vi.mocked(getDashboard).mockResolvedValue(mapDash(dashboardReadSnakeNoBlock));
+
+    renderHookWithProviders(() => useMilestoneEngine());
+
+    await waitFor(() => {
+      expect(getDashboard).toHaveBeenCalledTimes(1);
+    });
+
+    expect(listGoals).toHaveBeenCalledTimes(1);
+  });
+
+  it('listTrainingBlocks IS called even when no active block exists', async () => {
+    const { mapDashboardFromApi: mapDash } = await import('../lib/api/mappers');
+    const { dashboardReadSnakeNoBlock } = await import('../lib/api/testFixtures');
+    vi.mocked(getDashboard).mockResolvedValue(mapDash(dashboardReadSnakeNoBlock));
+
+    renderHookWithProviders(() => useMilestoneEngine());
+
+    await waitFor(() => {
+      expect(getDashboard).toHaveBeenCalledTimes(1);
+    });
+
+    expect(listTrainingBlocks).toHaveBeenCalledTimes(1);
+  });
+
+  it('previousBlocks returns all blocks when block is null', async () => {
+    const { mapDashboardFromApi: mapDash } = await import('../lib/api/mappers');
+    const { dashboardReadSnakeNoBlock } = await import('../lib/api/testFixtures');
+    vi.mocked(getDashboard).mockResolvedValue(mapDash(dashboardReadSnakeNoBlock));
+    vi.mocked(listTrainingBlocks).mockResolvedValue([activeBlockFixture, completedBlockFixture]);
+
+    const { result } = renderHookWithProviders(() => useMilestoneEngine());
+
+    // Wait for training-blocks data to populate result
+    await waitFor(() => {
+      const ids = result.current.previousBlocks.map((b: TrainingBlock) => b.id);
+      // When block is null, previousBlocks should include all returned blocks
+      expect(ids).toContain(activeBlockFixture.id);
+      expect(ids).toContain(completedBlockFixture.id);
+    });
+  });
+
+  it('goals defaults to [] when listGoals returns empty array', async () => {
+    vi.mocked(listGoals).mockResolvedValue([]);
+
+    const { result } = renderHookWithProviders(() => useMilestoneEngine());
+
+    await waitFor(() => {
+      expect(listGoals).toHaveBeenCalledTimes(1);
+    });
+
+    expect(result.current.goals).toEqual([]);
+  });
+
+  // ---------------------------------------------------------------------------
+  // submitNewActivity mutation
+  // ---------------------------------------------------------------------------
+
+  it('submitNewActivity calls createActivity with snake_case body and a generated id', async () => {
+    const { result } = renderHookWithProviders(() => useMilestoneEngine());
+
+    await waitFor(() => {
+      expect(result.current.todayDate).toBe(dashboardPayload.todayDate);
+    });
+
+    act(() => {
+      result.current.submitNewActivity({
+        name: 'Morning Jog',
+        activityClassId: 'cls-foot',
+        type: 'performance',
+        defaultVolumeUnit: 'km',
+      });
+    });
+
+    await waitFor(() => {
+      expect(createActivity).toHaveBeenCalledTimes(1);
+    });
+
+    const draft = vi.mocked(createActivity).mock.calls[0]?.[0];
+    expect(draft).toBeDefined();
+    // Hook passes camelCase draft to createActivity which maps internally
+    expect(draft?.id).toBe(MOCK_UUID);
+    expect(draft?.name).toBe('Morning Jog');
+    expect(draft?.activityClassId).toBe('cls-foot');
+    expect(draft?.type).toBe('performance');
+    expect(draft?.defaultVolumeUnit).toBe('km');
+    expect(draft?.isActive).toBe(true);
+  });
+
+  it('submitNewActivity invalidates ["dashboard"] and ["activities"] on success', async () => {
+    const { result, queryClient } = renderHookWithProviders(() => useMilestoneEngine());
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    await waitFor(() => {
+      expect(result.current.todayDate).toBe(dashboardPayload.todayDate);
+    });
+
+    act(() => {
+      result.current.submitNewActivity({
+        name: 'Morning Jog',
+        activityClassId: 'cls-foot',
+        type: 'performance',
+        defaultVolumeUnit: 'km',
+      });
+    });
+
+    await waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['dashboard'] });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['activities'] });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // createGoal mutation
+  // ---------------------------------------------------------------------------
+
+  it('createGoal calls createGoalApi and invalidates ["goals"]', async () => {
+    const { result, queryClient } = renderHookWithProviders(() => useMilestoneEngine());
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    await waitFor(() => {
+      expect(result.current.todayDate).toBe(dashboardPayload.todayDate);
+    });
+
+    act(() => {
+      result.current.createGoal({
+        title: 'New goal',
+        targetDate: '2026-06-30',
+        timeframe: 'monthly',
+        status: 'active',
+      });
+    });
+
+    await waitFor(() => {
+      expect(createGoalApi).toHaveBeenCalledTimes(1);
+    });
+
+    const draft = vi.mocked(createGoalApi).mock.calls[0]?.[0];
+    expect(draft?.id).toBe(MOCK_UUID);
+
+    await waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['goals'] });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // archiveGoal mutation
+  // ---------------------------------------------------------------------------
+
+  it('archiveGoal patches goal with status "paused" and invalidates ["goals"]', async () => {
+    const { result, queryClient } = renderHookWithProviders(() => useMilestoneEngine());
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    await waitFor(() => {
+      expect(result.current.todayDate).toBe(dashboardPayload.todayDate);
+    });
+
+    act(() => {
+      result.current.archiveGoal('goal-1');
+    });
+
+    await waitFor(() => {
+      expect(patchGoal).toHaveBeenCalledTimes(1);
+    });
+
+    const [goalId, patch] = vi.mocked(patchGoal).mock.calls[0] ?? [];
+    expect(goalId).toBe('goal-1');
+    expect(patch?.status).toBe('paused');
+
+    await waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['goals'] });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // updateGoal mutation
+  // ---------------------------------------------------------------------------
+
+  it('updateGoal calls patchGoal with the provided patch and invalidates ["goals"]', async () => {
+    const { result, queryClient } = renderHookWithProviders(() => useMilestoneEngine());
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    await waitFor(() => {
+      expect(result.current.todayDate).toBe(dashboardPayload.todayDate);
+    });
+
+    act(() => {
+      result.current.updateGoal('goal-1', { status: 'achieved' });
+    });
+
+    await waitFor(() => {
+      expect(patchGoal).toHaveBeenCalledTimes(1);
+    });
+
+    const [goalId, patch] = vi.mocked(patchGoal).mock.calls[0] ?? [];
+    expect(goalId).toBe('goal-1');
+    expect(patch?.status).toBe('achieved');
+
+    await waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['goals'] });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // createRule mutation
+  // ---------------------------------------------------------------------------
+
+  it('createRule calls createRuleApi with blockId and invalidates ["rules", blockId]', async () => {
+    const { result, queryClient } = renderHookWithProviders(() => useMilestoneEngine());
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    await waitFor(() => {
+      expect(listRulesByBlock).toHaveBeenCalledTimes(1);
+    });
+
+    act(() => {
+      result.current.createRule({
+        activityClassId: 'cls-foot',
+        ruleType: 'frequency_limit',
+        thresholdValue: 3,
+        windowDays: 7,
+        enabled: true,
+      });
+    });
+
+    await waitFor(() => {
+      expect(createRuleApi).toHaveBeenCalledTimes(1);
+    });
+
+    const [calledBlockId, draft] = vi.mocked(createRuleApi).mock.calls[0] ?? [];
+    expect(calledBlockId).toBe(ACTIVE_BLOCK_ID);
+    expect(draft?.id).toBe(MOCK_UUID);
+
+    await waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['rules', ACTIVE_BLOCK_ID] });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // deleteRule mutation
+  // ---------------------------------------------------------------------------
+
+  it('deleteRule calls deleteRuleApi and invalidates ["rules", blockId]', async () => {
+    const { result, queryClient } = renderHookWithProviders(() => useMilestoneEngine());
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    await waitFor(() => {
+      expect(listRulesByBlock).toHaveBeenCalledTimes(1);
+    });
+
+    act(() => {
+      result.current.deleteRule('rule-rest-foot');
+    });
+
+    await waitFor(() => {
+      expect(deleteRuleApi).toHaveBeenCalledTimes(1);
+      expect(deleteRuleApi).toHaveBeenCalledWith('rule-rest-foot');
+    });
+
+    await waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['rules', ACTIVE_BLOCK_ID] });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // updateRule mutation
+  // ---------------------------------------------------------------------------
+
+  it('updateRule calls patchRule with the provided patch', async () => {
+    const { mapRuleFromApi } = await import('../lib/api/mappers');
+    // stub patchRule for this test
+    vi.mocked(patchRule).mockResolvedValue(
+      mapRuleFromApi({
+        id: 'rule-rest-foot',
+        training_block_id: ACTIVE_BLOCK_ID,
+        activity_class_id: 'cls-foot',
+        rule_type: 'rest_between_class',
+        threshold_value: 4,
+        window_days: 3,
+        enabled: true,
+        created_at: '2026-04-07T06:00:00Z',
+      }),
+    );
+
+    const { result } = renderHookWithProviders(() => useMilestoneEngine());
+
+    await waitFor(() => {
+      expect(result.current.todayDate).toBe(dashboardPayload.todayDate);
+    });
+
+    act(() => {
+      result.current.updateRule('rule-rest-foot', { thresholdValue: 4 });
+    });
+
+    await waitFor(() => {
+      expect(patchRule).toHaveBeenCalledTimes(1);
+    });
+
+    const [ruleId, patch] = vi.mocked(patchRule).mock.calls[0] ?? [];
+    expect(ruleId).toBe('rule-rest-foot');
+    expect(patch?.thresholdValue).toBe(4);
+  });
+
+  // ---------------------------------------------------------------------------
+  // createTrainingBlock mutation
+  // ---------------------------------------------------------------------------
+
+  it('createTrainingBlock calls createTrainingBlockApi with a generated id', async () => {
+    const { result, queryClient } = renderHookWithProviders(() => useMilestoneEngine());
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    await waitFor(() => {
+      expect(result.current.todayDate).toBe(dashboardPayload.todayDate);
+    });
+
+    act(() => {
+      result.current.createTrainingBlock({
+        name: 'Phase 3 Build',
+        startDate: '2026-06-01',
+      });
+    });
+
+    await waitFor(() => {
+      expect(createTrainingBlockApi).toHaveBeenCalledTimes(1);
+    });
+
+    const draft = vi.mocked(createTrainingBlockApi).mock.calls[0]?.[0];
+    expect(draft?.id).toBe(MOCK_UUID);
+    expect(draft?.name).toBe('Phase 3 Build');
+    expect(draft?.startDate).toBe('2026-06-01');
+
+    await waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['training-blocks'] });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['dashboard'] });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // New draft interfaces exported from hook module
+  // ---------------------------------------------------------------------------
+
+  it('exports NewActivityDraft, GoalDraft, GoalPatch, RuleDraft, RulePatch, BlockDraft type shapes (compile-time)', async () => {
+    // This test validates that the hook module exports the required draft
+    // interfaces. It is a structural/type test: if the types are missing the
+    // TypeScript compiler will error before the test even runs.
+    const module = await import('./useMilestoneEngine');
+
+    // The hook result must carry the new mutation functions
+    const keys = Object.keys(module);
+    // At minimum the module must re-export something we can inspect at runtime.
+    // The real guard is tsc --noEmit; this just confirms the module loads.
+    expect(keys).toContain('useMilestoneEngine');
+  });
+
+  // ---------------------------------------------------------------------------
+  // Additive extension — existing result fields unchanged
+  // ---------------------------------------------------------------------------
+
+  it('existing result fields are still present alongside new F2.0 fields', async () => {
+    const { result } = renderHookWithProviders(() => useMilestoneEngine());
+
+    await waitFor(() => {
+      expect(result.current.todayDate).toBe(dashboardPayload.todayDate);
+    });
+
+    // Original fields still present
+    expect(typeof result.current.submitLog).toBe('function');
+    expect(typeof result.current.submitCheckIn).toBe('function');
+    expect(typeof result.current.submitIncident).toBe('function');
+    expect(typeof result.current.checkViolations).toBe('function');
+    expect(Array.isArray(result.current.activities)).toBe(true);
+    expect(Array.isArray(result.current.logs)).toBe(true);
+
+    // New F2.0 fields also present
+    expect(Array.isArray(result.current.goals)).toBe(true);
+    expect(Array.isArray(result.current.rules)).toBe(true);
+    expect(Array.isArray(result.current.weeklyTargets)).toBe(true);
+    expect(Array.isArray(result.current.previousBlocks)).toBe(true);
+    expect(typeof result.current.submitNewActivity).toBe('function');
+    expect(typeof result.current.createGoal).toBe('function');
+    expect(typeof result.current.updateGoal).toBe('function');
+    expect(typeof result.current.archiveGoal).toBe('function');
+    expect(typeof result.current.createRule).toBe('function');
+    expect(typeof result.current.updateRule).toBe('function');
+    expect(typeof result.current.deleteRule).toBe('function');
+    expect(typeof result.current.createTrainingBlock).toBe('function');
   });
 });

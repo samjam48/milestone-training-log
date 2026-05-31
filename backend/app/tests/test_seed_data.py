@@ -33,7 +33,7 @@ EXPECTED_COUNTS = {
     "activity_logs": 26,
     "daily_check_ins": 6,
     "flare_up_incidents": 2,
-    "goals": 0,
+    "goals": 2,
     "recovery_targets": 0,
 }
 USER_OWNED_TABLES = {

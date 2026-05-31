@@ -7,6 +7,8 @@ import {
   MorningCheckInScreen,
   LogActivityScreen,
   LogIncidentScreen,
+  GoalsScreen,
+  SettingsScreen,
 } from './components/screens';
 import { useMilestoneEngine } from './hooks/useMilestoneEngine';
 
@@ -94,7 +96,9 @@ export function App(): React.ReactElement {
       />
     );
   } else if (activeTab === 'goals') {
-    mainContent = <ComingSoonPlaceholder />;
+    mainContent = <GoalsScreen engine={engine} />;
+  } else if (activeTab === 'settings') {
+    mainContent = <SettingsScreen engine={engine} />;
   } else {
     mainContent = <ComingSoonPlaceholder />;
   }

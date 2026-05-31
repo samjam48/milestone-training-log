@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     APP_VERSION: str = "0.1.0"
     BACKEND_PORT: int = 8084
     DEFAULT_USER_NAME: str = "Sam"
+    APP_DEV_MODE: bool = False
 
     model_config = SettingsConfigDict(
         env_file=ENV_FILE,

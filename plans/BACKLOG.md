@@ -22,7 +22,7 @@ Follow-up items that are intentionally out of scope for the current task but sho
 
 - ~~Phase 6 F1.3: full Log History via `GET /api/activity-logs`~~ — ticketed in
   `plans/tickets-phase-6-frontend-2026-05-28.md`.
-- Phase 7: wire `recovery_streaks` compliance UI (hook maps field in Phase 6 F1.3).
-- Phase 7: delayed-tax / load-risk dashboard panel (`GET /api/load/delayed-tax`).
-- Phase 7: `CalendarHeatmap` on Settings / block-review using hook `dailyScores`.
+- Phase 8: wire `recovery_streaks` compliance UI (hook maps field in Phase 6 F1.3). *(re-routed from Phase 7, owner 2026-05-30 — dashboard surface, outside screen-port scope)*
+- Phase 8: delayed-tax / load-risk dashboard panel (`GET /api/load/delayed-tax`). *(re-routed from Phase 7, owner 2026-05-30)*
+- Phase 7.5: `CalendarHeatmap` on Settings / block-review using hook `dailyScores`. *(home screen Settings is built in Phase 7; worth doing right after — owner 2026-05-30)*
 - Phase 6 F1.4: replace hardcoded `cls-foot` display labels with `activityClasses` lookup.

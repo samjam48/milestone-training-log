@@ -10,7 +10,7 @@ class GoalCreate(BaseModel):
 
     id: str
     title: str
-    description: str
+    description: str = ""
     target_date: date
     timeframe: GoalTimeframe
     activity_class_id: str | None = None
