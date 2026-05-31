@@ -10,6 +10,7 @@ from sqlmodel import Session, SQLModel, create_engine
 from app.models.activity import Activity, ActivityClass
 from app.models.block import Rule, TrainingBlock, WeeklyTarget
 from app.models.checkin import DailyCheckIn, FlareUpIncident
+from app.models.goal import Goal
 from app.models.log import ActivityLog
 from app.settings import DATABASE_URL
 
@@ -455,20 +456,84 @@ def _flare_up_incidents() -> list[FlareUpIncident]:
     ]
 
 
+def _goals() -> list[Goal]:
+    return [
+        Goal(
+            id="goal-return-to-run",
+            user_id=LOCAL_USER_ID,
+            title="Complete full return-to-run protocol",
+            description="Progress through all walk/run intervals in the rehab plan without flare-ups.",
+            target_date=_date("2026-06-30"),
+            timeframe="monthly",
+            activity_class_id="cls-foot",
+            progress_value=None,
+            progress_target=None,
+            progress_unit=None,
+            status="active",
+            created_at=CREATED_AT,
+            updated_at=CREATED_AT,
+        ),
+        Goal(
+            id="goal-low-impact-weekly",
+            user_id=LOCAL_USER_ID,
+            title="Achieve 3× weekly Low-Impact sessions",
+            description="Maintain at least 3 low-impact recovery sessions per week for a full quarter.",
+            target_date=_date("2026-09-30"),
+            timeframe="quarterly",
+            activity_class_id="cls-recovery",
+            progress_value=None,
+            progress_target=None,
+            progress_unit=None,
+            status="active",
+            created_at=CREATED_AT,
+            updated_at=CREATED_AT,
+        ),
+    ]
+
+
+_TRUNCATION_ORDER = [
+    "activity_logs",
+    "flare_up_incidents",
+    "daily_check_ins",
+    "goals",
+    "rules",
+    "weekly_targets",
+    "recovery_targets",
+    "training_blocks",
+    "activities",
+    "activity_classes",
+]
+
+
+def run_seed(session: Session) -> None:
+    """Truncate all user-data tables then re-insert seed rows.
+
+    Safe to call multiple times — truncate-before-insert makes it idempotent.
+    """
+    from sqlalchemy import text
+
+    for table in _TRUNCATION_ORDER:
+        session.exec(text(f"DELETE FROM {table}"))  # type: ignore[call-overload]
+    session.commit()
+
+    for rows in (
+        _activity_classes(),
+        _activities(),
+        _goals(),
+        _training_blocks(),
+        _rules(),
+        _weekly_targets(),
+        _activity_logs(),
+        _daily_check_ins(),
+        _flare_up_incidents(),
+    ):
+        _upsert_all(session, rows)
+    session.commit()
+
+
 def seed_database(engine: Engine) -> None:
     with Session(engine) as session:
-        for rows in (
-            _activity_classes(),
-            _activities(),
-            _training_blocks(),
-            _rules(),
-            _weekly_targets(),
-            _activity_logs(),
-            _daily_check_ins(),
-            _flare_up_incidents(),
-        ):
-            _upsert_all(session, rows)
-        session.commit()
+        run_seed(session)
 
 
 def _parse_args() -> argparse.Namespace:

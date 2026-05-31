@@ -16,7 +16,7 @@ from app.routers.weekly_targets import (
     training_block_weekly_targets_router,
     weekly_targets_router,
 )
-from app.settings import APP_VERSION
+from app.settings import APP_VERSION, settings
 
 
 def create_app() -> FastAPI:
@@ -36,6 +36,9 @@ def create_app() -> FastAPI:
     app.include_router(recovery_targets_router)
     app.include_router(load_router)
     app.include_router(dashboard_router)
+    if settings.APP_DEV_MODE:
+        from app.routers import dev as dev_router_module
+        app.include_router(dev_router_module.router, prefix="/api")
     return app
 
 

@@ -6,8 +6,10 @@
 // =============================================================================
 
 import * as React from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '../../lib/cn';
 import { Card, CardHeader, CardTitle, CardMeta } from '../ui/Card';
+import { apiFetch } from '../../lib/api/client';
 import type { MilestoneEngineResult, RuleDraft, RulePatch, BlockDraft } from '../../hooks/useMilestoneEngine';
 import type { ActivityClass, ActivityLog, Rule, RuleType, WeeklyTarget, TrainingBlock } from '../../types';
 
@@ -753,10 +755,17 @@ export function SettingsScreen({ engine }: SettingsScreenProps): React.ReactElem
     createTrainingBlock,
   } = engine;
 
+  const queryClient = useQueryClient();
   const [editRulesOpen, setEditRulesOpen] = React.useState(false);
   const [newBlockOpen, setNewBlockOpen] = React.useState(false);
   const [notifications, setNotifications] = React.useState(true);
   const [metricUnits, setMetricUnits] = React.useState(true);
+
+  function handleResetMockData(): void {
+    void apiFetch('/dev/reset', { method: 'POST' })
+      .then(() => { void queryClient.invalidateQueries(); })
+      .catch(() => { /* dev tool — silent failure */ });
+  }
 
   const hasBlock = block.id !== '';
 
@@ -912,35 +921,38 @@ export function SettingsScreen({ engine }: SettingsScreenProps): React.ReactElem
                 value={metricUnits}
                 onChange={setMetricUnits}
               />
-              <div>
-                <button
-                  type="button"
-                  className="w-full flex items-center justify-between px-4 py-3 text-danger-fg hover:bg-danger/5 transition-colors duration-snap text-left"
-                >
-                  <span className="text-body font-medium">Reset mock data</span>
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    aria-hidden="true"
+              {import.meta.env.VITE_DEV_MODE === 'true' && (
+                <div>
+                  <button
+                    type="button"
+                    onClick={handleResetMockData}
+                    className="w-full flex items-center justify-between px-4 py-3 text-danger-fg hover:bg-danger/5 transition-colors duration-snap text-left"
                   >
-                    <path
-                      d="M13 8A5 5 0 1 1 8 3"
-                      stroke="currentColor"
-                      strokeWidth="1.4"
-                      strokeLinecap="round"
-                    />
-                    <path
-                      d="M8 1v4l3-2"
-                      stroke="currentColor"
-                      strokeWidth="1.4"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </button>
-              </div>
+                    <span className="text-body font-medium">Reset mock data</span>
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 16 16"
+                      fill="none"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="M13 8A5 5 0 1 1 8 3"
+                        stroke="currentColor"
+                        strokeWidth="1.4"
+                        strokeLinecap="round"
+                      />
+                      <path
+                        d="M8 1v4l3-2"
+                        stroke="currentColor"
+                        strokeWidth="1.4"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </button>
+                </div>
+              )}
             </div>
           </Card>
         </section>

@@ -10,7 +10,7 @@
  * Spec: export/preview/SettingsScreen.jsx, MOCKUPS.md §Screen 5 / 5b
  */
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders';
@@ -25,6 +25,23 @@ import type {
 } from '../../types';
 import type { RuleDraft, RulePatch } from '../../hooks/useMilestoneEngine';
 import { SettingsScreen } from './SettingsScreen';
+
+// Module-level mock for apiFetch used in F2.6 onClick wiring tests.
+// vi.hoisted ensures the variable is available when the hoisted vi.mock factory runs.
+const { apiFetchMock } = vi.hoisted(() => ({
+  apiFetchMock: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock('../../lib/api/client', () => ({
+  apiFetch: apiFetchMock,
+  apiFetchOrNullOn404: vi.fn().mockResolvedValue(null),
+  ApiError: class ApiError extends Error {
+    status: number;
+    constructor(status: number, message: string) {
+      super(message);
+      this.status = status;
+    }
+  },
+}));
 
 // ---------------------------------------------------------------------------
 // Shared fixtures
@@ -1012,6 +1029,13 @@ describe('SettingsScreen — New Block submit', () => {
 // ---------------------------------------------------------------------------
 
 describe('SettingsScreen — Preferences section', () => {
+  beforeEach(() => {
+    vi.stubEnv('VITE_DEV_MODE', 'true');
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('renders Notifications toggle', () => {
     const engine = makeEngine({ block: ACTIVE_BLOCK });
 
@@ -1193,6 +1217,85 @@ describe('EditRulesForm — delete-then-edit uses correct rule id (Bug 2)', () =
     const [updatedRuleId, patch] = onUpdateRule.mock.calls[0] as [string, RulePatch];
     expect(updatedRuleId).toBe(RULE_FREQ.id); // 'rule-freq-1' — currently FAILS (writes to ruleStates[0] = deleted rule)
     expect(patch.thresholdValue).toBe(5);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F2.6 — Reset mock data button: dev-mode guard + wiring
+// ---------------------------------------------------------------------------
+// These tests MUST FAIL until the implementation is in place:
+//   - SettingsScreen.tsx wraps the Reset button in:
+//       import.meta.env.VITE_DEV_MODE === 'true'
+//   - The button onClick calls apiFetch('/dev/reset', { method: 'POST' })
+//     then invalidates all queries.
+//
+// Mocking strategy:
+//   - vi.stubEnv('VITE_DEV_MODE', 'true'/'false') patches import.meta.env per-test.
+//   - apiFetch is mocked via vi.mock on the client module.
+// ---------------------------------------------------------------------------
+
+describe('SettingsScreen — Reset mock data button: dev-mode guard', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('renders the Reset mock data button when VITE_DEV_MODE is "true"', () => {
+    vi.stubEnv('VITE_DEV_MODE', 'true');
+    const engine = makeEngine({ block: ACTIVE_BLOCK });
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    expect(
+      screen.getByRole('button', { name: /reset mock data/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('does NOT render the Reset mock data button when VITE_DEV_MODE is "false"', () => {
+    vi.stubEnv('VITE_DEV_MODE', 'false');
+    const engine = makeEngine({ block: ACTIVE_BLOCK });
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    expect(
+      screen.queryByRole('button', { name: /reset mock data/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('does NOT render the Reset mock data button when VITE_DEV_MODE is unset', () => {
+    // Do not stub — relies on default (undefined/empty) value in test env
+    vi.stubEnv('VITE_DEV_MODE', '');
+    const engine = makeEngine({ block: ACTIVE_BLOCK });
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    expect(
+      screen.queryByRole('button', { name: /reset mock data/i }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe('SettingsScreen — Reset mock data button: onClick wiring', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('calls POST /api/dev/reset via apiFetch when the button is clicked in dev mode', async () => {
+    vi.stubEnv('VITE_DEV_MODE', 'true');
+    apiFetchMock.mockClear();
+
+    const user = userEvent.setup();
+    const engine = makeEngine({ block: ACTIVE_BLOCK });
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    const resetButton = screen.getByRole('button', { name: /reset mock data/i });
+    await user.click(resetButton);
+
+    // apiFetch must have been called with the reset path and POST method
+    expect(apiFetchMock).toHaveBeenCalledWith(
+      '/dev/reset',
+      expect.objectContaining({ method: 'POST' }),
+    );
   });
 });
 
