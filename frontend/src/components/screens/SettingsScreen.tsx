@@ -760,11 +760,22 @@ export function SettingsScreen({ engine }: SettingsScreenProps): React.ReactElem
   const [newBlockOpen, setNewBlockOpen] = React.useState(false);
   const [notifications, setNotifications] = React.useState(true);
   const [metricUnits, setMetricUnits] = React.useState(true);
+  const [resetState, setResetState] = React.useState<'idle' | 'confirming' | 'done'>('idle');
 
   function handleResetMockData(): void {
-    void apiFetch('/dev/reset', { method: 'POST' })
-      .then(() => { void queryClient.invalidateQueries(); })
-      .catch(() => { /* dev tool — silent failure */ });
+    if (resetState === 'idle') {
+      setResetState('confirming');
+      return;
+    }
+    if (resetState === 'confirming') {
+      void apiFetch('/dev/reset', { method: 'POST' })
+        .then(() => {
+          void queryClient.invalidateQueries();
+          setResetState('done');
+          setTimeout(() => setResetState('idle'), 2000);
+        })
+        .catch(() => { setResetState('idle'); });
+    }
   }
 
   const hasBlock = block.id !== '';
@@ -923,34 +934,46 @@ export function SettingsScreen({ engine }: SettingsScreenProps): React.ReactElem
               />
               {import.meta.env.VITE_DEV_MODE === 'true' && (
                 <div>
-                  <button
-                    type="button"
-                    onClick={handleResetMockData}
-                    className="w-full flex items-center justify-between px-4 py-3 text-danger-fg hover:bg-danger/5 transition-colors duration-snap text-left"
-                  >
-                    <span className="text-body font-medium">Reset mock data</span>
-                    <svg
-                      width="16"
-                      height="16"
-                      viewBox="0 0 16 16"
-                      fill="none"
-                      aria-hidden="true"
+                  {resetState === 'done' ? (
+                    <div className="flex items-center gap-2 px-4 py-3 text-safe-fg text-body font-medium">
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                        <path d="M3 8l3.5 3.5L13 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                      Data reset
+                    </div>
+                  ) : resetState === 'confirming' ? (
+                    <div className="flex items-center justify-between px-4 py-3 gap-3">
+                      <span className="text-body text-ink-muted">Reset all data to seed state?</span>
+                      <div className="flex gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setResetState('idle')}
+                          className="h-7 px-3 rounded-md text-caption font-medium text-ink-muted bg-bg-sunken hover:bg-bg-overlay transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleResetMockData}
+                          className="h-7 px-3 rounded-md text-caption font-medium text-white bg-danger hover:opacity-90 transition-opacity"
+                        >
+                          Reset
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleResetMockData}
+                      className="w-full flex items-center justify-between px-4 py-3 text-danger-fg hover:bg-danger/5 transition-colors duration-snap text-left"
                     >
-                      <path
-                        d="M13 8A5 5 0 1 1 8 3"
-                        stroke="currentColor"
-                        strokeWidth="1.4"
-                        strokeLinecap="round"
-                      />
-                      <path
-                        d="M8 1v4l3-2"
-                        stroke="currentColor"
-                        strokeWidth="1.4"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </button>
+                      <span className="text-body font-medium">Reset mock data</span>
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                        <path d="M13 8A5 5 0 1 1 8 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                        <path d="M8 1v4l3-2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </button>
+                  )}
                 </div>
               )}
             </div>

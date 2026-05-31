@@ -1288,10 +1288,15 @@ describe('SettingsScreen — Reset mock data button: onClick wiring', () => {
 
     renderWithProviders(<SettingsScreen engine={engine} />);
 
+    // First click shows confirmation UI — apiFetch not called yet
     const resetButton = screen.getByRole('button', { name: /reset mock data/i });
     await user.click(resetButton);
+    expect(apiFetchMock).not.toHaveBeenCalled();
 
-    // apiFetch must have been called with the reset path and POST method
+    // Confirm click triggers the actual POST
+    const confirmButton = screen.getByRole('button', { name: /^reset$/i });
+    await user.click(confirmButton);
+
     expect(apiFetchMock).toHaveBeenCalledWith(
       '/dev/reset',
       expect.objectContaining({ method: 'POST' }),
