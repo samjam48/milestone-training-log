@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import datetime
 
-import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
 
