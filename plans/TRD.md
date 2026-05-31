@@ -27,7 +27,7 @@ same relative paths work when the built `dist/` is wrapped natively.
 ## 2. Stack
 
 | Layer | Technology |
-|---|---|
+| --- | --- |
 | Backend framework | FastAPI 0.115+ |
 | ORM + models | SQLModel 0.0.21+ |
 | Migrations | Alembic |
@@ -104,7 +104,7 @@ Canonical type shapes: `export/src/types.ts` (supersedes `plans/milestone-archit
 **10 tables:** activity_classes, activities, activity_logs, daily_check_ins,
 flare_up_incidents, training_blocks, rules, recovery_targets, weekly_targets, goals.
 
-**user_id convention:** `user_id TEXT NOT NULL DEFAULT 'local'` on all user-owned
+**user&#95;id convention:** `user_id TEXT NOT NULL DEFAULT 'local'` on all user-owned
 rows. Phase 1 is single-user; the field exists so multi-user auth migration
 requires only one new column (a real UUID/auth sub) and one middleware layer —
 no schema restructuring.
@@ -116,7 +116,7 @@ map cleanly to `export/src/types.ts` and seed data without translation.
 inherit ownership through `training_blocks`; they do not carry their own
 `user_id` column in Phase 1.
 
-**flare_up_incidents → activity_classes:** Single nullable FK `activity_class_id`
+**flare&#95;up&#95;incidents → activity&#95;classes:** Single nullable FK `activity_class_id`
 on `flare_up_incidents`. User picks one likely cause class. If multi-class cause
 attribution is needed later, add a join table then (BACKLOG item).
 
@@ -128,7 +128,6 @@ JSON as the database source of truth.
 
 **Field set locked for Phase 1:** Include `activities.default_volume_unit`,
 `activity_logs.rule_violations_at_log`, `weekly_targets.target_unit`, and
-`goals.progress_value` / `progress_target` / `progress_unit` in the initial
 schema.
 
 **Relationship summary:**
@@ -149,7 +148,7 @@ Full contract: `docs/api-map.md`.
 - Single-user Phase 1: no auth header required; `user_id` resolved to `"local"` server-side
 
 | Method | Path | Notes |
-|---|---|---|
+| --- | --- | --- |
 | GET | `/api/health` | Liveness check |
 | GET | `/api/activity-classes` | List all classes |
 | POST | `/api/activity-classes` | Create class |
@@ -190,7 +189,6 @@ Full contract: `docs/api-map.md`.
 | GET | `/api/load/delayed-tax` | Proactive 7-day load/rest risk + symptom attribution; `?as_of=`, `?risk_window_days=`, `?baseline_days=`, `?pain_threshold=` |
 | GET | `/api/dashboard` | Full aggregate matching `MilestoneEngineResult` interface |
 
-**Load route conventions (Phase 4):** Request and response JSON use **snake_case**.
 When no active training block exists, load routes return **HTTP 200** with neutral
 or empty computed payloads (not `404`). Full behaviour:
 `plans/tickets-phase-4-load-engine-2026-05-27.md`.
@@ -204,8 +202,9 @@ noted below.
 
 **Python ↔ TypeScript function pairs:**
 
+| `detect_delayed_tax(logs, activities, classes, rules, check_ins, incidents, as_of, …)` | *(no TS reference)* | **New:** see §Delayed tax below |
 | Python (load_engine.py) | TypeScript (engine.ts / load.ts) | Parity |
-|---|---|---|
+| --- | --- | --- |
 | `rolling_load(logs, as_of, window_days) → float` | `rollingLoad` in load.ts | Exact |
 | `compute_class_statuses(as_of, classes, activities, logs, rules)` | `computeClassStatuses` | Exact (rest + weekly load cap only) |
 | `check_violations(activity_id, volume, rpe, logs, rules, as_of)` | `checkViolations` in useMilestoneEngine.ts | **Extended:** all five rule types (prototype: rest + cap only) |
@@ -214,7 +213,6 @@ noted below.
 | `compute_weekly_progress(targets, classes, activities, logs, period_start, period_end)` | `computeWeeklyProgress` | Exact |
 | `compute_clean_streak(logs)` | `computeCleanStreak` | Exact |
 | `compute_load_series(class_id, activities, logs, start, end, window=7)` | `computeLoadSeries` | Exact |
-| `detect_delayed_tax(logs, activities, classes, rules, check_ins, incidents, as_of, …)` | *(no TS reference)* | **New:** see §Delayed tax below |
 
 **Load formula:** `load = Σ(volume_value × rpe)` per log entry.
 **Default RPE** when not provided: 5 (matches `DEFAULT_RPE` in `export/src/lib/load.ts`).
@@ -249,7 +247,7 @@ See `agents/README.md`. One role, one ticket at a time.
 health endpoint tested. No business logic.
 
 | Ticket | Scope |
-|---|---|
+| --- | --- |
 | B0.1 | Repo structure: create `backend/` tree, `pyproject.toml` (fastapi, sqlmodel, alembic, ruff, mypy, pytest, httpx), `.env.example`, `Makefile` with `make dev`, `make test`, `make lint` |
 | B0.2 | `docker-compose.yml`: `backend` and `frontend` services, SQLite volume mount at `./data`, hot-reload via `--reload` flag, env vars wired from `.env` |
 | B0.3 | `GET /api/health` endpoint + test in `backend/app/tests/test_health.py`; response: `{"status": "ok", "version": "0.1.0"}` |
@@ -264,7 +262,7 @@ health endpoint tested. No business logic.
 that mirrors `export/src/lib/mockData.ts` (Sam Chen / plantar fasciitis scenario).
 
 | Ticket | Scope |
-|---|---|
+| --- | --- |
 | B1.1 | SQLModel models for all 10 tables in `backend/app/models/`; `user_id TEXT NOT NULL DEFAULT 'local'` on top-level user-owned tables; correct FK relationships |
 | B1.2 | `alembic init`; configure to point at models; generate initial migration; test `alembic upgrade head` → `alembic downgrade base` roundtrip in CI |
 | B1.3 | `backend/scripts/seed.py`: 3 activity classes, 5 activities, 26 activity logs spanning 7 weeks, 6 check-ins, 2 flare-up incidents, 1 active training block with 4 rules and 2 weekly targets |
@@ -280,7 +278,7 @@ that mirrors `export/src/lib/mockData.ts` (Sam Chen / plantar fasciitis scenario
 split enforced. Tests written before production code.
 
 | Ticket | Scope |
-|---|---|
+| --- | --- |
 | B2.1 | ActivityClass CRUD: schemas, service (`services/activity_classes.py`), router; `GET /api/activity-classes`, `POST`, `PATCH /{id}` |
 | B2.2 | Activity CRUD: + query filters `?class_id=`, `?is_active=`; `PATCH /{id}` supports `is_active` toggle |
 | B2.3 | ActivityLog CRUD: full CRUD; filters `?from=`, `?to=`, `?activity_id=`, `?class_id=`; `ruleViolationsAtLog` stored as JSON column |
@@ -297,7 +295,7 @@ split enforced. Tests written before production code.
 invariant server-side.
 
 | Ticket | Scope |
-|---|---|
+| --- | --- |
 | B3.1 | TrainingBlock CRUD: `GET /api/training-blocks`, `GET /api/training-blocks/active`, `POST`, `PATCH /{id}`; service enforces only one `status=active` block at a time (deactivates previous on new activation) |
 | B3.2 | Rule CRUD: `GET/POST /api/training-blocks/{id}/rules`; `PATCH/DELETE /api/rules/{id}` |
 | B3.3 | WeeklyTarget CRUD: `GET/POST /api/training-blocks/{id}/weekly-targets`; `PATCH /api/weekly-targets/{id}` |
@@ -319,7 +317,7 @@ fixtures at `as_of=2026-05-25`.
 **Ticket detail:** `plans/tickets-phase-4-load-engine-2026-05-27.md`
 
 | Ticket | Scope |
-|---|---|
+| --- | --- |
 | B4.1 | `load_engine.py`: §6 functions; `check_violations` all five rule types; `detect_delayed_tax` proactive + symptom layers |
 | B4.2 | `GET /api/load/summary`, `POST /api/load/check-violations`; `as_of` default today; snake_case JSON; 200 when no active block |
 | B4.3 | `GET /api/load/delayed-tax`; 7-day risk / 14-day median baseline; elevated load, rest debt, symptom attribution |
@@ -336,7 +334,7 @@ on the same fixture data.
 all its required data. Response must satisfy `MilestoneEngineResult` shape.
 
 | Ticket | Scope |
-|---|---|
+| --- | --- |
 | B5.1 | `backend/app/services/dashboard.py`: compose active block, all classes, all active activities, last 30 days of logs, today's check-in status, class statuses, suggestions, weekly progress (current block period), load series per class (block start → today), flare-up dates, clean streak, week load threshold per class |
 | B5.2 | `GET /api/dashboard` route + integration test: assert all keys present; assert class status states match `compute_class_statuses` for seed data |
 
@@ -354,11 +352,12 @@ with minimal screen diffs (label lookups only).
 `plans/tickets-phase-6-frontend-2026-05-28.md`.
 
 **Owner decisions locked (2026-05-28):**
+**Load route conventions (Phase 4):** Request and response JSON use **snake&#95;case**.
 
 | # | Topic | Decision |
 | --- | --- | --- |
 | 1 | Goals/Settings tabs before Phase 7 | Keep all four tabs; show **"Coming soon"** placeholder screens |
-| 2 | JSON casing | Backend stays **snake_case**; `frontend/src/lib/api/` maps to **camelCase** at the client boundary (no Pydantic alias churn) |
+| 2 | JSON casing | Backend stays **snake&#95;case**; `frontend/src/lib/api/` maps to **camelCase** at the client boundary (no Pydantic alias churn) |
 | 3 | Log History data source | **`GET /api/activity-logs`** for full history; dashboard `logs` remains 30-day window only |
 | 4 | Live rule check | **`POST /api/load/check-violations`** (all five rule types); remove prototype's two-rule inline logic from the hook |
 | 5 | Client IDs on writes | Frontend generates opaque string IDs (`crypto.randomUUID()`) on POST bodies |
@@ -367,7 +366,7 @@ with minimal screen diffs (label lookups only).
 | 8 | Delayed tax | **`GET /api/load/delayed-tax`** client wrapper in F1.2; **dashboard UI deferred to Phase 7+** (PRD F4) |
 
 | Ticket | Scope |
-|---|---|
+| --- | --- |
 | F1.1 | Vite + Tailwind + React Query scaffold; copy `export/src/`; `App.tsx` tab router + modal flows; Goals/Settings "Coming soon"; docker-compose frontend service; Makefile frontend gates |
 | F1.2 | Typed API client module(s) with snake↔camel mappers, `ApiError`, wrappers for every §5 endpoint |
 | F1.3 | Rewire `useMilestoneEngine`: dashboard query + activity-logs query + mutations + API-backed `checkViolations`; extend result type for `recoveryStreaks` |
@@ -418,7 +417,7 @@ by how close they sit to that scope:
   resolution from dashboard payload; Dashboard polish, not in Phase 7 scope.
 
 | Ticket | Scope |
-|---|---|
+| --- | --- |
 | F2.1 | `NewActivitySheet.tsx`: bottom-sheet component; name input, class picker (GET /api/activity-classes), type toggle (performance/recovery), default unit picker; `POST /api/activities` on submit; spec: MOCKUPS.md §Screen 6b |
 | F2.2 | `GoalsScreen.tsx`: goal list grouped by timeframe with progress bars; create-goal form (title, date, class, optional numeric target); status-update via `PATCH /api/goals/{id}`; spec: MOCKUPS.md §Screen 4 |
 | F2.3 | `SettingsScreen.tsx`: active block display with rules list; edit-rules form per class; new block creation sheet; rule CRUD via `/api/training-blocks/{id}/rules`; spec: MOCKUPS.md §Screen 5, 5b |
@@ -435,7 +434,7 @@ create activity via NewActivitySheet → appears in LogActivityScreen picker.
 detection, and MCP context stub for future AI integration.
 
 | Ticket | Scope |
-|---|---|
+| --- | --- |
 | F3.1 | Loading + empty states: skeleton loaders on Dashboard while `useQuery` is pending; empty-state illustrations for Log History (no logs yet) and Goals (no goals yet); top-level error boundary showing "Could not reach server" with retry |
 | F3.2 | Review milestone: backend service checks `is_review_milestone_hit` condition after every log creation (weekly target met + 2 consecutive safe days); if met, patches `training_blocks.is_review_milestone_hit = true`; SettingsScreen shows a milestone badge |
 | B6.1 | `GET /api/mcp/context`: returns structured JSON — active block summary, last 7 days of logs (activity name, load score per day), today's check-in (pain/readiness/stiffness), active class statuses; no AI integration, just the data shape for a future MCP server |
@@ -456,7 +455,7 @@ blank white screen. Log enough activities to meet milestone conditions →
 **Owner action required:** Produce mockups/designs for each item below before Phase 9 tickets are written. Use the same `export/preview/*.jsx` prototype convention so the implementer has a reference spec.
 
 | Item | Current state | Screen | Notes |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Edit goal | `onEdit={() => undefined}` stub | GoalsScreen | Needs an edit sheet (reuse NewGoalForm shell). Fields: title, target date, timeframe, class, progress target/unit. PATCH via `engine.updateGoal`. |
 | Edit activity | `onEdit={() => undefined}` stub | SettingsScreen — Activities Manager | Needs an edit sheet. Fields: name, class (read-only?), type, default volume unit. PATCH via a new `engine.updateActivity` mutation (not yet in the hook). |
 | Deactivate activity | `onDeactivate={() => undefined}` stub | SettingsScreen — Activities Manager | Needs confirmation dialog. On confirm: PATCH `isActive: false` via `engine.updateActivity`. Row should grey out or disappear per design decision. |
@@ -467,6 +466,7 @@ blank white screen. Log enough activities to meet milestone conditions →
 - Edit activity and Deactivate activity both require a new `updateActivity(activityId, patch)` mutation added to `useMilestoneEngine` (hook extension, similar to the F2.0 pattern).
 - View previous block and Block summary both depend on the Phase 7.5 CalendarHeatmap / block-review work which already appears in the Phase 7 out-of-scope list.
 
+`goals.progress_value` / `progress_target` / `progress_unit` in the initial
 ---
 
 ## 8. Quality Gates (from AGENTS.md)
@@ -501,7 +501,7 @@ exists (Phase 0, ticket B0.1).
 ## 10. Ticket Index
 
 | Ticket | Phase | Description |
-|---|---|---|
+| --- | --- | --- |
 | B0.1 | 0 Scaffold | Repo structure, pyproject.toml, Makefile |
 | B0.2 | 0 Scaffold | docker-compose.yml |
 | B0.3 | 0 Scaffold | GET /api/health + test |
@@ -538,7 +538,7 @@ exists (Phase 0, ticket B0.1).
 
 ## 11. Owner Actions Required Before Implementation
 
-- ~~**Before Phase 6:** Ensure `export/src/` is fully committed and stable~~
+- **~~Before Phase 6:~~** ~~Ensure `export/src/` is fully committed and stable~~
   (done — copy wholesale into `frontend/src/` on F1.1)
 - **Before Phase 7:** Add `SettingsScreen.jsx`, `GoalsScreen.jsx`,
   `NewActivitySheet.jsx` to `export/preview/` so the implementer can port
