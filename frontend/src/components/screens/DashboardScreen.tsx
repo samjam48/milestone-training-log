@@ -168,9 +168,7 @@ export const DashboardScreen: React.FC<Props> = ({ engine, onOpenCheckIn, onOpen
       />
 
       {/* ── Block safety map ── */}
-      {block.id !== '' && (
-        <BlockSafetyMapSection engine={engine} />
-      )}
+      <BlockSafetyMapSection engine={engine} />
 
       {/* ── Activity class status ── */}
       <div>
