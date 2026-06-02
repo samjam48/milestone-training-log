@@ -732,7 +732,6 @@ function NewTrainingBlockSheet({
 // ---------------------------------------------------------------------------
 
 export function SettingsScreen({ engine }: SettingsScreenProps): React.ReactElement {
-
   const {
     block,
     rules,

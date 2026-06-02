@@ -52,8 +52,8 @@ const PreviousBlockPage: React.FC<PreviousBlockPageProps> = ({ block }) => {
       style={{ scrollSnapAlign: 'start' }}
     >
       <div className="mb-4">
-        <h2 className="text-xl font-semibold">{block.name}</h2>
-        <p className="text-sm text-gray-500">
+        <h2 className="text-body-lg font-semibold text-ink">{block.name}</h2>
+        <p className="text-caption text-ink-muted">
           {formatDateRange(block.startDate, block.endDate)}
         </p>
       </div>
@@ -62,17 +62,17 @@ const PreviousBlockPage: React.FC<PreviousBlockPageProps> = ({ block }) => {
         <div
           data-testid="block-scores-loading"
           aria-busy="true"
-          className="skeleton h-40 w-full rounded-lg bg-gray-100 animate-pulse"
+          className="skeleton h-40 w-full rounded-lg bg-bg-sunken animate-pulse"
         />
       )}
 
       {isError && (
         <div role="alert" className="flex flex-col items-center gap-3 py-8">
-          <p className="text-sm text-red-600">Could not load scores</p>
+          <p className="text-caption text-danger-fg">Could not load scores</p>
           <button
             type="button"
             onClick={() => { void refetch(); }}
-            className="px-4 py-2 rounded-md bg-gray-100 text-sm font-medium"
+            className="px-4 py-2 rounded-md bg-bg-sunken text-body font-medium"
           >
             Retry
           </button>
@@ -115,8 +115,8 @@ export const BlockSafetyMapSection: React.FC<BlockSafetyMapSectionProps> = ({ en
           style={{ scrollSnapAlign: 'start' }}
         >
           <div className="mb-4">
-            <h2 className="text-xl font-semibold">{block.name}</h2>
-            <p className="text-sm text-gray-500">
+            <h2 className="text-body-lg font-semibold text-ink">{block.name}</h2>
+            <p className="text-caption text-ink-muted">
               {formatDateRange(block.startDate, block.endDate ?? todayDate)}
             </p>
           </div>

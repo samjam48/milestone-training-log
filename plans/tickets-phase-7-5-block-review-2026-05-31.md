@@ -6,6 +6,23 @@
 `backend/app/services/dashboard.py`,
 architect review 2026-05-31 | Date: 2026-05-31*
 
+## Implementation note
+
+> **Added post-implementation (2026-06-02).** The original tickets below specified a
+> full-page overlay (`BlockReviewScreen`) launched from Settings via an `onReview`
+> prop. During implementation the design was corrected:
+>
+> - The block safety map is now an **inline `BlockSafetyMapSection` composite**
+>   rendered directly on `DashboardScreen` — no overlay, no separate screen.
+> - **`BlockReviewScreen` was deleted** before it was ever shipped; it does not
+>   exist in the codebase.
+> - **`BlockSafetyMapSection`** (`frontend/src/components/composites/BlockSafetyMapSection.tsx`)
+>   is the delivered component.
+> - The backend **B3.0 endpoint** (`GET /api/training-blocks/{id}/scores`) and
+>   **F3.1 quality gates** are unchanged from what is specified below.
+>
+> The rest of this file is preserved verbatim as the original planning document.
+
 ## Planning assumptions locked for this ticket set
 
 - Phase 7 (tickets F2.0–F2.6) is complete and merged to `main`. `SettingsScreen`
