@@ -59,7 +59,6 @@ interface BlockSummaryCardProps {
   /** Whether the Edit rules CTA should be rendered. */
   showEditRules: boolean;
   onEditRules: () => void;
-  onReview: () => void;
 }
 
 function BlockSummaryCard({
@@ -69,7 +68,6 @@ function BlockSummaryCard({
   activityClasses,
   showEditRules,
   onEditRules,
-  onReview,
 }: BlockSummaryCardProps): React.ReactElement {
   const classMap = new Map(activityClasses.map((c) => [c.id, c]));
   const activeRules = rules.filter((r) => r.enabled);
@@ -145,8 +143,8 @@ function BlockSummaryCard({
       )}
 
       {/* CTAs */}
-      <div className="flex gap-2">
-        {showEditRules && (
+      {showEditRules && (
+        <div className="flex gap-2">
           <button
             type="button"
             onClick={onEditRules}
@@ -154,15 +152,8 @@ function BlockSummaryCard({
           >
             Edit rules
           </button>
-        )}
-        <button
-          type="button"
-          onClick={onReview}
-          className="flex-1 h-10 rounded-md bg-bg-sunken border border-border text-body font-medium text-ink-muted transition-colors duration-snap hover:bg-bg-overlay"
-        >
-          Block summary
-        </button>
-      </div>
+        </div>
+      )}
     </Card>
   );
 }
@@ -830,7 +821,6 @@ export function SettingsScreen({ engine }: SettingsScreenProps): React.ReactElem
               activityClasses={activityClasses}
               showEditRules={showEditRules}
               onEditRules={() => setEditRulesOpen(true)}
-              onReview={() => undefined}
             />
           ) : (
             <Card pad="md">

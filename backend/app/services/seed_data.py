@@ -122,7 +122,10 @@ def _goals() -> list[Goal]:
             id="goal-return-to-run",
             user_id=LOCAL_USER_ID,
             title="Complete full return-to-run protocol",
-            description="Progress through all walk/run intervals in the rehab plan without flare-ups.",
+            description=(
+                "Progress through all walk/run intervals in the rehab plan"
+                " without flare-ups."
+            ),
             target_date=_date("2026-06-30"),
             timeframe="monthly",
             activity_class_id="cls-foot",
@@ -137,7 +140,10 @@ def _goals() -> list[Goal]:
             id="goal-low-impact-weekly",
             user_id=LOCAL_USER_ID,
             title="Achieve 3× weekly Low-Impact sessions",
-            description="Maintain at least 3 low-impact recovery sessions per week for a full quarter.",
+            description=(
+                "Maintain at least 3 low-impact recovery sessions per week"
+                " for a full quarter."
+            ),
             target_date=_date("2026-09-30"),
             timeframe="quarterly",
             activity_class_id="cls-recovery",
@@ -293,7 +299,8 @@ def _activity_logs() -> list[ActivityLog]:
         _activity_log(
             "log-06", "act-walk", "2026-04-17", 25, 2.5, "km", 5, "mild_discomfort",
             [_violation("rule-rest-foot", "rest_between_class",
-                        "Only 3 days since last foot-load session — rest window not complete", "caution")],
+                        "Only 3 days since last foot-load session"
+                        " — rest window not complete", "caution")],
         ),
         _activity_log("log-07", "act-pool", "2026-04-19", 20, 20, "minutes", 2, "fine"),
         _activity_log("log-08", "act-walk", "2026-04-21", 30, 3.0, "km", 5, "fine"),
@@ -301,7 +308,8 @@ def _activity_logs() -> list[ActivityLog]:
         _activity_log(
             "log-10", "act-bike", "2026-04-24", 20, 20, "minutes", 5, "bad",
             [_violation("rule-rest-foot", "rest_between_class",
-                        "Breaks 3-day rest rule for foot load — only 3 days since morning walk", "caution")],
+                        "Breaks 3-day rest rule for foot load"
+                        " — only 3 days since morning walk", "caution")],
         ),
         _activity_log("log-11", "act-stretch", "2026-04-28", 15, 15, "minutes", 1, "fine"),
         _activity_log("log-12", "act-pool", "2026-04-30", 20, 20, "minutes", 2, "fine"),
@@ -316,12 +324,14 @@ def _activity_logs() -> list[ActivityLog]:
         _activity_log(
             "log-21", "act-bike", "2026-05-15", 20, 20, "minutes", 5, "mild_discomfort",
             [_violation("rule-rest-foot", "rest_between_class",
-                        "Breaks 3-day rest rule for foot load — 2 days since last walk", "caution")],
+                        "Breaks 3-day rest rule for foot load"
+                        " — 2 days since last walk", "caution")],
         ),
         _activity_log(
             "log-22", "act-walk", "2026-05-16", 30, 3.0, "km", 7, "bad",
             [_violation("rule-rest-foot", "rest_between_class",
-                        "Breaks 3-day rest rule for foot load — 1 day since last session", "danger")],
+                        "Breaks 3-day rest rule for foot load"
+                        " — 1 day since last session", "danger")],
         ),
         _activity_log("log-23", "act-stretch", "2026-05-19", 15, 15, "minutes", 1, "fine"),
         _activity_log("log-24", "act-pool", "2026-05-21", 20, 20, "minutes", 2, "fine"),

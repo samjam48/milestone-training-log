@@ -31,7 +31,7 @@ export const AppShell = React.forwardRef<HTMLDivElement, AppShellProps>(
       <div
         ref={ref}
         className={cn(
-          // Canvas — bounded viewport column so Tier-3 screens can use h-full + internal scroll
+          // Canvas — bounded viewport column. Content within scrolls independently; AppShell is not a scroll container.
           'flex min-h-screen h-dvh w-full flex-col bg-bg text-ink font-sans antialiased',
           // Safe-area top inset (status bar on notched devices)
           'pt-safe-top',

@@ -98,14 +98,16 @@ export function App(): React.ReactElement {
   } else if (activeTab === 'goals') {
     mainContent = <GoalsScreen engine={engine} />;
   } else if (activeTab === 'settings') {
-    mainContent = <SettingsScreen engine={engine} />;
+    mainContent = (
+      <SettingsScreen engine={engine} />
+    );
   } else {
     mainContent = <ComingSoonPlaceholder />;
   }
 
   return (
     <AppShell withTabBar={showTabBar}>
-      <div className="flex min-h-0 flex-1 flex-col">{mainContent}</div>
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">{mainContent}</div>
       {showTabBar && (
         <BottomTabBar active={activeTab} onChange={setActiveTab} />
       )}

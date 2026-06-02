@@ -1,9 +1,10 @@
-import type { TrainingBlock } from '../../types';
+import type { DailySafetyScore, TrainingBlock } from '../../types';
 import { apiFetch, apiFetchOrNullOn404 } from './client';
 import {
   mapTrainingBlockCreateBody,
   mapTrainingBlockFromApi,
   mapTrainingBlockPatchBody,
+  mapDailySafetyScoreFromApi,
 } from './mappers';
 
 type TrainingBlockRead = Omit<TrainingBlock, 'userId'>;
@@ -37,4 +38,16 @@ export async function patchTrainingBlock(
     body: JSON.stringify(mapTrainingBlockPatchBody(draft)),
   });
   return mapTrainingBlockFromApi(raw);
+}
+
+interface TrainingBlockScoresResponse {
+  block_id: string;
+  start_date: string;
+  end_date: string;
+  scores: Record<string, unknown>[];
+}
+
+export async function getTrainingBlockScores(blockId: string): Promise<DailySafetyScore[]> {
+  const raw = await apiFetch<TrainingBlockScoresResponse>(`/training-blocks/${blockId}/scores`);
+  return raw.scores.map((item) => mapDailySafetyScoreFromApi(item));
 }

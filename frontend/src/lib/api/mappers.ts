@@ -467,7 +467,7 @@ function mapWeeklyProgressFromApi(raw: Record<string, unknown>): WeeklyProgress 
   };
 }
 
-function mapDailySafetyScoreFromApi(raw: Record<string, unknown>) {
+export function mapDailySafetyScoreFromApi(raw: Record<string, unknown>) {
   const violations = raw.violations;
   return {
     date: String(raw.date) as ISODate,

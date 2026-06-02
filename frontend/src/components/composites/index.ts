@@ -19,3 +19,6 @@ export type {
   SuggestedActivityCardProps,
   Suggestion,
 } from './SuggestedActivityCard';
+
+export { BlockSafetyMapSection } from './BlockSafetyMapSection';
+export type { BlockSafetyMapSectionProps } from './BlockSafetyMapSection';
