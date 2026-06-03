@@ -7,7 +7,15 @@ import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
 
-from app.tests.helpers.seed import seed_goal, seed_training_block
+from app.tests.helpers.load_api_seed import seed_daily_check_in, seed_flare_up_incident
+from app.tests.helpers.seed import (
+    seed_activity,
+    seed_activity_class,
+    seed_activity_log,
+    seed_goal,
+    seed_rule,
+    seed_training_block,
+)
 
 
 def _assert_training_block_payload(
@@ -35,6 +43,119 @@ def _assert_training_block_payload(
     datetime.fromisoformat(payload["created_at"])
     datetime.fromisoformat(payload["updated_at"])
     assert "user_id" not in payload
+
+
+def _assert_training_block_review_payload(
+    payload: dict[str, Any],
+    *,
+    block_id: str,
+    name: str,
+    start_date: str,
+    status: str,
+    end_date: str | None,
+    total_sessions: int,
+    clean_days: int,
+) -> None:
+    block = payload["block"]
+    assert block["id"] == block_id
+    assert block["name"] == name
+    assert block["start_date"] == start_date
+    assert block["status"] == status
+    assert block["end_date"] == end_date
+    assert "created_at" in block
+    assert "updated_at" in block
+    datetime.fromisoformat(block["created_at"])
+    datetime.fromisoformat(block["updated_at"])
+    assert "user_id" not in block
+    assert isinstance(payload["daily_scores"], list)
+    assert isinstance(payload["load_series"], list)
+    assert isinstance(payload["flare_up_dates"], list)
+    assert payload["total_sessions"] == total_sessions
+    assert payload["clean_days"] == clean_days
+
+
+def _seed_review_block_graph(
+    app_with_test_database: FastAPI,
+    *,
+    block_id: str,
+    block_start: date,
+    block_end: date | None,
+    block_status: str,
+    seed_rules: bool,
+) -> None:
+    seed_training_block(
+        app_with_test_database,
+        block_id=block_id,
+        name="Review Block",
+        start_date=block_start,
+        end_date=block_end,
+        status=block_status,
+    )
+    seed_activity_class(
+        app_with_test_database,
+        class_id="cls-foot-review",
+        name="Foot Load",
+        class_type="performance",
+        default_recovery_window_days=3,
+    )
+    seed_activity(
+        app_with_test_database,
+        activity_id="act-walk-review",
+        activity_class_id="cls-foot-review",
+        name="Morning Walk",
+        activity_type="performance",
+        default_volume_unit="km",
+    )
+    if seed_rules:
+        seed_rule(
+            app_with_test_database,
+            rule_id="rule-cap-review",
+            training_block_id=block_id,
+            rule_type="weekly_load_cap",
+            threshold_value=120,
+            window_days=7,
+            activity_class_id="cls-foot-review",
+            enabled=True,
+        )
+    seed_activity_log(
+        app_with_test_database,
+        log_id="log-review-in-range",
+        activity_id="act-walk-review",
+        logged_date=date(2026, 4, 8),
+        volume_value=1.5,
+        volume_unit="km",
+        rpe=3,
+    )
+    seed_activity_log(
+        app_with_test_database,
+        log_id="log-review-outside-range",
+        activity_id="act-walk-review",
+        logged_date=date(2026, 4, 12),
+        volume_value=1.5,
+        volume_unit="km",
+        rpe=3,
+    )
+    seed_daily_check_in(
+        app_with_test_database,
+        check_in_id="ci-review-in-range",
+        check_in_date=date(2026, 4, 8),
+        pain_level=2,
+        has_flare_up=False,
+    )
+    seed_flare_up_incident(
+        app_with_test_database,
+        incident_id="incident-review-in-range",
+        incident_date=date(2026, 4, 9),
+        body_part="Left heel",
+        severity=6,
+    )
+    seed_flare_up_incident(
+        app_with_test_database,
+        incident_id="incident-review-outside-range",
+        incident_date=date(2026, 4, 12),
+        body_part="Left heel",
+        severity=6,
+    )
 
 
 async def test_list_training_blocks_returns_empty_list(client: AsyncClient) -> None:
@@ -512,3 +633,127 @@ async def test_patch_training_block_rejects_null_required_fields_without_changin
         start_date="2026-04-07",
         status="archived",
     )
+
+
+async def test_get_training_block_review_returns_not_found_for_missing_block(
+    client: AsyncClient,
+) -> None:
+    response = await client.get("/api/training-blocks/missing-block/review")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Training block not found"}
+
+
+async def test_get_training_block_review_returns_review_payload_for_completed_block(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    _seed_review_block_graph(
+        app_with_test_database,
+        block_id="blk-review-complete",
+        block_start=date(2026, 4, 7),
+        block_end=date(2026, 4, 10),
+        block_status="completed",
+        seed_rules=True,
+    )
+
+    response = await client.get("/api/training-blocks/blk-review-complete/review")
+
+    assert response.status_code == 200
+    payload = response.json()
+    _assert_training_block_review_payload(
+        payload,
+        block_id="blk-review-complete",
+        name="Review Block",
+        start_date="2026-04-07",
+        status="completed",
+        end_date="2026-04-10",
+        total_sessions=1,
+        clean_days=3,
+    )
+    assert len(payload["load_series"]) == 4
+    assert payload["load_series"][0]["date"] == "2026-04-07"
+    assert payload["load_series"][-1]["date"] == "2026-04-10"
+    assert [score["date"] for score in payload["daily_scores"]] == [
+        "2026-04-08",
+        "2026-04-09",
+    ]
+    assert payload["flare_up_dates"] == ["2026-04-09"]
+    assert payload["load_series"]
+
+
+async def test_get_training_block_review_supports_open_block_and_defaults_end_date_to_today(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    _seed_review_block_graph(
+        app_with_test_database,
+        block_id="blk-review-open",
+        block_start=date(2026, 5, 1),
+        block_end=None,
+        block_status="active",
+        seed_rules=True,
+    )
+    seed_activity_log(
+        app_with_test_database,
+        log_id="log-review-open-in-range",
+        activity_id="act-walk-review",
+        logged_date=date(2026, 5, 2),
+        volume_value=1.5,
+        volume_unit="km",
+        rpe=3,
+    )
+    seed_daily_check_in(
+        app_with_test_database,
+        check_in_id="ci-review-open-in-range",
+        check_in_date=date(2026, 5, 2),
+        pain_level=2,
+        has_flare_up=False,
+    )
+    seed_flare_up_incident(
+        app_with_test_database,
+        incident_id="incident-review-open-in-range",
+        incident_date=date(2026, 5, 3),
+        body_part="Left heel",
+        severity=6,
+    )
+
+    response = await client.get("/api/training-blocks/blk-review-open/review")
+
+    assert response.status_code == 200
+    payload = response.json()
+    expected_clean_days = (date.today() - date(2026, 5, 1)).days
+    _assert_training_block_review_payload(
+        payload,
+        block_id="blk-review-open",
+        name="Review Block",
+        start_date="2026-05-01",
+        status="active",
+        end_date=None,
+        total_sessions=1,
+        clean_days=expected_clean_days,
+    )
+    assert payload["block"]["end_date"] is None
+    assert payload["daily_scores"]
+    assert payload["load_series"]
+    assert payload["flare_up_dates"]
+
+
+async def test_get_training_block_review_empty_load_series_without_graph_class(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    seed_training_block(
+        app_with_test_database,
+        block_id="blk-review-empty",
+        name="Review Block Empty",
+        start_date=date(2026, 5, 1),
+        status="active",
+    )
+
+    response = await client.get("/api/training-blocks/blk-review-empty/review")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["block"]["id"] == "blk-review-empty"
+    assert payload["load_series"] == []

@@ -46,7 +46,7 @@ Use this alongside:
 | `POST` | `/api/training-blocks` | Create a new block; service automatically copies rules from the current active block and marks it `completed` |
 | `GET` | `/api/training-blocks/active` | Fetch the active block, if one exists |
 | `PATCH` | `/api/training-blocks/{block_id}` | Update block metadata or lifecycle status |
-| `GET` | `/api/training-blocks/{block_id}/review` | Per-block review payload: `block`, `daily_scores`, `load_series`, `flare_up_dates` — scoped to block date range; used by `BlockReviewScreen` for both active and historical blocks |
+| `GET` | `/api/training-blocks/{block_id}/review` | Per-block review payload: `block`, `daily_scores`, `load_series`, `flare_up_dates`, `total_sessions`, `clean_days` — scoped to block date range; used by `BlockReviewScreen` for both active and historical blocks |
 
 ### Activity Classes
 

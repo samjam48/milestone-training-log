@@ -25,7 +25,7 @@ from app.schemas.load import (
     SuggestionRead,
     WeeklyProgressRead,
 )
-from app.schemas.load_engine import ActivityClassDict, RuleDict
+from app.schemas.load_engine import RuleDict
 from app.schemas.training_blocks import TrainingBlockRead
 from app.services.activities import list_activities
 from app.services.activity_classes import list_activity_classes
@@ -49,6 +49,7 @@ from app.services.load_queries import (
     incident_dict,
     log_dict,
     resolve_as_of,
+    resolve_graph_class_id,
     rule_dict,
     weekly_target_dict,
 )
@@ -141,7 +142,7 @@ def get_dashboard(session: Session, *, as_of: date | None = None) -> DashboardRe
         else []
     )
 
-    graph_class_id = _resolve_graph_class_id(rule_dicts, class_dicts)
+    graph_class_id = resolve_graph_class_id(rule_dicts, class_dicts)
     load_series = (
         compute_load_series(
             graph_class_id,
@@ -206,32 +207,6 @@ def _build_previous_blocks(session: Session) -> list[TrainingBlockRead]:
         )
     )
     return [TrainingBlockRead.model_validate(block) for block in blocks]
-
-
-def _resolve_graph_class_id(
-    rules: list[RuleDict],
-    activity_classes: list[ActivityClassDict],
-) -> str | None:
-    enabled_caps = sorted(
-        (
-            rule
-            for rule in rules
-            if rule.get("enabled", True)
-            and rule["rule_type"] == "weekly_load_cap"
-            and rule.get("activity_class_id")
-        ),
-        key=lambda rule: rule["activity_class_id"],
-    )
-    if enabled_caps:
-        class_id = enabled_caps[0]["activity_class_id"]
-        return str(class_id) if class_id is not None else None
-
-    performance_class_ids = sorted(
-        cls["id"] for cls in activity_classes if cls.get("type") == "performance"
-    )
-    if performance_class_ids:
-        return str(performance_class_ids[0])
-    return None
 
 
 def _week_load_threshold(graph_class_id: str | None, rules: list[RuleDict]) -> int:

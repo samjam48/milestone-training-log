@@ -4,12 +4,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session
 
 from app.database import get_session
+from app.schemas.block_review import BlockReviewRead
 from app.schemas.block_scores import BlockScoresRead
 from app.schemas.training_blocks import (
     TrainingBlockCreate,
     TrainingBlockPatch,
     TrainingBlockRead,
 )
+from app.services.block_review import get_block_review
 from app.services.block_scores import get_block_scores
 from app.services.training_blocks import (
     GoalNotFoundError,
@@ -53,6 +55,20 @@ async def get_block_scores_route(
 ) -> BlockScoresRead:
     try:
         return get_block_scores(session, block_id)
+    except TrainingBlockNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Training block not found",
+        ) from exc
+
+
+@router.get("/{block_id}/review", response_model=BlockReviewRead)
+async def get_block_review_route(
+    block_id: str,
+    session: SessionDep,
+) -> BlockReviewRead:
+    try:
+        return get_block_review(session, block_id)
     except TrainingBlockNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
