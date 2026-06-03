@@ -1,11 +1,13 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+from uuid import uuid4
 
 from sqlmodel import Session, col, select
 
-from app.models.block import TrainingBlock
+from app.models.block import Rule, TrainingBlock
 from app.models.goal import Goal
 from app.schemas.training_blocks import TrainingBlockCreate, TrainingBlockPatch
 from app.services.local_scope import LOCAL_USER_ID, next_updated_at
+from app.services.rules import list_rules
 
 
 class TrainingBlockAlreadyExistsError(Exception):
@@ -66,10 +68,20 @@ def create_training_block(session: Session, payload: TrainingBlockCreate) -> Tra
         updated_at=now,
     )
     session.add(training_block)
+    copied_from_rules: list[Rule] = []
     if payload.status == "active":
-        _complete_other_active_blocks(session, exclude_block_id=payload.id)
+        outgoing_active_blocks = _get_other_active_blocks(session, exclude_block_id=payload.id)
+        if outgoing_active_blocks:
+            copied_from_rules = _copy_rules_to_block(
+                session,
+                source_block_id=outgoing_active_blocks[0].id,
+                target_block_id=payload.id,
+            )
+        _complete_active_blocks(session, outgoing_active_blocks, set_missing_end_date=True)
     session.commit()
     session.refresh(training_block)
+    for source_rule in copied_from_rules:
+        session.refresh(source_rule)
     return training_block
 
 
@@ -91,7 +103,11 @@ def update_training_block(
         training_block.updated_at = next_updated_at(training_block.updated_at)
 
     if updates.get("status") == "active":
-        _complete_other_active_blocks(session, exclude_block_id=block_id)
+        _complete_active_blocks(
+            session,
+            _get_other_active_blocks(session, exclude_block_id=block_id),
+            set_missing_end_date=False,
+        )
 
     session.add(training_block)
     session.commit()
@@ -99,16 +115,51 @@ def update_training_block(
     return training_block
 
 
-def _complete_other_active_blocks(session: Session, *, exclude_block_id: str) -> None:
+def _get_other_active_blocks(session: Session, *, exclude_block_id: str) -> list[TrainingBlock]:
     statement = select(TrainingBlock).where(
         TrainingBlock.user_id == LOCAL_USER_ID,
         TrainingBlock.status == "active",
         TrainingBlock.id != exclude_block_id,
     )
-    for other_block in session.exec(statement).all():
-        other_block.status = "completed"
-        other_block.updated_at = next_updated_at(other_block.updated_at)
-        session.add(other_block)
+    return list(session.exec(statement).all())
+
+
+def _complete_active_blocks(
+    session: Session,
+    training_blocks: list[TrainingBlock],
+    *,
+    set_missing_end_date: bool,
+) -> None:
+    for training_block in training_blocks:
+        training_block.status = "completed"
+        if set_missing_end_date and training_block.end_date is None:
+            training_block.end_date = date.today()
+        training_block.updated_at = next_updated_at(training_block.updated_at)
+        session.add(training_block)
+
+
+def _copy_rules_to_block(
+    session: Session,
+    *,
+    source_block_id: str,
+    target_block_id: str,
+) -> list[Rule]:
+    now = datetime.now(UTC)
+    source_rules = list_rules(session, source_block_id)
+    for source_rule in source_rules:
+        rule = Rule(
+            id=f"rule-{uuid4()}",
+            training_block_id=target_block_id,
+            activity_class_id=source_rule.activity_class_id,
+            rule_type=source_rule.rule_type,
+            threshold_value=source_rule.threshold_value,
+            window_days=source_rule.window_days,
+            enabled=source_rule.enabled,
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(rule)
+    return source_rules
 
 
 def _ensure_local_goal_exists(session: Session, goal_id: str) -> None:

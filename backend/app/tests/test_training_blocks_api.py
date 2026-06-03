@@ -757,3 +757,212 @@ async def test_get_training_block_review_empty_load_series_without_graph_class(
     payload = response.json()
     assert payload["block"]["id"] == "blk-review-empty"
     assert payload["load_series"] == []
+
+
+async def test_create_active_training_block_copies_previous_active_rules_and_closes_outgoing_block(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    seed_activity_class(
+        app_with_test_database,
+        class_id="cls-foot",
+        name="Foot Load",
+    )
+    seed_training_block(
+        app_with_test_database,
+        block_id="blk-old-active",
+        name="Old Active",
+        start_date=date(2026, 4, 7),
+        status="active",
+    )
+    seed_rule(
+        app_with_test_database,
+        rule_id="rule-old-load",
+        training_block_id="blk-old-active",
+        activity_class_id="cls-foot",
+        rule_type="weekly_load_cap",
+        threshold_value=120.0,
+        window_days=7,
+        enabled=True,
+    )
+    seed_rule(
+        app_with_test_database,
+        rule_id="rule-old-rest",
+        training_block_id="blk-old-active",
+        activity_class_id=None,
+        rule_type="frequency_limit",
+        threshold_value=3.0,
+        window_days=7,
+        enabled=False,
+    )
+    seed_rule(
+        app_with_test_database,
+        rule_id="rule-old-gap",
+        training_block_id="blk-old-active",
+        activity_class_id="cls-foot",
+        rule_type="rest_between_class",
+        threshold_value=2.0,
+        window_days=7,
+        enabled=True,
+    )
+
+    response = await client.post(
+        "/api/training-blocks",
+        json={
+            "id": "blk-new-active",
+            "name": "New Active",
+            "start_date": "2026-05-01",
+            "status": "active",
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["status"] == "active"
+
+    new_rules_response = await client.get("/api/training-blocks/blk-new-active/rules")
+    assert new_rules_response.status_code == 200
+    new_rules = new_rules_response.json()
+    assert len(new_rules) == 3
+    assert {rule["training_block_id"] for rule in new_rules} == {"blk-new-active"}
+    assert {rule["id"] for rule in new_rules}.isdisjoint(
+        {"rule-old-load", "rule-old-rest", "rule-old-gap"}
+    )
+    assert {
+        (
+            rule["activity_class_id"],
+            rule["rule_type"],
+            rule["threshold_value"],
+            rule["window_days"],
+            rule["enabled"],
+        )
+        for rule in new_rules
+    } == {
+        ("cls-foot", "weekly_load_cap", 120.0, 7, True),
+        (None, "frequency_limit", 3.0, 7, False),
+        ("cls-foot", "rest_between_class", 2.0, 7, True),
+    }
+
+    blocks_response = await client.get("/api/training-blocks")
+    assert blocks_response.status_code == 200
+    blocks_by_id = {block["id"]: block for block in blocks_response.json()}
+    assert blocks_by_id["blk-old-active"]["status"] == "completed"
+    assert blocks_by_id["blk-old-active"]["end_date"] == str(date.today())
+
+    old_rules_response = await client.get("/api/training-blocks/blk-old-active/rules")
+    assert old_rules_response.status_code == 200
+    assert {rule["id"] for rule in old_rules_response.json()} == {
+        "rule-old-load",
+        "rule-old-rest",
+        "rule-old-gap",
+    }
+
+
+async def test_create_active_training_block_preserves_existing_end_date_while_copying_rules(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    seed_activity_class(
+        app_with_test_database,
+        class_id="cls-foot-preserve",
+        name="Foot Load",
+    )
+    seed_training_block(
+        app_with_test_database,
+        block_id="blk-old-preserve",
+        name="Old Active Preserve",
+        start_date=date(2026, 4, 7),
+        end_date=date(2026, 5, 31),
+        status="active",
+    )
+    seed_rule(
+        app_with_test_database,
+        rule_id="rule-old-preserve",
+        training_block_id="blk-old-preserve",
+        activity_class_id="cls-foot-preserve",
+        rule_type="weekly_load_cap",
+        threshold_value=150.0,
+        window_days=7,
+        enabled=True,
+    )
+
+    response = await client.post(
+        "/api/training-blocks",
+        json={
+            "id": "blk-new-preserve",
+            "name": "New Active Preserve",
+            "start_date": "2026-06-01",
+            "status": "active",
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["status"] == "active"
+
+    blocks_response = await client.get("/api/training-blocks")
+    assert blocks_response.status_code == 200
+    blocks_by_id = {block["id"]: block for block in blocks_response.json()}
+    assert blocks_by_id["blk-old-preserve"]["status"] == "completed"
+    assert blocks_by_id["blk-old-preserve"]["end_date"] == "2026-05-31"
+
+    new_rules_response = await client.get("/api/training-blocks/blk-new-preserve/rules")
+    assert new_rules_response.status_code == 200
+    assert len(new_rules_response.json()) == 1
+    assert new_rules_response.json()[0]["activity_class_id"] == "cls-foot-preserve"
+
+
+async def test_create_completed_training_block_does_not_copy_or_archive_existing_active_block(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    seed_activity_class(
+        app_with_test_database,
+        class_id="cls-foot-completed",
+        name="Foot Load",
+    )
+    seed_training_block(
+        app_with_test_database,
+        block_id="blk-active-completed",
+        name="Current Active",
+        start_date=date(2026, 4, 7),
+        status="active",
+    )
+    seed_rule(
+        app_with_test_database,
+        rule_id="rule-active-completed",
+        training_block_id="blk-active-completed",
+        activity_class_id="cls-foot-completed",
+        rule_type="weekly_load_cap",
+        threshold_value=100.0,
+        window_days=7,
+        enabled=True,
+    )
+
+    response = await client.post(
+        "/api/training-blocks",
+        json={
+            "id": "blk-completed",
+            "name": "Completed Block",
+            "start_date": "2026-05-01",
+            "status": "completed",
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["status"] == "completed"
+
+    blocks_response = await client.get("/api/training-blocks")
+    assert blocks_response.status_code == 200
+    blocks_by_id = {block["id"]: block for block in blocks_response.json()}
+    assert blocks_by_id["blk-active-completed"]["status"] == "active"
+    assert blocks_by_id["blk-active-completed"]["end_date"] is None
+    assert blocks_by_id["blk-completed"]["status"] == "completed"
+
+    active_rules_response = await client.get("/api/training-blocks/blk-active-completed/rules")
+    assert active_rules_response.status_code == 200
+    assert {rule["id"] for rule in active_rules_response.json()} == {
+        "rule-active-completed"
+    }
+
+    new_rules_response = await client.get("/api/training-blocks/blk-completed/rules")
+    assert new_rules_response.status_code == 200
+    assert new_rules_response.json() == []
