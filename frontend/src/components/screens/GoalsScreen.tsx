@@ -18,6 +18,8 @@ import type { ActivityClass, Goal, GoalTimeframe, SafetyState } from '../../type
 
 export interface GoalsScreenProps {
   engine: MilestoneEngineResult;
+  /** When provided, clicking "+ New Goal" calls this instead of opening the inline form. */
+  onNewGoal?: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -449,7 +451,7 @@ function NewGoalForm({ open, onClose, activityClasses, onCreate }: NewGoalFormPr
 // GoalsScreen
 // ---------------------------------------------------------------------------
 
-export function GoalsScreen({ engine }: GoalsScreenProps): React.ReactElement {
+export function GoalsScreen({ engine, onNewGoal }: GoalsScreenProps): React.ReactElement {
   const { goals, activityClasses, archiveGoal, createGoal, updateGoal } = engine;
 
   const classMap = React.useMemo(
@@ -654,7 +656,13 @@ export function GoalsScreen({ engine }: GoalsScreenProps): React.ReactElement {
       >
         <button
           type="button"
-          onClick={() => setFormOpen(true)}
+          onClick={() => {
+            if (onNewGoal != null) {
+              onNewGoal();
+            } else {
+              setFormOpen(true);
+            }
+          }}
           className="pointer-events-auto w-full h-12 rounded-md bg-ink text-ink-inverse text-body-lg font-semibold transition-colors duration-snap active:opacity-80"
         >
           + New Goal

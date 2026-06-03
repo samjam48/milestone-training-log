@@ -13,6 +13,7 @@ import {
 import { useMilestoneEngine } from './hooks/useMilestoneEngine';
 
 type OverlayKey = 'check-in' | 'log-activity' | 'log-incident';
+type StackEntry = { screen: string; params: Record<string, unknown> };
 
 function resolveLogActivityPrefill(
   prefillId: string | undefined,
@@ -30,6 +31,23 @@ function ComingSoonPlaceholder(): React.ReactElement {
   );
 }
 
+function resolveStackScreen(
+  entry: StackEntry,
+  onPop: () => void,
+): React.ReactElement {
+  if (entry.screen === 'goal-editor') {
+    return (
+      <div data-testid="goal-editor-placeholder">
+        <button type="button" onClick={onPop}>
+          Back
+        </button>
+        Goal Editor (coming soon)
+      </div>
+    );
+  }
+  return <></>;
+}
+
 export function App(): React.ReactElement {
   const engine = useMilestoneEngine();
   const [activeTab, setActiveTab] = React.useState<TabKey>('dashboard');
@@ -37,8 +55,13 @@ export function App(): React.ReactElement {
   const [logActivityPrefillId, setLogActivityPrefillId] = React.useState<
     string | undefined
   >(undefined);
+  const [screenStack, setScreenStack] = React.useState<StackEntry[]>([]);
 
-  const showTabBar = overlay === null;
+  const pushScreen = (screen: string, params: Record<string, unknown> = {}): void =>
+    setScreenStack((s) => [...s, { screen, params }]);
+  const popScreen = (): void => setScreenStack((s) => s.slice(0, -1));
+
+  const showTabBar = overlay === null && screenStack.length === 0;
 
   const closeOverlay = (): void => {
     setOverlay(null);
@@ -96,7 +119,12 @@ export function App(): React.ReactElement {
       />
     );
   } else if (activeTab === 'goals') {
-    mainContent = <GoalsScreen engine={engine} />;
+    mainContent = (
+      <GoalsScreen
+        engine={engine}
+        onNewGoal={() => pushScreen('goal-editor')}
+      />
+    );
   } else if (activeTab === 'settings') {
     mainContent = (
       <SettingsScreen engine={engine} />
@@ -105,12 +133,31 @@ export function App(): React.ReactElement {
     mainContent = <ComingSoonPlaceholder />;
   }
 
+  const topEntry = screenStack.length > 0 ? screenStack[screenStack.length - 1] : null;
+
   return (
     <AppShell withTabBar={showTabBar}>
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">{mainContent}</div>
       {showTabBar && (
         <BottomTabBar active={activeTab} onChange={setActiveTab} />
       )}
+      {topEntry != null && (
+        <div
+          data-testid="stack-screen-overlay"
+          className="absolute inset-0 z-40 flex flex-col bg-bg"
+        >
+          {resolveStackScreen(topEntry, popScreen)}
+        </div>
+      )}
+      {/* Test affordance — allows exercising pushScreen with an unknown key */}
+      <button
+        type="button"
+        data-testid="test-push-unknown-screen"
+        onClick={() => pushScreen('unknown-key')}
+        style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', opacity: 0 }}
+        tabIndex={-1}
+        aria-hidden="true"
+      />
     </AppShell>
   );
 }

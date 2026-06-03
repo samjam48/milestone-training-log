@@ -230,3 +230,110 @@ describe('Dashboard suggestion → Log Activity prefill (C6.3)', () => {
     expect(screen.queryByRole('button', { name: 'Log lightly' })).not.toBeInTheDocument();
   });
 });
+
+describe('Screen stack — push/pop navigation (F8.2)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetMockEngine();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('stack starts empty — initial render shows a tab screen with no stack overlay', () => {
+    renderWithProviders(<App />);
+    // The tab bar must be present (stack is empty, no overlay)
+    expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
+    // No stack overlay should exist on initial render
+    expect(screen.queryByTestId('stack-screen-overlay')).not.toBeInTheDocument();
+  });
+
+  it('pushing goal-editor onto stack renders the overlay and hides the tab bar', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    // Navigate to Goals tab and click the "+ New Goal" button which will push goal-editor
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Goals' }));
+    await user.click(screen.getByRole('button', { name: /\+ new goal/i }));
+
+    // Stack overlay must appear
+    expect(screen.getByTestId('stack-screen-overlay')).toBeInTheDocument();
+    // Tab bar must be hidden when stack is non-empty
+    expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
+  });
+
+  it('popping the stack removes the overlay and restores the tab bar', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    // Push goal-editor onto the stack
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Goals' }));
+    await user.click(screen.getByRole('button', { name: /\+ new goal/i }));
+
+    expect(screen.getByTestId('stack-screen-overlay')).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
+
+    // Pop the stack via the back button inside the overlay
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+
+    // Overlay must be gone, tab bar restored
+    expect(screen.queryByTestId('stack-screen-overlay')).not.toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
+  });
+
+  it('regression — check-in overlay still hides the tab bar and restores it on close', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    await user.click(screen.getByRole('button', { name: 'Complete morning check-in' }));
+    expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Go back' }));
+    expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
+  });
+
+  it('regression — log-activity overlay still hides the tab bar and restores it on close', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
+    await user.click(screen.getByRole('button', { name: '+ Log Activity' }));
+    expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
+  });
+
+  it('regression — log-incident overlay still hides the tab bar and restores it on close', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
+    await user.click(screen.getByRole('button', { name: '+ Log Incident' }));
+    expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
+  });
+
+  it('pushing an unknown stack key renders nothing (no crash, no overlay content)', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    // Use the test affordance button to push an unknown key
+    const triggerBtn = screen.queryByTestId('test-push-unknown-screen');
+    if (triggerBtn !== null) {
+      await user.click(triggerBtn);
+      // An overlay wrapper may render but it should have no visible content
+      const overlay = screen.queryByTestId('stack-screen-overlay');
+      if (overlay !== null) {
+        expect(overlay.textContent).toBe('');
+      }
+    } else {
+      // If no test affordance exists yet, the implementation hasn't landed —
+      // this path intentionally fails to signal missing test infrastructure.
+      expect(screen.getByTestId('test-push-unknown-screen')).toBeInTheDocument();
+    }
+  });
+});
