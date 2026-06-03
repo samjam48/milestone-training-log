@@ -230,6 +230,23 @@ function makeEngine(
   return { ...mockEngine, ...overrides };
 }
 
+interface SettingsScreenCallbackProps {
+  engine: typeof mockEngine;
+  onEditRules?: () => void;
+  onReview?: () => void;
+  onNewBlock?: () => void;
+  onViewBlock?: (blockId: string) => void;
+  onEditActivity?: (activity: Activity) => void;
+}
+
+const SettingsScreenWithCallbacks = SettingsScreen as unknown as (
+  props: SettingsScreenCallbackProps,
+) => JSX.Element;
+
+function renderSettingsScreenWithCallbacks(props: SettingsScreenCallbackProps): void {
+  renderWithProviders(<SettingsScreenWithCallbacks {...props} />);
+}
+
 // ---------------------------------------------------------------------------
 // 1. Active Block Card — basic render
 // ---------------------------------------------------------------------------
@@ -611,6 +628,118 @@ describe('SettingsScreen — Activities Manager', () => {
     renderWithProviders(<SettingsScreen engine={engine} />);
 
     expect(screen.queryByText(ACTIVITY_INACTIVE.name)).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 9b. Stack action callbacks
+// ---------------------------------------------------------------------------
+
+describe('SettingsScreen — stack action callbacks', () => {
+  it('calls onEditRules and does not open the inline form when Edit rules is clicked', async () => {
+    const user = userEvent.setup();
+    const onEditRules = vi.fn();
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      rules: [RULE_REST],
+      weeklyTargets: [],
+      activityClasses: [CLASS_RUNNING],
+    });
+
+    renderSettingsScreenWithCallbacks({ engine, onEditRules });
+
+    await user.click(screen.getByRole('button', { name: /edit rules/i }));
+
+    expect(onEditRules).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('dialog', { name: /edit rules/i })).not.toBeInTheDocument();
+  });
+
+  it('calls onReview when Review is clicked', async () => {
+    const user = userEvent.setup();
+    const onReview = vi.fn();
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      rules: [],
+      weeklyTargets: [],
+      activityClasses: [],
+    });
+
+    renderSettingsScreenWithCallbacks({ engine, onReview });
+
+    await user.click(screen.getByRole('button', { name: /review/i }));
+
+    expect(onReview).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls onNewBlock and does not open the inline sheet when + New Training Block is clicked', async () => {
+    const user = userEvent.setup();
+    const onNewBlock = vi.fn();
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+    });
+
+    renderSettingsScreenWithCallbacks({ engine, onNewBlock });
+
+    await user.click(screen.getByRole('button', { name: /\+ new training block/i }));
+
+    expect(onNewBlock).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('dialog', { name: /new training block/i })).not.toBeInTheDocument();
+  });
+
+  it('calls onViewBlock with the previous block id when View is clicked', async () => {
+    const user = userEvent.setup();
+    const onViewBlock = vi.fn();
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      previousBlocks: [PREVIOUS_BLOCK_1],
+      rules: [],
+      weeklyTargets: [],
+      activityClasses: [],
+    });
+
+    renderSettingsScreenWithCallbacks({ engine, onViewBlock });
+
+    await user.click(screen.getByRole('button', { name: /view/i }));
+
+    expect(onViewBlock).toHaveBeenCalledTimes(1);
+    expect(onViewBlock).toHaveBeenCalledWith(PREVIOUS_BLOCK_1.id);
+  });
+
+  it('calls onEditActivity with the activity when Edit is clicked', async () => {
+    const user = userEvent.setup();
+    const onEditActivity = vi.fn();
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [CLASS_RUNNING],
+      activities: [ACTIVITY_RUNNING],
+      logs: [],
+    });
+
+    renderSettingsScreenWithCallbacks({ engine, onEditActivity });
+
+    await user.click(screen.getByRole('button', { name: /edit morning run/i }));
+
+    expect(onEditActivity).toHaveBeenCalledTimes(1);
+    expect(onEditActivity).toHaveBeenCalledWith(ACTIVITY_RUNNING);
+  });
+
+  it('calls engine.deactivateActivity with the activity id when Deactivate is clicked', async () => {
+    const user = userEvent.setup();
+    const deactivateActivity = vi.fn();
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [CLASS_RUNNING],
+      activities: [ACTIVITY_RUNNING],
+      logs: [],
+      deactivateActivity,
+    });
+
+    renderSettingsScreenWithCallbacks({ engine });
+
+    await user.click(screen.getByRole('button', { name: /deactivate morning run/i }));
+
+    expect(deactivateActivity).toHaveBeenCalledTimes(1);
+    expect(deactivateActivity).toHaveBeenCalledWith(ACTIVITY_RUNNING.id);
   });
 });
 

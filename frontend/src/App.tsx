@@ -188,7 +188,14 @@ export function App(): React.ReactElement {
     );
   } else if (activeTab === 'settings') {
     mainContent = (
-      <SettingsScreen engine={engine} />
+      <SettingsScreen
+        engine={engine}
+        onEditRules={() => pushScreen('edit-block-rules')}
+        onReview={() => pushScreen('block-review')}
+        onNewBlock={() => pushScreen('new-training-block')}
+        onViewBlock={(blockId) => pushScreen('block-review', { blockId })}
+        onEditActivity={(activity) => pushScreen('activity-manager', { activity })}
+      />
     );
   } else {
     mainContent = <ComingSoonPlaceholder />;

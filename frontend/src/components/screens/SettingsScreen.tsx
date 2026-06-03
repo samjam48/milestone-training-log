@@ -11,7 +11,7 @@ import { cn } from '../../lib/cn';
 import { Card, CardHeader, CardTitle, CardMeta } from '../ui/Card';
 import { apiFetch } from '../../lib/api/client';
 import type { MilestoneEngineResult, RuleDraft, RulePatch, BlockDraft } from '../../hooks/useMilestoneEngine';
-import type { ActivityClass, ActivityLog, Rule, RuleType, WeeklyTarget, TrainingBlock } from '../../types';
+import type { Activity, ActivityClass, ActivityLog, ID, Rule, RuleType, WeeklyTarget, TrainingBlock } from '../../types';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -19,6 +19,11 @@ import type { ActivityClass, ActivityLog, Rule, RuleType, WeeklyTarget, Training
 
 export interface SettingsScreenProps {
   engine: MilestoneEngineResult;
+  onEditRules?: () => void;
+  onReview?: () => void;
+  onNewBlock?: () => void;
+  onViewBlock?: (blockId: ID) => void;
+  onEditActivity?: (activity: Activity) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -59,6 +64,7 @@ interface BlockSummaryCardProps {
   /** Whether the Edit rules CTA should be rendered. */
   showEditRules: boolean;
   onEditRules: () => void;
+  onReview?: () => void;
 }
 
 function BlockSummaryCard({
@@ -68,6 +74,7 @@ function BlockSummaryCard({
   activityClasses,
   showEditRules,
   onEditRules,
+  onReview,
 }: BlockSummaryCardProps): React.ReactElement {
   const classMap = new Map(activityClasses.map((c) => [c.id, c]));
   const activeRules = rules.filter((r) => r.enabled);
@@ -152,6 +159,15 @@ function BlockSummaryCard({
           >
             Edit rules
           </button>
+          {onReview != null && (
+            <button
+              type="button"
+              onClick={onReview}
+              className="flex-1 h-10 rounded-md bg-bg-sunken border border-border text-body font-medium text-ink-muted transition-colors duration-snap hover:bg-bg-overlay"
+            >
+              Review
+            </button>
+          )}
         </div>
       )}
     </Card>
@@ -731,7 +747,14 @@ function NewTrainingBlockSheet({
 // SettingsScreen
 // ---------------------------------------------------------------------------
 
-export function SettingsScreen({ engine }: SettingsScreenProps): React.ReactElement {
+export function SettingsScreen({
+  engine,
+  onEditRules,
+  onReview,
+  onNewBlock,
+  onViewBlock,
+  onEditActivity,
+}: SettingsScreenProps): React.ReactElement {
   const {
     block,
     rules,
@@ -744,6 +767,7 @@ export function SettingsScreen({ engine }: SettingsScreenProps): React.ReactElem
     updateRule,
     deleteRule,
     createTrainingBlock,
+    deactivateActivity,
   } = engine;
 
   const queryClient = useQueryClient();
@@ -798,6 +822,8 @@ export function SettingsScreen({ engine }: SettingsScreenProps): React.ReactElem
   );
 
   const showEditRules = hasBlock;
+  const handleEditRules = onEditRules ?? (() => setEditRulesOpen(true));
+  const handleNewBlock = onNewBlock ?? (() => setNewBlockOpen(true));
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">
@@ -820,7 +846,8 @@ export function SettingsScreen({ engine }: SettingsScreenProps): React.ReactElem
               weeklyTargets={weeklyTargets}
               activityClasses={activityClasses}
               showEditRules={showEditRules}
-              onEditRules={() => setEditRulesOpen(true)}
+              onEditRules={handleEditRules}
+              onReview={onReview}
             />
           ) : (
             <Card pad="md">
@@ -852,6 +879,7 @@ export function SettingsScreen({ engine }: SettingsScreenProps): React.ReactElem
                     </div>
                     <button
                       type="button"
+                      onClick={() => onViewBlock?.(pb.id)}
                       className="shrink-0 h-8 px-2.5 rounded-md text-caption font-medium text-ink-muted bg-bg-sunken hover:bg-bg-overlay transition-colors duration-snap"
                     >
                       View
@@ -866,7 +894,7 @@ export function SettingsScreen({ engine }: SettingsScreenProps): React.ReactElem
         {/* ── + New Training Block ── */}
         <button
           type="button"
-          onClick={() => setNewBlockOpen(true)}
+          onClick={handleNewBlock}
           className="w-full h-11 rounded-md bg-bg-raised border border-border text-body font-medium text-ink-muted transition-colors duration-snap hover:bg-bg-overlay"
         >
           + New Training Block
@@ -892,8 +920,8 @@ export function SettingsScreen({ engine }: SettingsScreenProps): React.ReactElem
                         key={act.id}
                         activity={act}
                         lastLogDate={lastByAct[act.id] ?? null}
-                        onEdit={() => undefined}
-                        onDeactivate={() => undefined}
+                        onEdit={() => onEditActivity?.(act)}
+                        onDeactivate={() => deactivateActivity(act.id)}
                       />
                     ))}
                   </div>
