@@ -7,6 +7,7 @@ from app.schemas.activities import ActivityRead
 from app.schemas.activity_classes import ActivityClassRead
 from app.schemas.activity_logs import ActivityLogRead
 from app.schemas.flare_up_incidents import FlareUpIncidentRead
+from app.schemas.goals import GoalRead
 from app.schemas.load import (
     ActivityClassStatusRead,
     RuleViolationRead,
@@ -58,6 +59,7 @@ class DashboardRead(BaseModel):
     week_load_threshold: int
     clean_streak: int
     recovery_streaks: list[RecoveryStreakRead]
+    goals: list[GoalRead]
 
     model_config = ConfigDict(from_attributes=True)
 

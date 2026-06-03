@@ -217,6 +217,11 @@ Purpose:
 - One `daily_check_in` can surface zero or more linked `flare_up_incidents`,
   though Phase 1 behavior expects at most one check-in-sourced incident row.
 
+## Service Behaviour Notes
+
+- **Rule copy on new block:** when a new `training_block` is created via `POST /api/training-blocks`, the block creation service copies all `rules` rows from the previous active block into the new block. No schema change needed — this is a service operation, not a schema constraint.
+- **Block end_date on archive:** the service sets `end_date = today` on the outgoing block if not already set, before marking it `completed`. This ensures `BlockReviewScreen` can always scope its queries to a closed date range.
+
 ## Open Modeling Notes
 
 - If flare-up incidents need multi-select "likely caused by" classes, add a join table instead of storing arrays in JSON.

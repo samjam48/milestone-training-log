@@ -31,8 +31,8 @@ export const AppShell = React.forwardRef<HTMLDivElement, AppShellProps>(
       <div
         ref={ref}
         className={cn(
-          // Canvas — bounded viewport column. Content within scrolls independently; AppShell is not a scroll container.
-          'relative flex min-h-screen h-dvh w-full flex-col bg-bg text-ink font-sans antialiased',
+          // Canvas
+          'min-h-screen w-full bg-bg text-ink font-sans antialiased',
           // Safe-area top inset (status bar on notched devices)
           'pt-safe-top',
           // Reserve bottom space when tab bar is mounted (+ device home indicator)

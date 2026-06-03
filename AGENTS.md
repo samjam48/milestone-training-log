@@ -59,14 +59,17 @@ from `backend/` so `backend/pyproject.toml` is loaded.
 
 `make lint` and `make test` should wrap the canonical commands once the repo bootstrap is in place.
 ---
-## Current Sprint —
-**Goal:** Frontend completion — port the 3 remaining screens (NewActivitySheet, GoalsScreen, SettingsScreen) from JSX prototypes to TypeScript and wire to the existing API.
-**Status (2026-05-30):** Phase 0–6 complete and merged to `main`; Phase 7 tickets being planned.
-**Branch:** `feat/phase-7-frontend-completion`
-**Ticket source:** `plans/tickets-phase-7-frontend-completion-2026-05-30.md`
-**Primary references:** `plans/TRD.md` §Phase 7, `plans/PRD.md`, `MOCKUPS.md` §Screens 4/5/5b/6b, `export/preview/*.jsx`, `frontend/src/hooks/useMilestoneEngine.ts`, `docs/api-map.md`
-**Deferred-item routing (owner 2026-05-30):** `CalendarHeatmap` block-review → Phase 7.5; `recovery_streaks` UI, delayed-tax panel, dynamic load-graph title → Phase 8.
-**Out of scope:** CalendarHeatmap / block-review grid (Phase 7.5), recovery-streaks + delayed-tax + load-graph-title dashboard surfacing (Phase 8), loading/error polish + review milestone + MCP stub (Phase 8), auth, multi-user support
+## Current Sprint — Phase 8: Goals Flow
+**Goal:** Port the Goals tab editor flow from the export-2 prototype — extend the dashboard API with goals, make goals reactive in `useMilestoneEngine`, scaffold the push/pop navigation stack, wire `GoalsScreen` new props, and port `GoalEditorScreen`.
+**Status (2026-06-02):** Phases 0–7.5 complete and merged to `main`. Technical design approved; ready for planner agent to write Phase 8 tickets.
+**Branch:** `feat/phase-8-goals-flow`
+**Ticket source:** Not yet written — run planner agent next.
+**Primary references:** `plans/feature-brief-v02-screen-completion-2026-06-02.md` §Phase 8, `plans/technical-design-v02-screen-completion-2026-06-02.md`, `export-2/handover.md`, `docs/api-map.md`
+**Out of scope (Phase 8):** Settings flow screens, InlineLogSheet, review endpoint, block-create service, WEEKLY_TARGETS / ACTIVITY_CLASSES editing, notification/unit toggles, auth, multi-user support
+
+**Upcoming:**
+- Phase 9: Settings flow + InlineLogSheet (see feature brief §Phase 9)
+- Phase 10: Recovery streaks UI, delayed-tax panel, load-graph dynamic title, loading/error polish, review milestone, MCP stub
 
 ---
 ## Definition of Done

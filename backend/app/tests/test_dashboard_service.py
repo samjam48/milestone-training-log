@@ -31,6 +31,7 @@ from app.tests.helpers.seed import (
     seed_activity,
     seed_activity_class,
     seed_activity_log,
+    seed_goal,
     seed_recovery_target,
     with_session,
 )
@@ -273,6 +274,96 @@ def test_get_dashboard_excludes_records_after_as_of(
     assert all(log.id != "log-future" for log in dashboard.logs)
     assert dashboard.clean_streak == baseline.clean_streak
     assert _foot_status(dashboard).state == _foot_status(baseline).state
+
+
+# ---------------------------------------------------------------------------
+# B8.1 — goals field on dashboard
+# ---------------------------------------------------------------------------
+
+
+def test_get_dashboard_goals_contains_only_active_goals(
+    app_with_test_database: FastAPI,
+    session: Session,
+) -> None:
+    """goals list includes active goals and excludes paused ones."""
+    seed_goal(
+        app_with_test_database,
+        goal_id="goal-active-1",
+        title="Run 5k",
+        target_date=date(2026, 6, 15),
+        timeframe="monthly",
+        progress_target=5.0,
+        progress_unit="km",
+        status="active",
+    )
+    seed_goal(
+        app_with_test_database,
+        goal_id="goal-active-2",
+        title="Swim 10k",
+        target_date=date(2026, 7, 1),
+        timeframe="monthly",
+        progress_target=10.0,
+        progress_unit="km",
+        status="active",
+    )
+    seed_goal(
+        app_with_test_database,
+        goal_id="goal-paused",
+        title="Cycle 100k",
+        target_date=date(2026, 8, 1),
+        timeframe="monthly",
+        status="paused",
+    )
+
+    dashboard = get_dashboard(session, as_of=FROZEN_AS_OF)
+
+    assert len(dashboard.goals) == 2
+    goal_ids = {g.id for g in dashboard.goals}
+    assert "goal-active-1" in goal_ids
+    assert "goal-active-2" in goal_ids
+    assert "goal-paused" not in goal_ids
+
+
+def test_get_dashboard_goals_fields_round_trip_correctly(
+    app_with_test_database: FastAPI,
+    session: Session,
+) -> None:
+    """A known active goal's progress_target and status survive the service round-trip."""
+    seed_goal(
+        app_with_test_database,
+        goal_id="goal-rt",
+        title="Marathon prep",
+        target_date=date(2026, 6, 30),
+        timeframe="monthly",
+        progress_target=42.2,
+        progress_unit="km",
+        status="active",
+    )
+
+    dashboard = get_dashboard(session, as_of=FROZEN_AS_OF)
+
+    matched = next(g for g in dashboard.goals if g.id == "goal-rt")
+    assert matched.progress_target == 42.2
+    assert matched.status == "active"
+
+
+def test_get_dashboard_goals_empty_when_no_active_goals(
+    app_with_test_database: FastAPI,
+    session: Session,
+) -> None:
+    """goals is an empty list when no active goals exist."""
+    seed_goal(
+        app_with_test_database,
+        goal_id="goal-paused-only",
+        title="Paused goal",
+        target_date=date(2026, 9, 1),
+        timeframe="monthly",
+        status="paused",
+    )
+
+    dashboard = get_dashboard(session, as_of=FROZEN_AS_OF)
+
+    assert dashboard.goals == []
 
 
 def test_get_dashboard_skips_recovery_streak_when_activity_missing(

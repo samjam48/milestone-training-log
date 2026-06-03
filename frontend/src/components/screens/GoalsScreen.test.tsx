@@ -1046,3 +1046,180 @@ describe('GoalsScreen — Bug 3c: Restore button calls engine.updateGoal with st
     expect(updateGoal).toHaveBeenCalledWith(GOAL_PAUSED.id, { status: 'active' });
   });
 });
+
+// ---------------------------------------------------------------------------
+// F8.3 — onEditGoal prop + Edit button wiring
+// ---------------------------------------------------------------------------
+
+describe('GoalsScreen — F8.3: onEditGoal prop wiring', () => {
+  it('clicking an active goal\'s Edit button calls onEditGoal with that goal object', async () => {
+    const user = userEvent.setup();
+    const onEditGoal = vi.fn<(goal: Omit<Goal, 'userId'>) => void>();
+    const onNewGoal = vi.fn();
+    const engine = makeEngine({
+      goals: [GOAL_MONTHLY_NUMERIC],
+      activityClasses: [CLASS_RUNNING],
+    });
+
+    renderWithProviders(
+      <GoalsScreen engine={engine} onNewGoal={onNewGoal} onEditGoal={onEditGoal} />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /edit/i }));
+
+    expect(onEditGoal).toHaveBeenCalledTimes(1);
+    expect(onEditGoal).toHaveBeenCalledWith(GOAL_MONTHLY_NUMERIC);
+  });
+
+  it('clicking Edit on a quarterly goal calls onEditGoal with that quarterly goal object', async () => {
+    const user = userEvent.setup();
+    const onEditGoal = vi.fn<(goal: Omit<Goal, 'userId'>) => void>();
+    const onNewGoal = vi.fn();
+    const engine = makeEngine({
+      goals: [GOAL_QUARTERLY_NUMERIC],
+      activityClasses: [CLASS_RUNNING],
+    });
+
+    renderWithProviders(
+      <GoalsScreen engine={engine} onNewGoal={onNewGoal} onEditGoal={onEditGoal} />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /edit/i }));
+
+    expect(onEditGoal).toHaveBeenCalledTimes(1);
+    expect(onEditGoal).toHaveBeenCalledWith(GOAL_QUARTERLY_NUMERIC);
+  });
+
+  it('each active goal card has its own Edit button that calls onEditGoal with the correct goal', async () => {
+    const user = userEvent.setup();
+    const onEditGoal = vi.fn<(goal: Omit<Goal, 'userId'>) => void>();
+    const onNewGoal = vi.fn();
+    const engine = makeEngine({
+      goals: [GOAL_MONTHLY_NUMERIC, GOAL_MONTHLY_QUALITATIVE],
+      activityClasses: [CLASS_RUNNING],
+    });
+
+    renderWithProviders(
+      <GoalsScreen engine={engine} onNewGoal={onNewGoal} onEditGoal={onEditGoal} />,
+    );
+
+    const editButtons = screen.getAllByRole('button', { name: /edit/i });
+    expect(editButtons).toHaveLength(2);
+
+    // Click the second edit button (GOAL_MONTHLY_QUALITATIVE)
+    await user.click(editButtons[1]!);
+
+    expect(onEditGoal).toHaveBeenCalledTimes(1);
+    expect(onEditGoal).toHaveBeenCalledWith(GOAL_MONTHLY_QUALITATIVE);
+  });
+});
+
+describe('GoalsScreen — F8.3: onNewGoal prop overrides inline form', () => {
+  it('when onNewGoal is provided, clicking "+ New Goal" calls onNewGoal and does NOT open the inline sheet', async () => {
+    const user = userEvent.setup();
+    const onNewGoal = vi.fn();
+    const onEditGoal = vi.fn<(goal: Omit<Goal, 'userId'>) => void>();
+    const engine = makeEngine({
+      goals: [GOAL_MONTHLY_NUMERIC],
+      activityClasses: [CLASS_RUNNING],
+    });
+
+    renderWithProviders(
+      <GoalsScreen engine={engine} onNewGoal={onNewGoal} onEditGoal={onEditGoal} />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /\+ new goal/i }));
+
+    expect(onNewGoal).toHaveBeenCalledTimes(1);
+    // The inline NewGoalForm dialog must NOT appear
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('when onNewGoal is NOT provided, clicking "+ New Goal" opens the inline NewGoalForm (backward compat)', async () => {
+    const user = userEvent.setup();
+    const engine = makeEngine({
+      goals: [GOAL_MONTHLY_NUMERIC],
+      activityClasses: [CLASS_RUNNING],
+    });
+
+    // No onNewGoal or onEditGoal passed — backward-compat mode
+    renderWithProviders(<GoalsScreen engine={engine} />);
+
+    await user.click(screen.getByRole('button', { name: /\+ new goal/i }));
+
+    // The inline dialog must appear
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+});
+
+describe('GoalsScreen — F8.3: achieved goals do NOT have an Edit button', () => {
+  it('achieved goals rendered in the expanded Achieved section have no Edit button', async () => {
+    const user = userEvent.setup();
+    const onEditGoal = vi.fn<(goal: Omit<Goal, 'userId'>) => void>();
+    const onNewGoal = vi.fn();
+    const engine = makeEngine({
+      goals: [GOAL_ACHIEVED],
+      activityClasses: [],
+    });
+
+    renderWithProviders(
+      <GoalsScreen engine={engine} onNewGoal={onNewGoal} onEditGoal={onEditGoal} />,
+    );
+
+    // Expand the Achieved section
+    await user.click(screen.getByRole('button', { name: /achieved/i }));
+
+    // The achieved goal card must not have an Edit button
+    expect(screen.queryByRole('button', { name: /edit/i })).not.toBeInTheDocument();
+  });
+
+  it('active goals have Edit buttons but achieved goals in the same render do not', async () => {
+    const user = userEvent.setup();
+    const onEditGoal = vi.fn<(goal: Omit<Goal, 'userId'>) => void>();
+    const onNewGoal = vi.fn();
+    const engine = makeEngine({
+      goals: [GOAL_MONTHLY_NUMERIC, GOAL_ACHIEVED],
+      activityClasses: [CLASS_RUNNING],
+    });
+
+    renderWithProviders(
+      <GoalsScreen engine={engine} onNewGoal={onNewGoal} onEditGoal={onEditGoal} />,
+    );
+
+    // One Edit button for the active goal
+    expect(screen.getAllByRole('button', { name: /edit/i })).toHaveLength(1);
+
+    // Expand achieved section
+    await user.click(screen.getByRole('button', { name: /achieved/i }));
+
+    // Still only one Edit button (the achieved card must not add another)
+    expect(screen.getAllByRole('button', { name: /edit/i })).toHaveLength(1);
+  });
+});
+
+describe('GoalsScreen — F8.3: archive/restore regression', () => {
+  it('archive+restore behaviour is unaffected when onEditGoal is also provided', async () => {
+    const user = userEvent.setup();
+    const archiveGoal = vi.fn();
+    const onEditGoal = vi.fn<(goal: Omit<Goal, 'userId'>) => void>();
+    const onNewGoal = vi.fn();
+    const engine = makeEngine({
+      goals: [GOAL_MONTHLY_NUMERIC],
+      activityClasses: [CLASS_RUNNING],
+      archiveGoal,
+    });
+
+    renderWithProviders(
+      <GoalsScreen engine={engine} onNewGoal={onNewGoal} onEditGoal={onEditGoal} />,
+    );
+
+    // Initiate archive (should require confirmation)
+    await user.click(screen.getByRole('button', { name: /archive/i }));
+    expect(archiveGoal).not.toHaveBeenCalled();
+
+    // Confirm archive
+    await user.click(screen.getByRole('button', { name: /confirm/i }));
+    expect(archiveGoal).toHaveBeenCalledTimes(1);
+    expect(archiveGoal).toHaveBeenCalledWith(GOAL_MONTHLY_NUMERIC.id);
+  });
+});

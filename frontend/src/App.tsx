@@ -8,11 +8,14 @@ import {
   LogActivityScreen,
   LogIncidentScreen,
   GoalsScreen,
+  GoalEditorScreen,
   SettingsScreen,
 } from './components/screens';
-import { useMilestoneEngine } from './hooks/useMilestoneEngine';
+import type { Goal } from './types';
+import { useMilestoneEngine, type MilestoneEngineResult } from './hooks/useMilestoneEngine';
 
 type OverlayKey = 'check-in' | 'log-activity' | 'log-incident';
+type StackEntry = { screen: string; params: Record<string, unknown> };
 
 function resolveLogActivityPrefill(
   prefillId: string | undefined,
@@ -30,6 +33,25 @@ function ComingSoonPlaceholder(): React.ReactElement {
   );
 }
 
+function resolveStackScreen(
+  entry: StackEntry,
+  engine: MilestoneEngineResult,
+  onPop: () => void,
+): React.ReactElement {
+  if (entry.screen === 'goal-editor') {
+    const goal = entry.params.goal as Omit<Goal, 'userId'> | undefined | null;
+    return (
+      <GoalEditorScreen
+        goal={goal ?? null}
+        engine={engine}
+        onBack={onPop}
+        onComplete={onPop}
+      />
+    );
+  }
+  return <></>;
+}
+
 export function App(): React.ReactElement {
   const engine = useMilestoneEngine();
   const [activeTab, setActiveTab] = React.useState<TabKey>('dashboard');
@@ -37,8 +59,13 @@ export function App(): React.ReactElement {
   const [logActivityPrefillId, setLogActivityPrefillId] = React.useState<
     string | undefined
   >(undefined);
+  const [screenStack, setScreenStack] = React.useState<StackEntry[]>([]);
 
-  const showTabBar = overlay === null;
+  const pushScreen = (screen: string, params: Record<string, unknown> = {}): void =>
+    setScreenStack((s) => [...s, { screen, params }]);
+  const popScreen = (): void => setScreenStack((s) => s.slice(0, -1));
+
+  const showTabBar = overlay === null && screenStack.length === 0;
 
   const closeOverlay = (): void => {
     setOverlay(null);
@@ -96,7 +123,13 @@ export function App(): React.ReactElement {
       />
     );
   } else if (activeTab === 'goals') {
-    mainContent = <GoalsScreen engine={engine} />;
+    mainContent = (
+      <GoalsScreen
+        engine={engine}
+        onNewGoal={() => pushScreen('goal-editor')}
+        onEditGoal={(goal) => pushScreen('goal-editor', { goal })}
+      />
+    );
   } else if (activeTab === 'settings') {
     mainContent = (
       <SettingsScreen engine={engine} />
@@ -105,12 +138,31 @@ export function App(): React.ReactElement {
     mainContent = <ComingSoonPlaceholder />;
   }
 
+  const topEntry = screenStack.length > 0 ? screenStack[screenStack.length - 1] : null;
+
   return (
     <AppShell withTabBar={showTabBar}>
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">{mainContent}</div>
       {showTabBar && (
         <BottomTabBar active={activeTab} onChange={setActiveTab} />
       )}
+      {topEntry != null && (
+        <div
+          data-testid="stack-screen-overlay"
+          className="absolute inset-0 z-40 flex flex-col bg-bg"
+        >
+          {resolveStackScreen(topEntry, engine, popScreen)}
+        </div>
+      )}
+      {/* Test affordance — allows exercising pushScreen with an unknown key */}
+      <button
+        type="button"
+        data-testid="test-push-unknown-screen"
+        onClick={() => pushScreen('unknown-key')}
+        style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', opacity: 0 }}
+        tabIndex={-1}
+        aria-hidden="true"
+      />
     </AppShell>
   );
 }
