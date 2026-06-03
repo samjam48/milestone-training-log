@@ -5,4 +5,5 @@ export { LogActivityScreen } from './LogActivityScreen';
 export { LogIncidentScreen } from './LogIncidentScreen';
 export { NewActivitySheet } from './NewActivitySheet';
 export { GoalsScreen } from './GoalsScreen';
+export { GoalEditorScreen } from './GoalEditorScreen';
 export { SettingsScreen } from './SettingsScreen';

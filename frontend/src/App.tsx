@@ -8,9 +8,11 @@ import {
   LogActivityScreen,
   LogIncidentScreen,
   GoalsScreen,
+  GoalEditorScreen,
   SettingsScreen,
 } from './components/screens';
-import { useMilestoneEngine } from './hooks/useMilestoneEngine';
+import type { Goal } from './types';
+import { useMilestoneEngine, type MilestoneEngineResult } from './hooks/useMilestoneEngine';
 
 type OverlayKey = 'check-in' | 'log-activity' | 'log-incident';
 type StackEntry = { screen: string; params: Record<string, unknown> };
@@ -33,16 +35,18 @@ function ComingSoonPlaceholder(): React.ReactElement {
 
 function resolveStackScreen(
   entry: StackEntry,
+  engine: MilestoneEngineResult,
   onPop: () => void,
 ): React.ReactElement {
   if (entry.screen === 'goal-editor') {
+    const goal = entry.params.goal as Omit<Goal, 'userId'> | undefined | null;
     return (
-      <div data-testid="goal-editor-placeholder">
-        <button type="button" onClick={onPop}>
-          Back
-        </button>
-        Goal Editor (coming soon)
-      </div>
+      <GoalEditorScreen
+        goal={goal ?? null}
+        engine={engine}
+        onBack={onPop}
+        onComplete={onPop}
+      />
     );
   }
   return <></>;
@@ -147,7 +151,7 @@ export function App(): React.ReactElement {
           data-testid="stack-screen-overlay"
           className="absolute inset-0 z-40 flex flex-col bg-bg"
         >
-          {resolveStackScreen(topEntry, popScreen)}
+          {resolveStackScreen(topEntry, engine, popScreen)}
         </div>
       )}
       {/* Test affordance — allows exercising pushScreen with an unknown key */}
