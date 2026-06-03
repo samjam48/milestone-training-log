@@ -19,6 +19,7 @@ from app.schemas.dashboard import (
     load_point_from_dict,
 )
 from app.schemas.flare_up_incidents import FlareUpIncidentRead
+from app.schemas.goals import GoalRead
 from app.schemas.load import (
     ActivityClassStatusRead,
     SuggestionRead,
@@ -31,6 +32,7 @@ from app.services.activity_classes import list_activity_classes
 from app.services.activity_logs import list_activity_logs
 from app.services.daily_check_ins import list_daily_check_ins
 from app.services.flare_up_incidents import list_flare_up_incidents
+from app.services.goals import list_goals
 from app.services.load_engine import (
     compute_class_statuses,
     compute_clean_streak,
@@ -152,6 +154,7 @@ def get_dashboard(session: Session, *, as_of: date | None = None) -> DashboardRe
     clean_streak = compute_clean_streak(log_dicts)
     recovery_streaks = _build_recovery_streaks(recovery_targets, activities)
     flare_up_dates = sorted({format_iso_date(incident.incident_date) for incident in incidents})
+    active_goals = list_goals(session, status="active")
     has_checked_in_today = any(
         check_in.check_in_date == resolved for check_in in check_ins
     )
@@ -180,6 +183,7 @@ def get_dashboard(session: Session, *, as_of: date | None = None) -> DashboardRe
         week_load_threshold=week_load_threshold,
         clean_streak=clean_streak,
         recovery_streaks=recovery_streaks,
+        goals=[GoalRead.model_validate(g) for g in active_goals],
     )
 
 

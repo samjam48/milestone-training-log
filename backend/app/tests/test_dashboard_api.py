@@ -21,6 +21,7 @@ from app.tests.helpers.load_engine_fixtures import AS_OF, WEEKLY_TARGETS
 from app.tests.helpers.seed import (
     seed_activity,
     seed_activity_class,
+    seed_goal,
     seed_recovery_target,
 )
 from app.tests.test_seed_data import PROTOTYPE_TODAY, _make_migrated_engine, _run_seed
@@ -48,6 +49,7 @@ EXPECTED_TOP_LEVEL_KEYS = {
     "week_load_threshold",
     "clean_streak",
     "recovery_streaks",
+    "goals",
 }
 
 
@@ -185,6 +187,126 @@ async def test_get_dashboard_empty_database_returns_neutral_payload(
     assert payload["load_series"] == []
     assert payload["recovery_streaks"] == []
     assert payload["has_checked_in_today"] is False
+
+
+# ---------------------------------------------------------------------------
+# B8.1 — goals field on GET /api/dashboard
+# ---------------------------------------------------------------------------
+
+
+async def test_get_dashboard_goals_returns_only_active_goals(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    """goals array contains active goals and excludes paused ones."""
+    seed_goal(
+        app_with_test_database,
+        goal_id="api-goal-active-1",
+        title="Run 5k",
+        target_date=date(2026, 6, 15),
+        timeframe="monthly",
+        progress_target=5.0,
+        progress_unit="km",
+        status="active",
+    )
+    seed_goal(
+        app_with_test_database,
+        goal_id="api-goal-active-2",
+        title="Swim 10k",
+        target_date=date(2026, 7, 1),
+        timeframe="monthly",
+        progress_target=10.0,
+        progress_unit="km",
+        status="active",
+    )
+    seed_goal(
+        app_with_test_database,
+        goal_id="api-goal-paused",
+        title="Cycle 100k",
+        target_date=date(2026, 8, 1),
+        timeframe="monthly",
+        status="paused",
+    )
+
+    response = await client.get(DASHBOARD_URL, params={"as_of": AS_OF})
+
+    assert response.status_code == 200
+    payload = response.json()
+    goals = payload["goals"]
+    assert len(goals) == 2
+    goal_ids = {g["id"] for g in goals}
+    assert "api-goal-active-1" in goal_ids
+    assert "api-goal-active-2" in goal_ids
+    assert "api-goal-paused" not in goal_ids
+
+
+async def test_get_dashboard_goals_fields_are_snake_case(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    """A goal object in the response has snake_case progress_target and status fields."""
+    seed_goal(
+        app_with_test_database,
+        goal_id="api-goal-snake",
+        title="Marathon prep",
+        target_date=date(2026, 6, 30),
+        timeframe="monthly",
+        progress_target=42.2,
+        progress_unit="km",
+        status="active",
+    )
+
+    response = await client.get(DASHBOARD_URL, params={"as_of": AS_OF})
+
+    assert response.status_code == 200
+    payload = response.json()
+    goal = next(g for g in payload["goals"] if g["id"] == "api-goal-snake")
+    assert goal["progress_target"] == 42.2
+    assert goal["status"] == "active"
+
+
+async def test_get_dashboard_goals_empty_when_no_active_goals(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    """goals is [] when no active goals exist."""
+    seed_goal(
+        app_with_test_database,
+        goal_id="api-goal-paused-only",
+        title="Paused only",
+        target_date=date(2026, 9, 1),
+        timeframe="monthly",
+        status="paused",
+    )
+
+    response = await client.get(DASHBOARD_URL, params={"as_of": AS_OF})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["goals"] == []
+
+
+async def test_get_dashboard_goals_present_when_no_active_block(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    """goals is returned even when there is no active training block."""
+    seed_goal(
+        app_with_test_database,
+        goal_id="api-goal-no-block",
+        title="No-block goal",
+        target_date=date(2026, 6, 20),
+        timeframe="monthly",
+        status="active",
+    )
+
+    response = await client.get(DASHBOARD_URL, params={"as_of": AS_OF})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["block"] is None
+    assert len(payload["goals"]) == 1
+    assert payload["goals"][0]["id"] == "api-goal-no-block"
 
 
 async def test_get_dashboard_seeded_response_completes_under_500ms(
