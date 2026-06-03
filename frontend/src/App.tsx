@@ -11,6 +11,7 @@ import {
   GoalEditorScreen,
   SettingsScreen,
   EditBlockRulesScreen,
+  BlockReviewScreen,
 } from './components/screens';
 import type { Activity, Goal } from './types';
 import { useMilestoneEngine, type MilestoneEngineResult } from './hooks/useMilestoneEngine';
@@ -86,11 +87,7 @@ function resolveStackScreen(
   if (entry.screen === 'block-review') {
     const blockId = entry.params.blockId as string | undefined;
     return (
-      <SettingsStackPlaceholder
-        title="Block review"
-        detail={blockId}
-        onBack={onPop}
-      />
+      <BlockReviewScreen engine={engine} blockId={blockId} onBack={onPop} />
     );
   }
   if (entry.screen === 'new-training-block') {
@@ -223,14 +220,6 @@ export function App(): React.ReactElement {
         type="button"
         data-testid="test-push-unknown-screen"
         onClick={() => pushScreen('unknown-key')}
-        style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', opacity: 0 }}
-        tabIndex={-1}
-        aria-hidden="true"
-      />
-      <button
-        type="button"
-        data-testid="test-push-block-review"
-        onClick={() => pushScreen('block-review', { blockId: engine.block?.id })}
         style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', opacity: 0 }}
         tabIndex={-1}
         aria-hidden="true"

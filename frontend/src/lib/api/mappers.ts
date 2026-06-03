@@ -480,7 +480,7 @@ export function mapDailySafetyScoreFromApi(raw: Record<string, unknown>) {
   };
 }
 
-function mapLoadPointFromApi(raw: Record<string, unknown>): LoadPoint {
+export function mapLoadPointFromApi(raw: Record<string, unknown>): LoadPoint {
   return {
     date: String(raw.date) as ISODate,
     load: Number(raw.load),
