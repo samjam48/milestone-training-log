@@ -348,12 +348,25 @@ describe('Settings stack navigation (F9.4)', () => {
     cleanup();
   });
 
+  it('opens edit-block-rules through the visible Settings flow, then pops back out', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Settings' }));
+    await user.click(screen.getByRole('button', { name: /edit rules/i }));
+
+    expect(screen.getByTestId('stack-screen-overlay')).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /edit rules/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+
+    expect(screen.queryByTestId('stack-screen-overlay')).not.toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
+  });
+
   it.each([
-    {
-      stackKey: 'edit-block-rules',
-      testId: 'test-push-edit-block-rules',
-      expectedHeading: /edit rules/i,
-    },
     {
       stackKey: 'block-review',
       testId: 'test-push-block-review',
