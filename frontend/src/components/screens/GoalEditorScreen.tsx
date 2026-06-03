@@ -22,7 +22,7 @@ const TIMEFRAME_OPTS: Array<{ value: GoalTimeframe; label: string; tone: 'neutra
   { value: 'quarterly', label: 'Quarterly', tone: 'neutral' },
 ];
 
-const VOLUME_UNITS: VolumeUnit[] = ['km', 'mi', 'm', 'minutes', 'reps', 'sets', 'sessions'];
+const VOLUME_UNITS: VolumeUnit[] = ['km', 'mi', 'm', 'kg', 'minutes', 'reps', 'sets', 'sessions'];
 
 export function GoalEditorScreen({
   goal,

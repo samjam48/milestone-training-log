@@ -62,6 +62,7 @@ export interface Activity extends Timestamped {
 
 export type VolumeUnit =
   | 'km' | 'mi' | 'm'
+  | 'kg'
   | 'reps' | 'sets' | 'sessions'
   | 'minutes';
 
