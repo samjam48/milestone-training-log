@@ -11,7 +11,7 @@ import {
   GoalEditorScreen,
   SettingsScreen,
 } from './components/screens';
-import type { Goal } from './types';
+import type { Activity, Goal } from './types';
 import { useMilestoneEngine, type MilestoneEngineResult } from './hooks/useMilestoneEngine';
 
 type OverlayKey = 'check-in' | 'log-activity' | 'log-incident';
@@ -33,6 +33,36 @@ function ComingSoonPlaceholder(): React.ReactElement {
   );
 }
 
+interface SettingsStackPlaceholderProps {
+  title: string;
+  onBack: () => void;
+  detail?: string;
+}
+
+function SettingsStackPlaceholder({
+  title,
+  onBack,
+  detail,
+}: SettingsStackPlaceholderProps): React.ReactElement {
+  return (
+    <section className="flex min-h-full flex-col gap-6 px-5 py-6">
+      <button
+        type="button"
+        onClick={onBack}
+        className="self-start rounded-full border border-line px-4 py-2 text-body-sm font-semibold text-ink"
+      >
+        Back
+      </button>
+      <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center">
+        <h1 className="text-title-lg font-semibold text-ink">{title}</h1>
+        {detail != null && detail !== '' ? (
+          <p className="text-body-md text-ink-muted">{detail}</p>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
 function resolveStackScreen(
   entry: StackEntry,
   engine: MilestoneEngineResult,
@@ -46,6 +76,32 @@ function resolveStackScreen(
         engine={engine}
         onBack={onPop}
         onComplete={onPop}
+      />
+    );
+  }
+  if (entry.screen === 'edit-block-rules') {
+    return <SettingsStackPlaceholder title="Edit rules" onBack={onPop} />;
+  }
+  if (entry.screen === 'block-review') {
+    const blockId = entry.params.blockId as string | undefined;
+    return (
+      <SettingsStackPlaceholder
+        title="Block review"
+        detail={blockId}
+        onBack={onPop}
+      />
+    );
+  }
+  if (entry.screen === 'new-training-block') {
+    return <SettingsStackPlaceholder title="New training block" onBack={onPop} />;
+  }
+  if (entry.screen === 'activity-manager') {
+    const activity = entry.params.activity as Activity | undefined;
+    return (
+      <SettingsStackPlaceholder
+        title="Edit activity"
+        detail={activity?.name}
+        onBack={onPop}
       />
     );
   }
@@ -159,6 +215,38 @@ export function App(): React.ReactElement {
         type="button"
         data-testid="test-push-unknown-screen"
         onClick={() => pushScreen('unknown-key')}
+        style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', opacity: 0 }}
+        tabIndex={-1}
+        aria-hidden="true"
+      />
+      <button
+        type="button"
+        data-testid="test-push-edit-block-rules"
+        onClick={() => pushScreen('edit-block-rules')}
+        style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', opacity: 0 }}
+        tabIndex={-1}
+        aria-hidden="true"
+      />
+      <button
+        type="button"
+        data-testid="test-push-block-review"
+        onClick={() => pushScreen('block-review', { blockId: engine.block?.id })}
+        style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', opacity: 0 }}
+        tabIndex={-1}
+        aria-hidden="true"
+      />
+      <button
+        type="button"
+        data-testid="test-push-new-training-block"
+        onClick={() => pushScreen('new-training-block')}
+        style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', opacity: 0 }}
+        tabIndex={-1}
+        aria-hidden="true"
+      />
+      <button
+        type="button"
+        data-testid="test-push-activity-manager"
+        onClick={() => pushScreen('activity-manager', { activity: engine.activities[0] })}
         style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', opacity: 0 }}
         tabIndex={-1}
         aria-hidden="true"

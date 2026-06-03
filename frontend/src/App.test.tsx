@@ -337,3 +337,67 @@ describe('Screen stack — push/pop navigation (F8.2)', () => {
     }
   });
 });
+
+describe('Settings stack navigation (F9.4)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetMockEngine();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it.each([
+    {
+      stackKey: 'edit-block-rules',
+      testId: 'test-push-edit-block-rules',
+      expectedHeading: /edit rules/i,
+    },
+    {
+      stackKey: 'block-review',
+      testId: 'test-push-block-review',
+      expectedHeading: /block review/i,
+    },
+    {
+      stackKey: 'new-training-block',
+      testId: 'test-push-new-training-block',
+      expectedHeading: /new training block/i,
+    },
+    {
+      stackKey: 'activity-manager',
+      testId: 'test-push-activity-manager',
+      expectedHeading: /edit activity/i,
+    },
+  ])(
+    'pushing $stackKey via its hidden affordance renders the overlay, hides the tab bar, and pops back out',
+    async ({ testId, expectedHeading }) => {
+      const user = userEvent.setup();
+      renderWithProviders(<App />);
+
+      await user.click(screen.getByTestId(testId));
+
+      expect(screen.getByTestId('stack-screen-overlay')).toBeInTheDocument();
+      expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: expectedHeading })).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Back' }));
+
+      expect(screen.queryByTestId('stack-screen-overlay')).not.toBeInTheDocument();
+      expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
+    },
+  );
+
+  it('still renders nothing for an unknown stack key without crashing', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    await user.click(screen.getByTestId('test-push-unknown-screen'));
+
+    const overlay = screen.getByTestId('stack-screen-overlay');
+    expect(overlay).toBeInTheDocument();
+    expect(overlay.textContent).toBe('');
+    expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument();
+  });
+});
