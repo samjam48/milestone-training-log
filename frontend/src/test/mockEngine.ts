@@ -40,6 +40,8 @@ function createBaseline(): MilestoneEngineResult {
     previousBlocks: [],
     // F2.0 mutations
     submitNewActivity: () => undefined,
+    updateActivity: () => undefined,
+    deactivateActivity: () => undefined,
     createGoal: () => undefined,
     updateGoal: () => undefined,
     archiveGoal: () => undefined,

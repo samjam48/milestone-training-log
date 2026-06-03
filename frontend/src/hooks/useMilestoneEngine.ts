@@ -54,6 +54,7 @@ import {
   deleteRule as deleteRuleApi,
   createTrainingBlock as createTrainingBlockApi,
   createActivity,
+  patchActivity,
 } from '../lib/api';
 
 type EntityWithoutUserId<T extends { userId: string }> = Omit<T, 'userId'>;
@@ -171,6 +172,8 @@ export interface MilestoneEngineResult {
   previousBlocks: TrainingBlock[];
   // F2.0 mutations
   submitNewActivity: (draft: NewActivityDraft) => void;
+  updateActivity: (activityId: ID, patch: Partial<NewActivityDraft>) => void;
+  deactivateActivity: (activityId: ID) => void;
   createGoal: (draft: GoalDraft) => void;
   updateGoal: (goalId: ID, patch: GoalPatch) => void;
   archiveGoal: (goalId: ID) => void;
@@ -315,6 +318,24 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     },
   });
 
+  const updateActivityMutation = useMutation({
+    mutationFn: ({ activityId, patch }: { activityId: ID; patch: Partial<NewActivityDraft> }) =>
+      patchActivity(activityId, patch as Record<string, unknown>),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+
+  const deactivateActivityMutation = useMutation({
+    mutationFn: (activityId: ID) =>
+      patchActivity(activityId, { isActive: false }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+
   const createGoalMutation = useMutation({
     mutationFn: (draft: GoalDraft) =>
       createGoalApi({
@@ -427,6 +448,14 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     submitNewActivityMutation.mutate(draft);
   }, [submitNewActivityMutation]);
 
+  const updateActivity = React.useCallback((activityId: ID, patch: Partial<NewActivityDraft>) => {
+    updateActivityMutation.mutate({ activityId, patch });
+  }, [updateActivityMutation]);
+
+  const deactivateActivity = React.useCallback((activityId: ID) => {
+    deactivateActivityMutation.mutate(activityId);
+  }, [deactivateActivityMutation]);
+
   const createGoal = React.useCallback((draft: GoalDraft) => {
     createGoalMutation.mutate(draft);
   }, [createGoalMutation]);
@@ -483,6 +512,8 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     previousBlocks: previousBlocks as TrainingBlock[],
     // F2.0 mutations
     submitNewActivity,
+    updateActivity,
+    deactivateActivity,
     createGoal,
     updateGoal,
     archiveGoal,
