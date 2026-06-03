@@ -23,6 +23,7 @@ from app.tests.helpers.seed import (
     seed_activity_class,
     seed_goal,
     seed_recovery_target,
+    seed_training_block,
 )
 from app.tests.test_seed_data import PROTOTYPE_TODAY, _make_migrated_engine, _run_seed
 
@@ -35,6 +36,7 @@ EXPECTED_TOP_LEVEL_KEYS = {
     "as_of",
     "user_name",
     "block",
+    "previous_blocks",
     "activity_classes",
     "activities",
     "logs",
@@ -141,9 +143,67 @@ async def test_get_dashboard_without_active_block_returns_neutral_empty_payload(
     assert response.status_code == 200
     payload = response.json()
     assert payload["block"] is None
+    assert payload["previous_blocks"] == []
     assert payload["weekly_progress"] == []
     assert payload["load_series"] == []
     assert payload["recovery_streaks"] == []
+
+
+async def test_get_dashboard_previous_blocks_serializes_summary_array(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    seed_training_block(
+        app_with_test_database,
+        block_id="blk-current",
+        name="Current block",
+        start_date=date(2026, 5, 20),
+        status="active",
+    )
+    seed_training_block(
+        app_with_test_database,
+        block_id="blk-recent",
+        name="Recent block",
+        start_date=date(2026, 2, 1),
+        end_date=date(2026, 5, 10),
+        status="completed",
+        is_review_milestone_hit=True,
+    )
+    seed_training_block(
+        app_with_test_database,
+        block_id="blk-older",
+        name="Older block",
+        start_date=date(2026, 4, 1),
+        end_date=date(2026, 4, 20),
+        status="archived",
+    )
+
+    response = await client.get(DASHBOARD_URL, params={"as_of": AS_OF})
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert [block["id"] for block in payload["previous_blocks"]] == [
+        "blk-recent",
+        "blk-older",
+    ]
+    first_block = payload["previous_blocks"][0]
+    assert first_block["end_date"] == "2026-05-10"
+    assert first_block["is_review_milestone_hit"] is True
+    assert all(block["status"] != "active" for block in payload["previous_blocks"])
+
+
+async def test_get_dashboard_previous_blocks_empty_when_no_non_active_blocks_exist(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    freeze_server_today(monkeypatch)
+
+    response = await client.get(DASHBOARD_URL)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["previous_blocks"] == []
 
 
 async def test_get_dashboard_rejects_invalid_as_of_query(

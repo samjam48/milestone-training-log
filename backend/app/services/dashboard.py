@@ -54,7 +54,11 @@ from app.services.load_queries import (
 )
 from app.services.recovery_targets import list_recovery_targets
 from app.services.rules import list_rules
-from app.services.training_blocks import TrainingBlockNotFoundError, get_active_training_block
+from app.services.training_blocks import (
+    TrainingBlockNotFoundError,
+    get_active_training_block,
+    list_training_blocks,
+)
 from app.services.weekly_targets import list_weekly_targets
 from app.settings import settings
 
@@ -155,6 +159,7 @@ def get_dashboard(session: Session, *, as_of: date | None = None) -> DashboardRe
     recovery_streaks = _build_recovery_streaks(recovery_targets, activities)
     flare_up_dates = sorted({format_iso_date(incident.incident_date) for incident in incidents})
     active_goals = list_goals(session, status="active")
+    previous_blocks = _build_previous_blocks(session)
     has_checked_in_today = any(
         check_in.check_in_date == resolved for check_in in check_ins
     )
@@ -163,6 +168,7 @@ def get_dashboard(session: Session, *, as_of: date | None = None) -> DashboardRe
         as_of=resolved,
         user_name=settings.DEFAULT_USER_NAME,
         block=block_read,
+        previous_blocks=previous_blocks,
         activity_classes=[
             ActivityClassRead.model_validate(cls) for cls in activity_classes
         ],
@@ -185,6 +191,21 @@ def get_dashboard(session: Session, *, as_of: date | None = None) -> DashboardRe
         recovery_streaks=recovery_streaks,
         goals=[GoalRead.model_validate(g) for g in active_goals],
     )
+
+
+def _build_previous_blocks(session: Session) -> list[TrainingBlockRead]:
+    blocks = [
+        block for block in list_training_blocks(session) if block.status != "active"
+    ]
+    blocks.sort(
+        key=lambda block: (
+            block.end_date is None,
+            -(block.end_date or date.min).toordinal(),
+            -block.start_date.toordinal(),
+            block.id,
+        )
+    )
+    return [TrainingBlockRead.model_validate(block) for block in blocks]
 
 
 def _resolve_graph_class_id(
