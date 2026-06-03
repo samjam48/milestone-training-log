@@ -384,36 +384,40 @@ describe('Settings stack navigation (F9.4)', () => {
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
   });
 
-  it.each([
-    {
-      stackKey: 'new-training-block',
-      testId: 'test-push-new-training-block',
-      expectedHeading: /new training block/i,
-    },
-    {
-      stackKey: 'activity-manager',
-      testId: 'test-push-activity-manager',
-      expectedHeading: /edit activity/i,
-    },
-  ])(
-    'pushing $stackKey via its hidden affordance renders the overlay, hides the tab bar, and pops back out',
-    async ({ testId, expectedHeading }) => {
-      const user = userEvent.setup();
-      renderWithProviders(<App />);
+  it('opens new-training-block through the visible Settings flow, then pops back out', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
 
-      await user.click(screen.getByTestId(testId));
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Settings' }));
+    await user.click(screen.getByRole('button', { name: /\+ new training block/i }));
 
-      expect(screen.getByTestId('stack-screen-overlay')).toBeInTheDocument();
-      expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument();
-      expect(screen.getByRole('heading', { name: expectedHeading })).toBeInTheDocument();
+    expect(screen.getByTestId('stack-screen-overlay')).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /new training block/i })).toBeInTheDocument();
 
-      await user.click(screen.getByRole('button', { name: 'Back' }));
+    await user.click(screen.getByRole('button', { name: 'Back' }));
 
-      expect(screen.queryByTestId('stack-screen-overlay')).not.toBeInTheDocument();
-      expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
-    },
-  );
+    expect(screen.queryByTestId('stack-screen-overlay')).not.toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
+  });
+
+  it('pushing activity-manager via its hidden affordance renders the overlay, hides the tab bar, and pops back out', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    await user.click(screen.getByTestId('test-push-activity-manager'));
+
+    expect(screen.getByTestId('stack-screen-overlay')).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /edit activity/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+
+    expect(screen.queryByTestId('stack-screen-overlay')).not.toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
+  });
 
   it('still renders nothing for an unknown stack key without crashing', async () => {
     const user = userEvent.setup();

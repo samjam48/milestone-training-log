@@ -12,6 +12,7 @@ import {
   SettingsScreen,
   EditBlockRulesScreen,
   BlockReviewScreen,
+  NewTrainingBlockScreen,
 } from './components/screens';
 import type { Activity, Goal } from './types';
 import { useMilestoneEngine, type MilestoneEngineResult } from './hooks/useMilestoneEngine';
@@ -91,7 +92,13 @@ function resolveStackScreen(
     );
   }
   if (entry.screen === 'new-training-block') {
-    return <SettingsStackPlaceholder title="New training block" onBack={onPop} />;
+    return (
+      <NewTrainingBlockScreen
+        engine={engine}
+        onBack={onPop}
+        onComplete={onPop}
+      />
+    );
   }
   if (entry.screen === 'activity-manager') {
     const activity = entry.params.activity as Activity | undefined;
@@ -220,14 +227,6 @@ export function App(): React.ReactElement {
         type="button"
         data-testid="test-push-unknown-screen"
         onClick={() => pushScreen('unknown-key')}
-        style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', opacity: 0 }}
-        tabIndex={-1}
-        aria-hidden="true"
-      />
-      <button
-        type="button"
-        data-testid="test-push-new-training-block"
-        onClick={() => pushScreen('new-training-block')}
         style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', opacity: 0 }}
         tabIndex={-1}
         aria-hidden="true"
