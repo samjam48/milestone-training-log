@@ -20,6 +20,8 @@ export interface GoalsScreenProps {
   engine: MilestoneEngineResult;
   /** When provided, clicking "+ New Goal" calls this instead of opening the inline form. */
   onNewGoal?: () => void;
+  /** When provided, clicking "Edit" on an active goal calls this with the goal object. */
+  onEditGoal?: (goal: Omit<Goal, 'userId'>) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -451,7 +453,7 @@ function NewGoalForm({ open, onClose, activityClasses, onCreate }: NewGoalFormPr
 // GoalsScreen
 // ---------------------------------------------------------------------------
 
-export function GoalsScreen({ engine, onNewGoal }: GoalsScreenProps): React.ReactElement {
+export function GoalsScreen({ engine, onNewGoal, onEditGoal }: GoalsScreenProps): React.ReactElement {
   const { goals, activityClasses, archiveGoal, createGoal, updateGoal } = engine;
 
   const classMap = React.useMemo(
@@ -542,7 +544,7 @@ export function GoalsScreen({ engine, onNewGoal }: GoalsScreenProps): React.Reac
                       key={g.id}
                       goal={g}
                       activityClassName={resolveClassName(g)}
-                      onEdit={() => undefined}
+                      onEdit={onEditGoal ? () => onEditGoal(g) : () => undefined}
                       onArchive={handleArchiveRequest}
                       confirmingArchive={confirmArchiveId === g.id}
                       onArchiveConfirm={handleArchiveConfirm}
@@ -565,7 +567,7 @@ export function GoalsScreen({ engine, onNewGoal }: GoalsScreenProps): React.Reac
                       key={g.id}
                       goal={g}
                       activityClassName={resolveClassName(g)}
-                      onEdit={() => undefined}
+                      onEdit={onEditGoal ? () => onEditGoal(g) : () => undefined}
                       onArchive={handleArchiveRequest}
                       confirmingArchive={confirmArchiveId === g.id}
                       onArchiveConfirm={handleArchiveConfirm}

@@ -123,6 +123,7 @@ export function App(): React.ReactElement {
       <GoalsScreen
         engine={engine}
         onNewGoal={() => pushScreen('goal-editor')}
+        onEditGoal={(goal) => pushScreen('goal-editor', { goal })}
       />
     );
   } else if (activeTab === 'settings') {
