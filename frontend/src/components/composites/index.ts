@@ -22,3 +22,9 @@ export type {
 
 export { BlockSafetyMapSection } from './BlockSafetyMapSection';
 export type { BlockSafetyMapSectionProps } from './BlockSafetyMapSection';
+
+export { DelayedTaxAttributionSection } from './DelayedTaxAttributionSection';
+export type { DelayedTaxAttributionSectionProps } from './DelayedTaxAttributionSection';
+
+export { LoadRiskSection } from './LoadRiskSection';
+export type { LoadRiskSectionProps } from './LoadRiskSection';

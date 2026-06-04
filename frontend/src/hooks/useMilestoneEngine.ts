@@ -43,10 +43,8 @@ import {
   createDailyCheckIn,
   createFlareUpIncident,
   checkViolations as checkViolationsApi,
-  listGoals,
   listRulesByBlock,
   listWeeklyTargetsByBlock,
-  listTrainingBlocks,
   createGoal as createGoalApi,
   patchGoal,
   createRule as createRuleApi,
@@ -55,7 +53,10 @@ import {
   createTrainingBlock as createTrainingBlockApi,
   createActivity,
   patchActivity,
+  getDelayedTax,
 } from '../lib/api';
+
+export type DelayedTaxResponse = Awaited<ReturnType<typeof getDelayedTax>>;
 
 type EntityWithoutUserId<T extends { userId: string }> = Omit<T, 'userId'>;
 
@@ -161,10 +162,14 @@ export interface MilestoneEngineResult {
   weeklyProgress: WeeklyProgress[];
   dailyScores: DailySafetyScore[];
   loadSeries: LoadPoint[];
+  graphClassId: string | null;
   flareUpDates: ISODate[];
   weekLoadThreshold: number;
   cleanStreak: number;
   recoveryStreaks: RecoveryStreak[];
+  delayedTax?: DelayedTaxResponse;
+  /** True when the delayed-tax fetch failed (distinct from still loading). */
+  delayedTaxError: boolean;
   // F2.0 read fields
   goals: Omit<Goal, 'userId'>[];
   rules: Rule[];
@@ -181,6 +186,10 @@ export interface MilestoneEngineResult {
   updateRule: (ruleId: ID, patch: RulePatch) => void;
   deleteRule: (ruleId: ID) => void;
   createTrainingBlock: (draft: BlockDraft) => void;
+  // H10.2 — app shell query status (no raw React Query objects)
+  isInitialLoading: boolean;
+  isFatalError: boolean;
+  refetchAll: () => void;
   // F1.3 mutations
   submitCheckIn: (draft: CheckInDraft) => void;
   submitLog: (draft: LogDraft) => void;
@@ -214,18 +223,6 @@ export function useMilestoneEngine(): MilestoneEngineResult {
   const todayDate = dashboard?.todayDate ?? ('' as ISODate);
   const blockId = dashboard?.block?.id ?? null;
 
-  const goalsQuery = useQuery({
-    queryKey: ['goals'],
-    queryFn: () => listGoals(),
-    refetchOnWindowFocus: false,
-  });
-
-  const trainingBlocksQuery = useQuery({
-    queryKey: ['training-blocks'],
-    queryFn: () => listTrainingBlocks(),
-    refetchOnWindowFocus: false,
-  });
-
   const rulesQuery = useQuery({
     queryKey: ['rules', blockId ?? ''],
     queryFn: () => listRulesByBlock(blockId as string),
@@ -238,6 +235,15 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     queryFn: () => listWeeklyTargetsByBlock(blockId as string),
     enabled: !!blockId,
     refetchOnWindowFocus: false,
+  });
+
+  const delayedTaxAsOf = dashboard?.todayDate;
+
+  const delayedTaxQuery = useQuery({
+    queryKey: ['delayed-tax', delayedTaxAsOf],
+    queryFn: () => getDelayedTax({ asOf: delayedTaxAsOf as ISODate }),
+    enabled: delayedTaxAsOf !== undefined,
+    gcTime: 0,
   });
 
   const [liveViolations, setLiveViolations] = React.useState<RuleViolationSnapshot[]>([]);
@@ -261,6 +267,7 @@ export function useMilestoneEngine(): MilestoneEngineResult {
       void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       void queryClient.invalidateQueries({ queryKey: ['activity-logs'] });
       void queryClient.invalidateQueries({ queryKey: ['activities'] });
+      void queryClient.invalidateQueries({ queryKey: ['delayed-tax'] });
     },
   });
 
@@ -284,6 +291,7 @@ export function useMilestoneEngine(): MilestoneEngineResult {
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['delayed-tax'] });
     },
   });
 
@@ -299,6 +307,7 @@ export function useMilestoneEngine(): MilestoneEngineResult {
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['delayed-tax'] });
     },
   });
 
@@ -343,7 +352,7 @@ export function useMilestoneEngine(): MilestoneEngineResult {
         ...draft,
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['goals'] });
+      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
   });
 
@@ -351,7 +360,7 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     mutationFn: ({ goalId, patch }: { goalId: ID; patch: GoalPatch }) =>
       patchGoal(goalId, patch as Record<string, unknown>),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['goals'] });
+      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
   });
 
@@ -359,7 +368,7 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     mutationFn: (goalId: ID) =>
       patchGoal(goalId, { status: 'paused' }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['goals'] });
+      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
   });
 
@@ -396,7 +405,6 @@ export function useMilestoneEngine(): MilestoneEngineResult {
         ...draft,
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['training-blocks'] });
       void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
   });
@@ -484,8 +492,14 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     createTrainingBlockMutation.mutate(draft);
   }, [createTrainingBlockMutation]);
 
-  const allBlocks = trainingBlocksQuery.data ?? [];
-  const previousBlocks = allBlocks.filter((b) => b.id !== (dashboard?.block?.id ?? null));
+  const isInitialLoading = dashboardQuery.isPending;
+  const isFatalError = dashboardQuery.isError && dashboard === undefined;
+
+  const refetchAll = React.useCallback(() => {
+    void dashboardQuery.refetch();
+    void activityLogsQuery.refetch();
+    void delayedTaxQuery.refetch();
+  }, [dashboardQuery, activityLogsQuery, delayedTaxQuery]);
 
   return {
     todayDate,
@@ -501,15 +515,18 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     weeklyProgress: dashboard?.weeklyProgress ?? [],
     dailyScores: dashboard?.dailyScores ?? [],
     loadSeries: dashboard?.loadSeries ?? [],
+    graphClassId: dashboard?.graphClassId ?? null,
     flareUpDates: dashboard?.flareUpDates ?? [],
     weekLoadThreshold: dashboard?.weekLoadThreshold ?? 0,
     cleanStreak: dashboard?.cleanStreak ?? 0,
     recoveryStreaks: dashboard?.recoveryStreaks ?? [],
+    delayedTax: delayedTaxQuery.data,
+    delayedTaxError: delayedTaxQuery.isError,
     // F2.0 read fields
-    goals: (goalsQuery.data ?? []) as Omit<Goal, 'userId'>[],
+    goals: (dashboard?.goals ?? []) as Omit<Goal, 'userId'>[],
     rules: (rulesQuery.data ?? []) as Rule[],
     weeklyTargets: (weeklyTargetsQuery.data ?? []) as WeeklyTarget[],
-    previousBlocks: previousBlocks as TrainingBlock[],
+    previousBlocks: (dashboard?.previousBlocks ?? []) as TrainingBlock[],
     // F2.0 mutations
     submitNewActivity,
     updateActivity,
@@ -521,6 +538,10 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     updateRule,
     deleteRule,
     createTrainingBlock,
+    // H10.2 — app shell query status
+    isInitialLoading,
+    isFatalError,
+    refetchAll,
     // F1.3 mutations
     submitCheckIn,
     submitLog,

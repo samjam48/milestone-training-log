@@ -1,14 +1,12 @@
 /**
- * F3.0 — trainingBlocks API client tests.
+ * B10.4 — trainingBlocks API client: /scores removed, /review is canonical.
  *
- * Tests for getTrainingBlockScores are written failing-first (TDD).
- * The function does NOT exist in trainingBlocks.ts yet — the import line
- * will cause these tests to fail until the implementation is in place.
+ * Failing until getTrainingBlockScores is removed and callers use getTrainingBlockReview.
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-// Speculative import — getTrainingBlockScores does not exist yet.
-import { getTrainingBlockScores } from './trainingBlocks';
+import * as trainingBlocks from './trainingBlocks';
+import { getTrainingBlockReview } from './trainingBlocks';
 
 const originalFetch = globalThis.fetch;
 
@@ -24,17 +22,26 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-// ---------------------------------------------------------------------------
-// Test 7 — getTrainingBlockScores maps API response to camelCase DailySafetyScore[]
-// ---------------------------------------------------------------------------
+describe('B10.4 — getTrainingBlockScores removal', () => {
+  it('does not export getTrainingBlockScores', () => {
+    expect('getTrainingBlockScores' in trainingBlocks).toBe(false);
+  });
+});
 
-describe('getTrainingBlockScores', () => {
-  it('fetches /training-blocks/:id/scores and maps snake_case response to camelCase DailySafetyScore[]', async () => {
+describe('getTrainingBlockReview', () => {
+  it('fetches /training-blocks/:id/review and maps daily_scores to camelCase dailyScores', async () => {
     const snakeResponse = {
-      block_id: 'blk-prev-1',
-      start_date: '2026-04-01',
-      end_date: '2026-04-30',
-      scores: [
+      block: {
+        id: 'blk-prev-1',
+        user_id: 'user-1',
+        name: 'April Block',
+        start_date: '2026-04-01',
+        end_date: '2026-04-30',
+        status: 'completed',
+        is_review_milestone_hit: true,
+        created_at: '2026-04-01T00:00:00Z',
+      },
+      daily_scores: [
         {
           date: '2026-04-01',
           state: 'safe',
@@ -54,74 +61,64 @@ describe('getTrainingBlockScores', () => {
           ],
           had_flare_up: true,
         },
-        {
-          date: '2026-04-03',
-          state: 'danger',
-          violations: [],
-          had_flare_up: false,
-        },
       ],
+      load_series: [{ date: '2026-04-01', load: 10 }],
+      flare_up_dates: ['2026-04-02'],
+      total_sessions: 2,
+      clean_days: 1,
     };
 
     globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse(snakeResponse));
 
-    const result = await getTrainingBlockScores('blk-prev-1');
+    const result = await getTrainingBlockReview('blk-prev-1');
 
-    // Should hit the correct endpoint.
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      '/api/training-blocks/blk-prev-1/scores',
+      '/api/training-blocks/blk-prev-1/review',
       expect.any(Object),
     );
 
-    // Result must be an array of DailySafetyScore (camelCase fields).
-    expect(result).toHaveLength(3);
-
-    // First score — simple safe day.
-    expect(result[0]).toMatchObject({
+    expect(result.dailyScores).toHaveLength(2);
+    expect(result.dailyScores[0]).toMatchObject({
       date: '2026-04-01',
       state: 'safe',
       violations: [],
       hadFlareUp: false,
     });
-    // Snake-case keys must NOT appear on the result.
-    expect(result[0]).not.toHaveProperty('had_flare_up');
-
-    // Second score — caution with a violation, hadFlareUp true.
-    expect(result[1]).toMatchObject({
+    expect(result.dailyScores[1]).toMatchObject({
       date: '2026-04-02',
       state: 'caution',
       hadFlareUp: true,
     });
-    expect(result[1]!.violations).toHaveLength(1);
-    expect(result[1]!.violations[0]).toMatchObject({
-      ruleId: 'rule-1',
-      ruleType: 'rest_between_class',
-      message: 'Too soon',
-      severity: 'caution',
-    });
-    // Snake-case keys must not be on the violation.
-    expect(result[1]!.violations[0]).not.toHaveProperty('rule_id');
-
-    // Third score — danger day.
-    expect(result[2]).toMatchObject({
-      date: '2026-04-03',
-      state: 'danger',
-      hadFlareUp: false,
-    });
+    expect(result.dailyScores[0]).not.toHaveProperty('had_flare_up');
+    expect(result.block.id).toBe('blk-prev-1');
+    expect(result.flareUpDates).toEqual(['2026-04-02']);
+    expect(result.totalSessions).toBe(2);
+    expect(result.cleanDays).toBe(1);
   });
 
-  it('returns an empty array when scores array is empty', async () => {
+  it('returns empty dailyScores when review payload has no scored days', async () => {
     const snakeResponse = {
-      block_id: 'blk-empty',
-      start_date: '2026-03-01',
-      end_date: '2026-03-31',
-      scores: [],
+      block: {
+        id: 'blk-empty',
+        user_id: 'user-1',
+        name: 'Empty Block',
+        start_date: '2026-03-01',
+        end_date: '2026-03-31',
+        status: 'completed',
+        is_review_milestone_hit: false,
+        created_at: '2026-03-01T00:00:00Z',
+      },
+      daily_scores: [],
+      load_series: [],
+      flare_up_dates: [],
+      total_sessions: 0,
+      clean_days: 0,
     };
 
     globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse(snakeResponse));
 
-    const result = await getTrainingBlockScores('blk-empty');
+    const result = await getTrainingBlockReview('blk-empty');
 
-    expect(result).toEqual([]);
+    expect(result.dailyScores).toEqual([]);
   });
 });

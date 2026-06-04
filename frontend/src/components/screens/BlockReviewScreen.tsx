@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { CalendarHeatmap } from '../composites/CalendarHeatmap';
 import { WeeklyLoadGraph } from '../composites/WeeklyLoadGraph';
 import { Card } from '../ui/Card';
+import { ReviewMilestoneBadge } from '../ui/ReviewMilestoneBadge';
 import type { MilestoneEngineResult } from '../../hooks/useMilestoneEngine';
 import { getTrainingBlockReview } from '../../lib/api/trainingBlocks';
 import type { TrainingBlockReview } from '../../lib/api/trainingBlocks';
@@ -22,6 +23,7 @@ interface ReviewBlock {
   startDate: ISODate;
   endDate?: ISODate;
   status: TrainingBlock['status'];
+  isReviewMilestoneHit: boolean;
 }
 
 interface ReviewData {
@@ -189,6 +191,8 @@ export function BlockReviewScreen({
 
   const titleBlock = reviewData?.block ?? previousBlock ?? engine.block;
   const displayEndDate = titleBlock.endDate ?? engine.todayDate;
+  const showReviewMilestone =
+    titleBlock.id !== '' && titleBlock.isReviewMilestoneHit === true;
 
   return (
     <section className="flex min-h-full flex-1 flex-col bg-bg">
@@ -201,7 +205,10 @@ export function BlockReviewScreen({
           Back
         </button>
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-title-lg font-semibold text-ink">Block review</h1>
+          <div className="flex min-w-0 items-center gap-2">
+            <h1 className="truncate text-title-lg font-semibold text-ink">Block review</h1>
+            {showReviewMilestone ? <ReviewMilestoneBadge /> : null}
+          </div>
           {titleBlock.id !== '' ? (
             <p className="mt-0.5 truncate text-caption text-ink-muted">
               {titleBlock.name} · {formatDate(titleBlock.startDate)} -{' '}

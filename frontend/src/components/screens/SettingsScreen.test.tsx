@@ -1,11 +1,10 @@
 /**
  * F2.3 — SettingsScreen component tests (failing first, TDD).
+ * F10.6 — Review milestone badge on BlockSummaryCard and previous-block rows
+ *         (plans/tickets-phase-10-polish-2026-06-04.md).
  *
  * Tests are written against the public contract defined in the ticket:
  *   Props: { engine: MilestoneEngineResult }
- *
- * The component (SettingsScreen.tsx) does NOT exist yet — all tests below
- * must fail until the implementation is in place.
  *
  * Spec: export/preview/SettingsScreen.jsx, MOCKUPS.md §Screen 5 / 5b
  */
@@ -23,7 +22,7 @@ import type {
   WeeklyTarget,
   TrainingBlock,
 } from '../../types';
-import type { NewActivityDraft, RuleDraft, RulePatch } from '../../hooks/useMilestoneEngine';
+import type { NewActivityDraft } from '../../hooks/useMilestoneEngine';
 import { SettingsScreen } from './SettingsScreen';
 
 // Module-level mock for apiFetch used in F2.6 onClick wiring tests.
@@ -263,6 +262,16 @@ function getInactiveSection(): HTMLElement {
   expect(section).not.toBeNull();
   return section as HTMLElement;
 }
+
+/** Previous-blocks list row (name cell → inner column → flex row). */
+function withinPreviousBlockRow(blockName: string) {
+  const nameEl = screen.getByText(blockName);
+  const row = nameEl.parentElement?.parentElement;
+  expect(row).not.toBeNull();
+  return within(row as HTMLElement);
+}
+
+const REVIEW_MILESTONE_BADGE = /review milestone reached/i;
 
 function renderStatefulSettingsScreen(options: {
   activities?: Activity[];
@@ -919,10 +928,12 @@ describe('SettingsScreen — Q9.11B inactive activity recovery flow', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 10. Edit Rules button opens form
+// F10.10 — Remove inline EditRulesForm / NewTrainingBlockSheet
+// Rule and block create/edit coverage: EditBlockRulesScreen.test.tsx,
+// NewTrainingBlockScreen.test.tsx. plans/tickets-phase-10-polish-2026-06-04.md
 // ---------------------------------------------------------------------------
 
-describe('SettingsScreen — Edit Rules form opens', () => {
+describe('SettingsScreen — F10.10 remove inline rule and block sheets', () => {
   it('renders an Edit Rules button when a block is active', () => {
     const engine = makeEngine({
       block: ACTIVE_BLOCK,
@@ -936,8 +947,7 @@ describe('SettingsScreen — Edit Rules form opens', () => {
     expect(screen.getByRole('button', { name: /edit rules/i })).toBeInTheDocument();
   });
 
-  it('opens the Edit Rules form when the Edit Rules button is clicked', async () => {
-    const user = userEvent.setup();
+  it('does not mount the inline Edit Rules dialog in the document', () => {
     const engine = makeEngine({
       block: ACTIVE_BLOCK,
       rules: [RULE_REST],
@@ -945,386 +955,81 @@ describe('SettingsScreen — Edit Rules form opens', () => {
       activityClasses: [CLASS_RUNNING],
     });
 
-    renderWithProviders(<SettingsScreen engine={engine} />);
-
-    await user.click(screen.getByRole('button', { name: /edit rules/i }));
-
-    // The form/dialog should appear
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// 11. Edit Rules — per-class threshold inputs
-// ---------------------------------------------------------------------------
-
-describe('SettingsScreen — Edit Rules per-class thresholds', () => {
-  async function openEditRules(engine: typeof mockEngine) {
-    const user = userEvent.setup();
-    renderWithProviders(<SettingsScreen engine={engine} />);
-    await user.click(screen.getByRole('button', { name: /edit rules/i }));
-    return user;
-  }
-
-  it('shows rest_between_class threshold input in Edit Rules form', async () => {
-    const engine = makeEngine({
-      block: ACTIVE_BLOCK,
-      rules: [RULE_REST],
-      weeklyTargets: [],
-      activityClasses: [CLASS_RUNNING],
-    });
-
-    await openEditRules(engine);
-
-    // Should render a numeric input for rest_between_class
-    const input = screen.queryByLabelText(/rest.between/i) ??
-      screen.queryByLabelText(/rest between class/i) ??
-      screen.queryByRole('spinbutton', { name: /rest/i });
-    expect(input).toBeInTheDocument();
-  });
-
-  it('shows frequency_limit threshold input in Edit Rules form', async () => {
-    const engine = makeEngine({
-      block: ACTIVE_BLOCK,
-      rules: [RULE_FREQ],
-      weeklyTargets: [],
-      activityClasses: [CLASS_RUNNING],
-    });
-
-    await openEditRules(engine);
-
-    const input = screen.queryByLabelText(/frequency/i) ??
-      screen.queryByRole('spinbutton', { name: /frequency/i });
-    expect(input).toBeInTheDocument();
-  });
-
-  it('shows weekly_load_cap threshold input in Edit Rules form', async () => {
-    const ruleLoadCap: Rule = {
-      ...RULE_REST,
-      id: 'rule-load-cap',
-      ruleType: 'weekly_load_cap',
-      thresholdValue: 100,
-      enabled: true,
-    };
-    const engine = makeEngine({
-      block: ACTIVE_BLOCK,
-      rules: [ruleLoadCap],
-      weeklyTargets: [],
-      activityClasses: [CLASS_RUNNING],
-    });
-
-    await openEditRules(engine);
-
-    const input = screen.queryByLabelText(/load cap/i) ??
-      screen.queryByRole('spinbutton', { name: /load/i });
-    expect(input).toBeInTheDocument();
-  });
-
-  it('shows consecutive_day_limit threshold input in Edit Rules form', async () => {
-    const ruleConsec: Rule = {
-      ...RULE_REST,
-      id: 'rule-consec',
-      ruleType: 'consecutive_day_limit',
-      thresholdValue: 4,
-      enabled: true,
-    };
-    const engine = makeEngine({
-      block: ACTIVE_BLOCK,
-      rules: [ruleConsec],
-      weeklyTargets: [],
-      activityClasses: [CLASS_RUNNING],
-    });
-
-    await openEditRules(engine);
-
-    const input = screen.queryByLabelText(/consecutive/i) ??
-      screen.queryByRole('spinbutton', { name: /consecutive/i });
-    expect(input).toBeInTheDocument();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// 12. Edit Rules — cross-class weekly_activity_count
-// ---------------------------------------------------------------------------
-
-describe('SettingsScreen — Edit Rules cross-class weekly_activity_count', () => {
-  it('shows weekly_activity_count input in Edit Rules form', async () => {
-    const user = userEvent.setup();
-    const engine = makeEngine({
-      block: ACTIVE_BLOCK,
-      rules: [RULE_CROSS_CLASS],
-      weeklyTargets: [],
-      activityClasses: [],
-    });
-
-    renderWithProviders(<SettingsScreen engine={engine} />);
-    await user.click(screen.getByRole('button', { name: /edit rules/i }));
-
-    const input = screen.queryByLabelText(/weekly activity count/i) ??
-      screen.queryByLabelText(/sessions.*week/i) ??
-      screen.queryByRole('spinbutton', { name: /sessions/i });
-    expect(input).toBeInTheDocument();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// 13. Edit Rules save → engine mutations
-// ---------------------------------------------------------------------------
-
-describe('SettingsScreen — Edit Rules save mutations', () => {
-  it('calls engine.updateRule when saving a changed rule threshold', async () => {
-    const user = userEvent.setup();
-    const updateRule = vi.fn();
-    const engine = makeEngine({
-      block: ACTIVE_BLOCK,
-      rules: [RULE_REST],
-      weeklyTargets: [],
-      activityClasses: [CLASS_RUNNING],
-      updateRule,
-    });
-
-    renderWithProviders(<SettingsScreen engine={engine} />);
-    await user.click(screen.getByRole('button', { name: /edit rules/i }));
-
-    // Find the threshold input, clear it, and type a new value
-    const thresholdInput = screen.getByDisplayValue('2');
-    await user.clear(thresholdInput);
-    await user.type(thresholdInput, '3');
-
-    await user.click(screen.getByRole('button', { name: /save/i }));
-
-    expect(updateRule).toHaveBeenCalledTimes(1);
-    const [ruleId, patch] = updateRule.mock.calls[0] as [string, RulePatch];
-    expect(ruleId).toBe(RULE_REST.id);
-    expect(patch.thresholdValue).toBe(3);
-  });
-
-  it('calls engine.createRule when adding a new rule in Edit Rules form', async () => {
-    const user = userEvent.setup();
-    const createRule = vi.fn();
-    const engine = makeEngine({
-      block: ACTIVE_BLOCK,
-      rules: [], // no existing rules
-      weeklyTargets: [],
-      activityClasses: [CLASS_RUNNING],
-      createRule,
-    });
-
-    renderWithProviders(<SettingsScreen engine={engine} />);
-    await user.click(screen.getByRole('button', { name: /edit rules/i }));
-
-    // Find "Add rule" or similar affordance
-    const addRuleButton = screen.queryByRole('button', { name: /add rule/i });
-    if (addRuleButton) {
-      await user.click(addRuleButton);
-    }
-
-    // Fill in rule form fields
-    const typeSelect = screen.queryByRole('combobox', { name: /rule type/i }) ??
-      screen.queryByRole('combobox');
-    if (typeSelect) {
-      await user.selectOptions(typeSelect, 'rest_between_class');
-    }
-
-    const thresholdInput = screen.queryByRole('spinbutton', { name: /threshold/i }) ??
-      screen.queryByRole('spinbutton');
-    if (thresholdInput) {
-      await user.clear(thresholdInput);
-      await user.type(thresholdInput, '2');
-    }
-
-    await user.click(screen.getByRole('button', { name: /save/i }));
-
-    expect(createRule).toHaveBeenCalledTimes(1);
-    const [draft] = createRule.mock.calls[0] as [RuleDraft];
-    expect(draft.ruleType).toBe('rest_between_class');
-  });
-
-  it('calls engine.deleteRule when a rule is deleted in Edit Rules form', async () => {
-    const user = userEvent.setup();
-    const deleteRule = vi.fn();
-    const engine = makeEngine({
-      block: ACTIVE_BLOCK,
-      rules: [RULE_REST],
-      weeklyTargets: [],
-      activityClasses: [CLASS_RUNNING],
-      deleteRule,
-    });
-
-    renderWithProviders(<SettingsScreen engine={engine} />);
-    await user.click(screen.getByRole('button', { name: /edit rules/i }));
-
-    // Find and click delete button for the rule
-    const deleteButton = screen.queryByRole('button', { name: /delete|remove/i });
-    if (deleteButton) {
-      await user.click(deleteButton);
-      await user.click(screen.getByRole('button', { name: /save/i }));
-      expect(deleteRule).toHaveBeenCalledWith(RULE_REST.id);
-    } else {
-      // If no per-rule delete button, skip this assertion
-      // (may be a toggle/enabled pattern)
-      expect(true).toBe(true);
-    }
-  });
-});
-
-// ---------------------------------------------------------------------------
-// 14. Edit Rules save reflected in block summary
-// ---------------------------------------------------------------------------
-
-describe('SettingsScreen — Edit Rules reflected in block summary after save', () => {
-  it('new rule appears in block summary after save and re-render', async () => {
-    const engine = makeEngine({
-      block: ACTIVE_BLOCK,
-      rules: [],
-      weeklyTargets: [],
-      activityClasses: [CLASS_RUNNING],
-    });
-
-    const { rerender } = renderWithProviders(<SettingsScreen engine={engine} />);
-
-    // Simulate query invalidation: engine now has the new rule
-    const updatedEngine = makeEngine({
-      block: ACTIVE_BLOCK,
-      rules: [RULE_REST],
-      weeklyTargets: [],
-      activityClasses: [CLASS_RUNNING],
-    });
-
-    rerender(<SettingsScreen engine={updatedEngine} />);
-
-    expect(screen.getByText(/min 2.day rest/i)).toBeInTheDocument();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// 15. "+ New Training Block" sheet opens
-// ---------------------------------------------------------------------------
-
-describe('SettingsScreen — New Training Block sheet', () => {
-  it('renders the "+ New Training Block" button', () => {
-    const engine = makeEngine({
-      block: ACTIVE_BLOCK,
-    });
-
-    renderWithProviders(<SettingsScreen engine={engine} />);
+    renderWithProviders(
+      <SettingsScreen
+        engine={engine}
+        onEditRules={vi.fn()}
+        onNewBlock={vi.fn()}
+      />,
+    );
 
     expect(
-      screen.getByRole('button', { name: /\+ new training block/i }),
-    ).toBeInTheDocument();
+      screen.queryByRole('dialog', { name: /edit rules for/i }),
+    ).not.toBeInTheDocument();
   });
 
-  it('opens the New Block form/sheet when the button is clicked', async () => {
+  it('clicking Edit rules without onEditRules does not open an inline Edit Rules sheet', async () => {
     const user = userEvent.setup();
     const engine = makeEngine({
       block: ACTIVE_BLOCK,
+      rules: [RULE_REST],
+      weeklyTargets: [],
+      activityClasses: [CLASS_RUNNING],
     });
 
     renderWithProviders(<SettingsScreen engine={engine} />);
 
-    await user.click(screen.getByRole('button', { name: /\+ new training block/i }));
+    await user.click(screen.getByRole('button', { name: /edit rules/i }));
 
-    // A form or dialog should appear
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
-});
 
-// ---------------------------------------------------------------------------
-// 16–17. New Block form fields
-// ---------------------------------------------------------------------------
-
-describe('SettingsScreen — New Block form fields', () => {
-  async function openNewBlockSheet(engine: typeof mockEngine) {
-    const user = userEvent.setup();
-    renderWithProviders(<SettingsScreen engine={engine} />);
-    await user.click(screen.getByRole('button', { name: /\+ new training block/i }));
-    return user;
-  }
-
-  it('form has a required name text input', async () => {
+  it('does not mount the inline New Training Block dialog in the document', () => {
     const engine = makeEngine({ block: ACTIVE_BLOCK });
-    await openNewBlockSheet(engine);
 
-    const nameInput = screen.getByRole('textbox', { name: /name/i });
-    expect(nameInput).toBeInTheDocument();
-    expect(nameInput).toBeRequired();
+    renderWithProviders(
+      <SettingsScreen
+        engine={engine}
+        onEditRules={vi.fn()}
+        onNewBlock={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.queryByRole('dialog', { name: /new training block/i }),
+    ).not.toBeInTheDocument();
   });
 
-  it('form has a required start date input', async () => {
-    const engine = makeEngine({ block: ACTIVE_BLOCK });
-    await openNewBlockSheet(engine);
-
-    const dateInput = screen.getByLabelText(/start date/i);
-    expect(dateInput).toBeInTheDocument();
-    expect(dateInput).toBeRequired();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// 17. New Block submit → engine.createTrainingBlock
-// ---------------------------------------------------------------------------
-
-describe('SettingsScreen — New Block submit', () => {
-  async function openNewBlockSheet(engine: typeof mockEngine) {
+  it('clicking + New Training Block without onNewBlock does not open an inline sheet', async () => {
     const user = userEvent.setup();
-    renderWithProviders(<SettingsScreen engine={engine} />);
-    await user.click(screen.getByRole('button', { name: /\+ new training block/i }));
-    return user;
-  }
-
-  it('calls engine.createTrainingBlock with name and startDate on submit', async () => {
     const createTrainingBlock = vi.fn();
     const engine = makeEngine({
       block: ACTIVE_BLOCK,
       createTrainingBlock,
     });
-    const user = await openNewBlockSheet(engine);
 
-    await user.type(screen.getByRole('textbox', { name: /name/i }), 'New June Block');
-    await user.type(screen.getByLabelText(/start date/i), '2026-06-01');
+    renderWithProviders(<SettingsScreen engine={engine} />);
 
-    await user.click(screen.getByRole('button', { name: /create|save/i }));
-
-    expect(createTrainingBlock).toHaveBeenCalledTimes(1);
-    const [draft] = createTrainingBlock.mock.calls[0] as [{ name: string; startDate: string }];
-    expect(draft.name).toBe('New June Block');
-    expect(draft.startDate).toBe('2026-06-01');
-  });
-
-  it('closes the New Block sheet after submit', async () => {
-    const engine = makeEngine({ block: ACTIVE_BLOCK });
-    const user = await openNewBlockSheet(engine);
-
-    await user.type(screen.getByRole('textbox', { name: /name/i }), 'June Block');
-    await user.type(screen.getByLabelText(/start date/i), '2026-06-01');
-    await user.click(screen.getByRole('button', { name: /create|save/i }));
+    await user.click(screen.getByRole('button', { name: /\+ new training block/i }));
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(createTrainingBlock).not.toHaveBeenCalled();
   });
 
-  it('new block appears as active/most-recent on refetch (re-render)', async () => {
-    const engine = makeEngine({
-      block: ACTIVE_BLOCK,
-      previousBlocks: [],
-    });
+  it('keeps the dev Reset mock data control when VITE_DEV_MODE is true', () => {
+    vi.stubEnv('VITE_DEV_MODE', 'true');
+    const engine = makeEngine({ block: ACTIVE_BLOCK });
 
-    const { rerender } = renderWithProviders(<SettingsScreen engine={engine} />);
+    renderWithProviders(
+      <SettingsScreen
+        engine={engine}
+        onEditRules={vi.fn()}
+        onNewBlock={vi.fn()}
+      />,
+    );
 
-    // Simulate query invalidation with the new block as previous
-    const updatedEngine = makeEngine({
-      block: {
-        ...ACTIVE_BLOCK,
-        id: 'blk-new',
-        name: 'New June Block',
-        startDate: '2026-06-01',
-        endDate: undefined,
-      },
-      previousBlocks: [ACTIVE_BLOCK],
-    });
-
-    rerender(<SettingsScreen engine={updatedEngine} />);
-
-    expect(screen.getByText('New June Block')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /reset mock data/i })).toBeInTheDocument();
+    vi.unstubAllEnvs();
   });
 });
 
@@ -1474,57 +1179,6 @@ describe('SettingsScreen — Activity row stub actions', () => {
 });
 
 // ---------------------------------------------------------------------------
-// F2.5 Bug 2 — EditRulesForm: deleting a rule then editing the remaining rule
-// must update the *remaining* rule's id, not the deleted rule's position.
-// ---------------------------------------------------------------------------
-
-describe('EditRulesForm — delete-then-edit uses correct rule id (Bug 2)', () => {
-  it('after deleting rule[0], editing and saving updates the second rule id, not the first', async () => {
-    const user = userEvent.setup();
-    const onDeleteRule = vi.fn();
-    const onUpdateRule = vi.fn();
-
-    // Two rules: RULE_REST (id='rule-rest-1') and RULE_FREQ (id='rule-freq-1')
-    const engine = makeEngine({
-      block: ACTIVE_BLOCK,
-      rules: [RULE_REST, RULE_FREQ],
-      weeklyTargets: [],
-      activityClasses: [CLASS_RUNNING],
-      deleteRule: onDeleteRule,
-      updateRule: onUpdateRule,
-    });
-
-    renderWithProviders(<SettingsScreen engine={engine} />);
-    await user.click(screen.getByRole('button', { name: /edit rules/i }));
-
-    // Both rules are visible; delete the first one (RULE_REST)
-    const deleteButtons = screen.getAllByRole('button', { name: /delete/i });
-    expect(deleteButtons).toHaveLength(2);
-    await user.click(deleteButtons[0]!);
-
-    // After deleting RULE_REST, only RULE_FREQ remains visible.
-    // The remaining visible rule's threshold input should show RULE_FREQ's value (3).
-    const remainingInput = screen.getByDisplayValue('3');
-
-    // Edit the threshold of the remaining (second) rule
-    await user.clear(remainingInput);
-    await user.type(remainingInput, '5');
-
-    await user.click(screen.getByRole('button', { name: /save/i }));
-
-    // deleteRule must be called with the FIRST rule's id
-    expect(onDeleteRule).toHaveBeenCalledTimes(1);
-    expect(onDeleteRule).toHaveBeenCalledWith(RULE_REST.id);
-
-    // updateRule must be called with the SECOND rule's id (rule-freq-1), NOT rule-rest-1
-    expect(onUpdateRule).toHaveBeenCalledTimes(1);
-    const [updatedRuleId, patch] = onUpdateRule.mock.calls[0] as [string, RulePatch];
-    expect(updatedRuleId).toBe(RULE_FREQ.id); // 'rule-freq-1' — currently FAILS (writes to ruleStates[0] = deleted rule)
-    expect(patch.thresholdValue).toBe(5);
-  });
-});
-
-// ---------------------------------------------------------------------------
 // F2.6 — Reset mock data button: dev-mode guard + wiring
 // ---------------------------------------------------------------------------
 // These tests MUST FAIL until the implementation is in place:
@@ -1605,6 +1259,75 @@ describe('SettingsScreen — Reset mock data button: onClick wiring', () => {
       '/dev/reset',
       expect.objectContaining({ method: 'POST' }),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F10.6 — Review milestone badge (B10.1 isReviewMilestoneHit)
+// ---------------------------------------------------------------------------
+
+describe('SettingsScreen — F10.6 review milestone badge', () => {
+  it('shows review milestone badge on active BlockSummaryCard when isReviewMilestoneHit is true', () => {
+    const engine = makeEngine({
+      block: { ...ACTIVE_BLOCK, isReviewMilestoneHit: true },
+      previousBlocks: [],
+      rules: [],
+      weeklyTargets: [],
+      activityClasses: [],
+    });
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    expect(screen.getByText(REVIEW_MILESTONE_BADGE)).toBeInTheDocument();
+  });
+
+  it('does not show review milestone badge on active block when isReviewMilestoneHit is false', () => {
+    const engine = makeEngine({
+      block: { ...ACTIVE_BLOCK, isReviewMilestoneHit: false },
+      previousBlocks: [],
+      rules: [],
+      weeklyTargets: [],
+      activityClasses: [],
+    });
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    expect(screen.queryByText(REVIEW_MILESTONE_BADGE)).not.toBeInTheDocument();
+  });
+
+  it('shows review milestone indicator on previous block rows when pb.isReviewMilestoneHit is true', () => {
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      previousBlocks: [PREVIOUS_BLOCK_1, PREVIOUS_BLOCK_2],
+      rules: [],
+      weeklyTargets: [],
+      activityClasses: [],
+    });
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    expect(
+      withinPreviousBlockRow(PREVIOUS_BLOCK_1.name).getByText(REVIEW_MILESTONE_BADGE),
+    ).toBeInTheDocument();
+    expect(
+      withinPreviousBlockRow(PREVIOUS_BLOCK_2.name).queryByText(REVIEW_MILESTONE_BADGE),
+    ).not.toBeInTheDocument();
+  });
+
+  it('allows an accessible label on previous-block milestone indicator (icon-only row)', () => {
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      previousBlocks: [PREVIOUS_BLOCK_1],
+      rules: [],
+      weeklyTargets: [],
+      activityClasses: [],
+    });
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    expect(
+      withinPreviousBlockRow(PREVIOUS_BLOCK_1.name).getByLabelText(REVIEW_MILESTONE_BADGE),
+    ).toBeInTheDocument();
   });
 });
 

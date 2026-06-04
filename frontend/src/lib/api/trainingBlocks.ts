@@ -42,18 +42,6 @@ export async function patchTrainingBlock(
   return mapTrainingBlockFromApi(raw);
 }
 
-interface TrainingBlockScoresResponse {
-  block_id: string;
-  start_date: string;
-  end_date: string;
-  scores: Record<string, unknown>[];
-}
-
-export async function getTrainingBlockScores(blockId: string): Promise<DailySafetyScore[]> {
-  const raw = await apiFetch<TrainingBlockScoresResponse>(`/training-blocks/${blockId}/scores`);
-  return raw.scores.map((item) => mapDailySafetyScoreFromApi(item));
-}
-
 interface TrainingBlockReviewResponse {
   block: Record<string, unknown>;
   daily_scores: Record<string, unknown>[];

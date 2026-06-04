@@ -7,6 +7,7 @@ import { cn } from '../../lib/cn';
 import { Card } from '../ui/Card';
 import { Slider } from '../ui/Slider';
 import { SegmentedControl } from '../ui/SegmentedControl';
+import { DelayedTaxAttributionSection } from '../composites/DelayedTaxAttributionSection';
 import type { MilestoneEngineResult, CheckInDraft } from '../../hooks/useMilestoneEngine';
 import type { Score0to10, SafetyState } from '../../types';
 
@@ -62,7 +63,7 @@ const FieldGroup: React.FC<{ children: React.ReactNode }> = ({ children }) => (
 // ---------------------------------------------------------------------------
 
 export const MorningCheckInScreen: React.FC<Props> = ({ engine, onBack, onComplete }) => {
-  const { todayDate, submitCheckIn } = engine;
+  const { todayDate, delayedTax, delayedTaxError, submitCheckIn } = engine;
 
   const [pain,       setPain]       = React.useState<number>(0);
   const [stiffness,  setStiffness]  = React.useState<number>(0);
@@ -90,12 +91,11 @@ export const MorningCheckInScreen: React.FC<Props> = ({ engine, onBack, onComple
     };
     submitCheckIn(draft);
     setSubmitted(true);
-    setTimeout(onComplete, 900);
   }
 
   if (submitted) {
     return (
-      <div className="flex flex-col items-center justify-center gap-4 h-full px-4 text-center">
+      <div className="flex flex-col items-center gap-4 h-full px-4 pb-8 pt-8 text-center overflow-y-auto">
         <span className="flex h-14 w-14 items-center justify-center rounded-full bg-safe/20">
           <svg width={28} height={28} viewBox="0 0 28 28" fill="none" aria-hidden="true">
             <path d="M5 14l6 6L23 7" stroke="#3DD68C" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
@@ -103,6 +103,20 @@ export const MorningCheckInScreen: React.FC<Props> = ({ engine, onBack, onComple
         </span>
         <p className="text-title font-semibold text-safe-fg">Check-in logged.</p>
         <p className="text-body text-ink-muted">Your status lights will update now.</p>
+        {flareUp === 'yes' ? (
+          <DelayedTaxAttributionSection
+            delayedTax={delayedTax}
+            delayedTaxError={delayedTaxError}
+            activityClasses={engine.activityClasses}
+          />
+        ) : null}
+        <button
+          type="button"
+          onClick={onComplete}
+          className="mt-2 h-12 w-full max-w-md rounded-md bg-safe text-body-lg font-semibold text-ink-inverse active:brightness-90"
+        >
+          Done
+        </button>
       </div>
     );
   }

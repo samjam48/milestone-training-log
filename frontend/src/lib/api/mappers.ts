@@ -514,10 +514,13 @@ export interface DashboardPayload {
   weeklyProgress: WeeklyProgress[];
   dailyScores: ReturnType<typeof mapDailySafetyScoreFromApi>[];
   loadSeries: LoadPoint[];
+  graphClassId: string | null;
   flareUpDates: ISODate[];
   weekLoadThreshold: number;
   cleanStreak: number;
   recoveryStreaks: RecoveryStreak[];
+  goals: WithoutUserId<Goal>[];
+  previousBlocks: WithoutUserId<TrainingBlock>[];
 }
 
 export function mapDashboardFromApi(raw: Record<string, unknown>): DashboardPayload {
@@ -541,12 +544,16 @@ export function mapDashboardFromApi(raw: Record<string, unknown>): DashboardPayl
     weeklyProgress: mapList(raw.weekly_progress, mapWeeklyProgressFromApi),
     dailyScores: mapList(raw.daily_scores, mapDailySafetyScoreFromApi),
     loadSeries: mapList(raw.load_series, mapLoadPointFromApi),
+    graphClassId:
+      raw.graph_class_id == null ? null : String(raw.graph_class_id),
     flareUpDates: Array.isArray(raw.flare_up_dates)
       ? raw.flare_up_dates.map((date) => String(date) as ISODate)
       : [],
     weekLoadThreshold: Number(raw.week_load_threshold),
     cleanStreak: Number(raw.clean_streak),
     recoveryStreaks: mapList(raw.recovery_streaks, mapRecoveryStreakFromApi),
+    goals: mapList(raw.goals, mapGoalFromApi),
+    previousBlocks: mapList(raw.previous_blocks, mapTrainingBlockFromApi),
   };
 }
 

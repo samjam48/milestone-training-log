@@ -29,10 +29,12 @@ function createBaseline(): MilestoneEngineResult {
     weeklyProgress: [],
     dailyScores: [],
     loadSeries: [],
+    graphClassId: null,
     flareUpDates: [],
     weekLoadThreshold: 0,
     cleanStreak: 0,
     recoveryStreaks: [],
+    delayedTaxError: false,
     // F2.0 read fields
     goals: [],
     rules: [],
@@ -49,6 +51,10 @@ function createBaseline(): MilestoneEngineResult {
     updateRule: () => undefined,
     deleteRule: () => undefined,
     createTrainingBlock: () => undefined,
+    // H10.2 — app shell query status
+    isInitialLoading: false,
+    isFatalError: false,
+    refetchAll: () => undefined,
     // F1.3 mutations
     submitLog: () => undefined,
     submitCheckIn: () => undefined,

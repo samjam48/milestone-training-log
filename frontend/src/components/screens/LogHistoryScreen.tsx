@@ -123,7 +123,22 @@ export const LogHistoryScreen: React.FC<Props> = ({ engine, onOpenLogActivity, o
       {/* Scrollable list */}
       <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-4">
         {monthKeys.length === 0 ? (
-          <p className="text-body text-ink-muted text-center mt-8">No sessions logged yet.</p>
+          <div
+            data-testid="log-history-empty-state"
+            className="flex flex-col items-center justify-center gap-3 text-center mt-8 px-2"
+          >
+            <div
+              data-testid="log-history-empty-illustration"
+              className="flex h-20 w-20 items-center justify-center rounded-full bg-bg-sunken text-ink-faint"
+              aria-hidden="true"
+            >
+              <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="8" y="6" width="24" height="28" rx="3" stroke="currentColor" strokeWidth="1.75" />
+                <path d="M14 14h12M14 20h12M14 26h8" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+              </svg>
+            </div>
+            <p className="text-body text-ink-muted">No sessions logged yet.</p>
+          </div>
         ) : (
           <div className="flex flex-col gap-4">
             {monthKeys.map(month => {

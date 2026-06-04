@@ -9,8 +9,8 @@ import * as React from 'react';
 import { cn } from '../../lib/cn';
 import { Card } from '../ui/Card';
 import { ProgressBar } from '../ui/ProgressBar';
-import type { MilestoneEngineResult, GoalDraft } from '../../hooks/useMilestoneEngine';
-import type { ActivityClass, Goal, GoalTimeframe, SafetyState } from '../../types';
+import type { MilestoneEngineResult } from '../../hooks/useMilestoneEngine';
+import type { Goal, SafetyState } from '../../types';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -163,298 +163,11 @@ function GoalCard({ goal, activityClassName, onEdit, onArchive, confirmingArchiv
 }
 
 // ---------------------------------------------------------------------------
-// NewGoalForm — bottom-sheet dialog
-// ---------------------------------------------------------------------------
-
-interface NewGoalFormProps {
-  open: boolean;
-  onClose: () => void;
-  activityClasses: ActivityClass[];
-  onCreate: (draft: GoalDraft) => void;
-}
-
-function NewGoalForm({ open, onClose, activityClasses, onCreate }: NewGoalFormProps): React.ReactElement | null {
-  const [title, setTitle] = React.useState('');
-  const [targetDate, setTargetDate] = React.useState('');
-  const [timeframe, setTimeframe] = React.useState<GoalTimeframe>('monthly');
-  const [activityClassId, setActivityClassId] = React.useState<string>('');
-  const [progressTarget, setProgressTarget] = React.useState('');
-  const [progressUnit, setProgressUnit] = React.useState('');
-
-  // Reset form each time the dialog opens
-  React.useEffect(() => {
-    if (open) {
-      setTitle('');
-      setTargetDate('');
-      setTimeframe('monthly');
-      setActivityClassId('');
-      setProgressTarget('');
-      setProgressUnit('');
-    }
-  }, [open]);
-
-  if (!open) return null;
-
-  const canSubmit = title.trim().length > 0 && targetDate.length > 0;
-
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>): void {
-    e.preventDefault();
-    if (!canSubmit) return;
-
-    const draft: GoalDraft = {
-      title: title.trim(),
-      targetDate,
-      timeframe,
-      status: 'active',
-      activityClassId: activityClassId !== '' ? activityClassId : undefined,
-      progressTarget: progressTarget !== '' ? Number(progressTarget) : undefined,
-      progressUnit: progressUnit !== '' ? progressUnit as import('../../types').VolumeUnit : undefined,
-    };
-    onCreate(draft);
-    onClose();
-  }
-
-  return (
-    <>
-      {/* Scrim */}
-      <div
-        className="fixed inset-0 z-50 bg-black/60"
-        style={{ backdropFilter: 'blur(4px)' }}
-        onClick={onClose}
-        aria-hidden="true"
-      />
-
-      {/* Panel */}
-      <div
-        className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-[440px] rounded-t-2xl bg-bg-raised border-t border-border"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Create new goal"
-      >
-        {/* Drag handle */}
-        <div className="flex justify-center pt-3 pb-1">
-          <div className="h-1 w-10 rounded-full bg-border" aria-hidden="true" />
-        </div>
-
-        <div className="px-4 pb-8 pt-2">
-          <div className="flex items-center justify-between mb-5">
-            <h2 className="text-title font-bold text-ink">New Goal</h2>
-            <button
-              type="button"
-              onClick={onClose}
-              className="h-8 w-8 flex items-center justify-center rounded-full text-ink-muted hover:text-ink hover:bg-bg-overlay transition-colors duration-snap"
-              aria-label="Close"
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <path
-                  d="M4 4l8 8M12 4l-8 8"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-              </svg>
-            </button>
-          </div>
-
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-
-            {/* ── Title ── */}
-            <div>
-              <label
-                htmlFor="goal-title"
-                className="block text-body font-medium text-ink mb-2"
-              >
-                Title
-              </label>
-              <input
-                id="goal-title"
-                type="text"
-                required
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. Run 50km this month"
-                autoFocus
-                aria-label="Title"
-                className={cn(
-                  'w-full rounded-md bg-bg-sunken border border-border px-3 py-2.5',
-                  'text-body text-ink placeholder:text-ink-faint',
-                  'focus:outline-none focus:border-border-strong',
-                )}
-              />
-            </div>
-
-            {/* ── Target date ── */}
-            <div>
-              <label
-                htmlFor="goal-target-date"
-                className="block text-body font-medium text-ink mb-2"
-              >
-                Target date
-              </label>
-              <input
-                id="goal-target-date"
-                type="date"
-                required
-                value={targetDate}
-                onChange={(e) => setTargetDate(e.target.value)}
-                aria-label="Target date"
-                className={cn(
-                  'w-full rounded-md bg-bg-sunken border border-border px-3 py-2.5',
-                  'text-body text-ink',
-                  'focus:outline-none focus:border-border-strong',
-                )}
-              />
-            </div>
-
-            {/* ── Timeframe ── */}
-            <fieldset>
-              <legend className="block text-body font-medium text-ink mb-2">
-                Timeframe
-              </legend>
-              <div className="flex gap-4">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="goal-timeframe"
-                    value="monthly"
-                    checked={timeframe === 'monthly'}
-                    onChange={() => setTimeframe('monthly')}
-                    aria-label="Monthly"
-                  />
-                  <span className="text-body text-ink">Monthly</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="goal-timeframe"
-                    value="quarterly"
-                    checked={timeframe === 'quarterly'}
-                    onChange={() => setTimeframe('quarterly')}
-                    aria-label="Quarterly"
-                  />
-                  <span className="text-body text-ink">Quarterly</span>
-                </label>
-              </div>
-            </fieldset>
-
-            {/* ── Activity class (optional) ── */}
-            <div>
-              <label
-                htmlFor="goal-activity-class"
-                className="block text-body font-medium text-ink mb-2"
-              >
-                Activity class (optional)
-              </label>
-              <select
-                id="goal-activity-class"
-                value={activityClassId}
-                onChange={(e) => setActivityClassId(e.target.value)}
-                aria-label="Activity class"
-                className={cn(
-                  'w-full rounded-md bg-bg-sunken border border-border px-3 py-2.5',
-                  'text-body text-ink',
-                  'focus:outline-none focus:border-border-strong',
-                )}
-              >
-                <option value="">None</option>
-                {activityClasses.map((cls) => (
-                  <option key={cls.id} value={cls.id}>
-                    {cls.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* ── Progress target (optional) ── */}
-            <div>
-              <label
-                htmlFor="goal-progress-target"
-                className="block text-body font-medium text-ink mb-2"
-              >
-                Progress target (optional)
-              </label>
-              <input
-                id="goal-progress-target"
-                type="number"
-                min={0}
-                value={progressTarget}
-                onChange={(e) => setProgressTarget(e.target.value)}
-                placeholder="e.g. 50"
-                aria-label="Progress target"
-                className={cn(
-                  'w-full rounded-md bg-bg-sunken border border-border px-3 py-2.5',
-                  'text-body text-ink placeholder:text-ink-faint',
-                  'focus:outline-none focus:border-border-strong',
-                )}
-              />
-            </div>
-
-            {/* ── Progress unit (optional) ── */}
-            <div>
-              <label
-                htmlFor="goal-progress-unit"
-                className="block text-body font-medium text-ink mb-2"
-              >
-                Unit (optional)
-              </label>
-              <select
-                id="goal-progress-unit"
-                value={progressUnit}
-                onChange={(e) => setProgressUnit(e.target.value)}
-                aria-label="Unit"
-                className={cn(
-                  'w-full rounded-md bg-bg-sunken border border-border px-3 py-2.5',
-                  'text-body text-ink',
-                  'focus:outline-none focus:border-border-strong',
-                )}
-              >
-                <option value="">No unit</option>
-                <option value="km">km</option>
-                <option value="mi">miles</option>
-                <option value="m">m</option>
-                <option value="minutes">minutes</option>
-                <option value="reps">reps</option>
-                <option value="sets">sets</option>
-                <option value="sessions">sessions</option>
-              </select>
-            </div>
-
-            {/* ── Actions ── */}
-            <div className="flex gap-3 pt-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="flex-1 h-11 rounded-md bg-bg-sunken text-body font-medium text-ink-muted transition-colors duration-snap active:bg-bg-overlay"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={!canSubmit}
-                className={cn(
-                  'flex-1 h-11 rounded-md text-body-lg font-semibold transition-colors duration-snap',
-                  canSubmit
-                    ? 'bg-ink text-ink-inverse active:opacity-80'
-                    : 'bg-ink/20 text-ink-faint cursor-not-allowed',
-                )}
-              >
-                Save
-              </button>
-            </div>
-
-          </form>
-        </div>
-      </div>
-    </>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // GoalsScreen
 // ---------------------------------------------------------------------------
 
 export function GoalsScreen({ engine, onNewGoal, onEditGoal }: GoalsScreenProps): React.ReactElement {
-  const { goals, activityClasses, archiveGoal, createGoal, updateGoal } = engine;
+  const { goals, activityClasses, archiveGoal, updateGoal } = engine;
 
   const classMap = React.useMemo(
     () => new Map(activityClasses.map((c) => [c.id, c])),
@@ -481,15 +194,10 @@ export function GoalsScreen({ engine, onNewGoal, onEditGoal }: GoalsScreenProps)
 
   const [showAchieved, setShowAchieved] = React.useState(false);
   const [confirmArchiveId, setConfirmArchiveId] = React.useState<string | null>(null);
-  const [formOpen, setFormOpen] = React.useState(false);
 
   function resolveClassName(goal: Omit<Goal, 'userId'>): string | null {
     if (goal.activityClassId == null) return null;
     return classMap.get(goal.activityClassId)?.name ?? null;
-  }
-
-  function handleCreate(draft: GoalDraft): void {
-    createGoal(draft);
   }
 
   function handleArchiveRequest(id: string): void {
@@ -523,7 +231,21 @@ export function GoalsScreen({ engine, onNewGoal, onEditGoal }: GoalsScreenProps)
       {/* Scrollable body — pb-24 clears the sticky CTA */}
       <div className="flex-1 overflow-y-auto px-4 pb-24 min-h-0">
         {!hasActive ? (
-          <div className="flex flex-col items-center justify-center gap-3 text-center mt-16 px-4">
+          <div
+            data-testid="goals-empty-state"
+            className="flex flex-col items-center justify-center gap-3 text-center mt-16 px-4"
+          >
+            <div
+              data-testid="goals-empty-illustration"
+              className="flex h-20 w-20 items-center justify-center rounded-full bg-bg-sunken text-ink-faint"
+              aria-hidden="true"
+            >
+              <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="20" cy="20" r="12" stroke="currentColor" strokeWidth="1.75" />
+                <circle cx="20" cy="20" r="5" stroke="currentColor" strokeWidth="1.75" />
+                <path d="M20 4v4M20 32v4M4 20h4M32 20h4" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+              </svg>
+            </div>
             <p className="text-title font-semibold text-ink">No goals yet</p>
             <p className="text-body text-ink-muted">
               Set a monthly or quarterly target to track your progress here.
@@ -658,26 +380,12 @@ export function GoalsScreen({ engine, onNewGoal, onEditGoal }: GoalsScreenProps)
       >
         <button
           type="button"
-          onClick={() => {
-            if (onNewGoal != null) {
-              onNewGoal();
-            } else {
-              setFormOpen(true);
-            }
-          }}
+          onClick={() => onNewGoal?.()}
           className="pointer-events-auto w-full h-12 rounded-md bg-ink text-ink-inverse text-body-lg font-semibold transition-colors duration-snap active:opacity-80"
         >
           + New Goal
         </button>
       </div>
-
-      {/* New Goal form */}
-      <NewGoalForm
-        open={formOpen}
-        onClose={() => setFormOpen(false)}
-        activityClasses={activityClasses}
-        onCreate={handleCreate}
-      />
     </div>
   );
 }

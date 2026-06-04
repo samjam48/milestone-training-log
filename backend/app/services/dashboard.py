@@ -159,7 +159,7 @@ def get_dashboard(session: Session, *, as_of: date | None = None) -> DashboardRe
     clean_streak = compute_clean_streak(log_dicts)
     recovery_streaks = _build_recovery_streaks(recovery_targets, activities)
     flare_up_dates = sorted({format_iso_date(incident.incident_date) for incident in incidents})
-    active_goals = list_goals(session, status="active")
+    dashboard_goals = list_goals(session)
     previous_blocks = _build_previous_blocks(session)
     has_checked_in_today = any(
         check_in.check_in_date == resolved for check_in in check_ins
@@ -186,11 +186,12 @@ def get_dashboard(session: Session, *, as_of: date | None = None) -> DashboardRe
         ],
         daily_scores=[daily_safety_score_from_dict(dict(score)) for score in daily_scores],
         load_series=[load_point_from_dict(dict(point)) for point in load_series],
+        graph_class_id=graph_class_id if block_start is not None else None,
         flare_up_dates=flare_up_dates,
         week_load_threshold=week_load_threshold,
         clean_streak=clean_streak,
         recovery_streaks=recovery_streaks,
-        goals=[GoalRead.model_validate(g) for g in active_goals],
+        goals=[GoalRead.model_validate(g) for g in dashboard_goals],
     )
 
 

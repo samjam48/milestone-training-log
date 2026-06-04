@@ -1,7 +1,7 @@
-"""Failing tests for GET /api/training-blocks/{id}/scores (B3.0).
+"""B10.4 — GET /api/training-blocks/{id}/scores removed; use /review instead.
 
-The endpoint does not exist yet — all tests here are expected to FAIL
-until the route, service, and schema are implemented.
+These tests fail until the /scores route, block_scores service, and schema are removed.
+Review endpoint coverage lives in test_training_blocks_api.py.
 """
 
 from __future__ import annotations
@@ -19,24 +19,12 @@ from app.tests.helpers.seed import (
     seed_training_block,
 )
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-
-BLOCK_ID = "blk-scores-1"
-BLOCK_START = datetime.date(2026, 4, 7)
-BLOCK_END = datetime.date(2026, 5, 25)
-
+BLOCK_ID = "blk-scores-removed"
 SCORES_URL = f"/api/training-blocks/{BLOCK_ID}/scores"
-
-
-# ---------------------------------------------------------------------------
-# Seed helper — minimal graph with one activity log and one check-in
-# ---------------------------------------------------------------------------
+REVIEW_URL = f"/api/training-blocks/{BLOCK_ID}/review"
 
 
 def _seed_block_with_data(app_with_test_database: FastAPI) -> None:
-    """Seed one block, one activity class/activity, one log, one check-in."""
     seed_activity_class(
         app_with_test_database,
         class_id="cls-foot-scores",
@@ -55,12 +43,11 @@ def _seed_block_with_data(app_with_test_database: FastAPI) -> None:
     seed_training_block(
         app_with_test_database,
         block_id=BLOCK_ID,
-        name="Block Scores Test Block",
-        start_date=BLOCK_START,
-        end_date=BLOCK_END,
+        name="Block Scores Removal Test",
+        start_date=datetime.date(2026, 4, 7),
+        end_date=datetime.date(2026, 5, 25),
         status="active",
     )
-    # A single light walk on 2026-04-08 — well within rest rules → "safe"
     seed_activity_log(
         app_with_test_database,
         log_id="log-scores-01",
@@ -70,7 +57,6 @@ def _seed_block_with_data(app_with_test_database: FastAPI) -> None:
         volume_unit="km",
         rpe=3,
     )
-    # A check-in on the same date with no flare-up
     seed_daily_check_in(
         app_with_test_database,
         check_in_id="ci-scores-01",
@@ -80,125 +66,48 @@ def _seed_block_with_data(app_with_test_database: FastAPI) -> None:
     )
 
 
-# ---------------------------------------------------------------------------
-# Test 1 — 200 with seeded data; scores list contains at least one "safe" day
-# ---------------------------------------------------------------------------
-
-
-async def test_block_scores_returns_200_with_seeded_data(
+async def test_block_scores_route_removed_returns_404(
     app_with_test_database: FastAPI,
     client: AsyncClient,
 ) -> None:
+    """Legacy /scores must be removed — FastAPI route-not-found, not domain 404."""
     _seed_block_with_data(app_with_test_database)
 
     response = await client.get(SCORES_URL)
 
-    assert response.status_code == 200
-    payload = response.json()
-
-    # Top-level shape
-    assert payload["block_id"] == BLOCK_ID
-    assert payload["start_date"] == BLOCK_START.isoformat()
-    assert payload["end_date"] == BLOCK_END.isoformat()
-    assert isinstance(payload["scores"], list)
-    assert len(payload["scores"]) > 0
-
-    # Each score entry has the expected keys
-    first_score = payload["scores"][0]
-    assert "date" in first_score
-    assert "state" in first_score
-    assert "violations" in first_score
-    assert "had_flare_up" in first_score
-
-    # The log on 2026-04-08 is light — no violations — expect at least one "safe"
-    states = [s["state"] for s in payload["scores"]]
-    assert "safe" in states, f"Expected at least one 'safe' score, got: {states}"
-
-    # The entry for 2026-04-08 specifically
-    apr_8_scores = [s for s in payload["scores"] if s["date"] == "2026-04-08"]
-    assert len(apr_8_scores) == 1
-    apr_8 = apr_8_scores[0]
-    assert apr_8["state"] == "safe"
-    assert apr_8["violations"] == []
-    assert apr_8["had_flare_up"] is False
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Not Found"}
 
 
-# ---------------------------------------------------------------------------
-# Test 2 — 404 for a non-existent block ID
-# ---------------------------------------------------------------------------
-
-
-async def test_block_scores_returns_404_for_missing_block(
+async def test_block_scores_route_removed_for_missing_block(
     client: AsyncClient,
 ) -> None:
     response = await client.get("/api/training-blocks/blk-does-not-exist/scores")
 
     assert response.status_code == 404
-    # FastAPI's generic route-not-found returns {"detail": "Not Found"} (capital N).
-    # The real endpoint must return the lowercase domain message so we can
-    # distinguish a properly-handled block-not-found from a missing route.
-    detail = response.json().get("detail", "")
-    assert detail == "Training block not found", (
-        f"Expected domain-level 404 detail, got: {detail!r}"
-    )
+    assert response.json() == {"detail": "Not Found"}
 
 
-# ---------------------------------------------------------------------------
-# Test 3 — Block with no end_date defaults to today; no 500
-# ---------------------------------------------------------------------------
-
-
-async def test_block_scores_no_end_date_defaults_to_today(
+async def test_review_supplies_daily_scores_after_scores_removal(
     app_with_test_database: FastAPI,
     client: AsyncClient,
 ) -> None:
-    seed_activity_class(
-        app_with_test_database,
-        class_id="cls-open-scores",
-        name="Open Block Class",
-        class_type="performance",
-        default_recovery_window_days=3,
-    )
-    seed_training_block(
-        app_with_test_database,
-        block_id="blk-open",
-        name="Open-ended block",
-        start_date=datetime.date(2026, 5, 1),
-        end_date=None,   # no end_date
-        status="active",
-    )
+    """Migrated from B3.0 scores tests — same seeded block via /review daily_scores."""
+    _seed_block_with_data(app_with_test_database)
 
-    response = await client.get("/api/training-blocks/blk-open/scores")
+    response = await client.get(REVIEW_URL)
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["block_id"] == "blk-open"
-    # end_date in response should default to today (not null, not a 500)
-    assert payload["end_date"] == datetime.date.today().isoformat()
-    assert isinstance(payload["scores"], list)
+    assert payload["block"]["id"] == BLOCK_ID
+    assert isinstance(payload["daily_scores"], list)
+    assert len(payload["daily_scores"]) > 0
 
+    states = [score["state"] for score in payload["daily_scores"]]
+    assert "safe" in states
 
-# ---------------------------------------------------------------------------
-# Test 4 — Block with no logs or check-ins → scores is []
-# ---------------------------------------------------------------------------
-
-
-async def test_block_scores_empty_block_returns_empty_scores(
-    app_with_test_database: FastAPI,
-    client: AsyncClient,
-) -> None:
-    seed_training_block(
-        app_with_test_database,
-        block_id="blk-empty",
-        name="Empty block",
-        start_date=datetime.date(2026, 4, 1),
-        end_date=datetime.date(2026, 4, 3),
-        status="completed",
-    )
-
-    response = await client.get("/api/training-blocks/blk-empty/scores")
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["block_id"] == "blk-empty"
-    assert payload["scores"] == []
+    apr_8_scores = [s for s in payload["daily_scores"] if s["date"] == "2026-04-08"]
+    assert len(apr_8_scores) == 1
+    assert apr_8_scores[0]["state"] == "safe"
+    assert apr_8_scores[0]["violations"] == []
+    assert apr_8_scores[0]["had_flare_up"] is False

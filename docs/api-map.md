@@ -46,7 +46,7 @@ Use this alongside:
 | `POST` | `/api/training-blocks` | Create a new block; service automatically copies rules from the current active block and marks it `completed` |
 | `GET` | `/api/training-blocks/active` | Fetch the active block, if one exists |
 | `PATCH` | `/api/training-blocks/{block_id}` | Update block metadata or lifecycle status |
-| `GET` | `/api/training-blocks/{block_id}/review` | Per-block review payload: `block`, `daily_scores`, `load_series`, `flare_up_dates`, `total_sessions`, `clean_days` — scoped to block date range; used by `BlockReviewScreen` for both active and historical blocks |
+| `GET` | `/api/training-blocks/{block_id}/review` | Per-block review payload: `block`, `daily_scores`, `load_series`, `flare_up_dates`, `total_sessions`, `clean_days` — scoped to block date range; used by `BlockReviewScreen` and `BlockSafetyMapSection` (previous-block heatmaps). **Removed (B10.4):** `GET /api/training-blocks/{block_id}/scores` — callers use `daily_scores` from `/review` instead |
 
 ### Activity Classes
 
@@ -122,7 +122,13 @@ Use this alongside:
 | `GET` | `/api/load/summary` | Class statuses, suggestions, weekly progress; optional `?as_of=` (default server-local today); snake_case JSON; 200 with neutral payloads when no active block |
 | `POST` | `/api/load/check-violations` | Dry-run all five rule types for a proposed log; body `activity_id`, `volume_value`, `rpe`, optional `as_of`; no DB write |
 | `GET` | `/api/load/delayed-tax` | Proactive 7-day load/rest risk plus symptom attribution when pain/flare recorded; optional `?as_of=`, `?risk_window_days=`, `?baseline_days=`, `?pain_threshold=` (default 3) |
-| `GET` | `/api/dashboard` | Aggregate dashboard payload; optional `?as_of=YYYY-MM-DD` (default server-local today). Top-level fields: `as_of`, `user_name`, `block`, `activity_classes`, `activities`, `logs` (30-day window ending on `as_of` only — full Log History is Phase 6 via `GET /api/activity-logs`), `incidents`, `goals` (active goals), `previous_blocks` (completed/archived blocks, summary only — no scores), `has_checked_in_today`, `class_statuses`, `suggestions`, `weekly_progress`, `daily_scores`, `load_series`, `flare_up_dates`, `week_load_threshold`, `clean_streak`, `recovery_streaks`. Returns 200 with `block: null` and neutral/empty derived fields when no active block |
+| `GET` | `/api/dashboard` | Aggregate dashboard payload; optional `?as_of=YYYY-MM-DD` (default server-local today). Top-level fields: `as_of`, `user_name`, `block`, `activity_classes`, `activities`, `logs` (30-day window ending on `as_of` only — full Log History is Phase 6 via `GET /api/activity-logs`), `incidents`, `goals` (all local goals for the Goals tab: active, achieved, paused, missed), `previous_blocks` (completed/archived blocks, summary only — no scores), `has_checked_in_today`, `class_statuses`, `suggestions`, `weekly_progress`, `daily_scores`, `load_series`, `graph_class_id` (activity class ID used for `load_series` and `week_load_threshold`; `null` when no active block), `flare_up_dates`, `week_load_threshold`, `clean_streak`, `recovery_streaks`. Returns 200 with `block: null` and neutral/empty derived fields when no active block |
+
+### MCP Context (AI Stub)
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/mcp/context` | Structured AI-readable summary for future MCP integration; optional `?as_of=YYYY-MM-DD` (default server-local today). Top-level fields: `active_block` (slim block summary — `id`, `name`, `start_date`, `end_date`, `status`, `is_review_milestone_hit` — or `null`), `recent_logs` (last 7 calendar days ending on `as_of`; each entry has `activity_name`, `load_score` as `volume × rpe` with default RPE 5, and `logged_date`), `today_check_in` (`pain`, `readiness`, `stiffness`, `has_flare_up` or `null`), `class_statuses` (slim traffic-light summaries: `activity_class_id`, `state`, `reason`; empty when no active block). No auth, no AI calls |
 
 ## Notes For Initial Backend Build
 

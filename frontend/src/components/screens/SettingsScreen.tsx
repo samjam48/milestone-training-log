@@ -9,14 +9,9 @@ import * as React from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '../../lib/cn';
 import { Card, CardHeader, CardTitle, CardMeta } from '../ui/Card';
+import { ReviewMilestoneBadge } from '../ui/ReviewMilestoneBadge';
 import { apiFetch } from '../../lib/api/client';
-import type {
-  MilestoneEngineResult,
-  RuleDraft,
-  RulePatch,
-  BlockDraft,
-  NewActivityDraft,
-} from '../../hooks/useMilestoneEngine';
+import type { MilestoneEngineResult, NewActivityDraft } from '../../hooks/useMilestoneEngine';
 import type { Activity, ActivityClass, ActivityLog, ID, Rule, RuleType, WeeklyTarget, TrainingBlock } from '../../types';
 
 // ---------------------------------------------------------------------------
@@ -94,6 +89,9 @@ function BlockSummaryCard({
             Started {formatShortDate(block.startDate)}
             {block.endDate ? ` · Ends ${formatShortDate(block.endDate)}` : ''}
           </CardMeta>
+          {block.isReviewMilestoneHit ? (
+            <ReviewMilestoneBadge className="mt-2" />
+          ) : null}
         </div>
         <span className="inline-flex items-center gap-1.5 text-caption font-medium text-safe-fg">
           <span
@@ -345,456 +343,6 @@ function PreferenceRow({
 }
 
 // ---------------------------------------------------------------------------
-// EditRulesForm — dialog for editing rules
-// ---------------------------------------------------------------------------
-
-interface EditRuleState {
-  id: string;
-  activityClassId: string | null;
-  ruleType: RuleType;
-  thresholdValue: number;
-  windowDays: number;
-  enabled: boolean;
-  isNew: boolean;
-  isDeleted: boolean;
-}
-
-interface EditRulesFormProps {
-  open: boolean;
-  onClose: () => void;
-  block: TrainingBlock;
-  rules: Rule[];
-  onCreateRule: (draft: RuleDraft) => void;
-  onUpdateRule: (ruleId: string, patch: RulePatch) => void;
-  onDeleteRule: (ruleId: string) => void;
-}
-
-const RULE_TYPE_OPTIONS: { value: RuleType; label: string }[] = [
-  { value: 'rest_between_class', label: 'Rest between class' },
-  { value: 'frequency_limit', label: 'Frequency limit' },
-  { value: 'weekly_load_cap', label: 'Weekly load cap' },
-  { value: 'consecutive_day_limit', label: 'Consecutive day limit' },
-  { value: 'weekly_activity_count', label: 'Weekly activity count' },
-];
-
-const RULE_FIELD_LABELS: Partial<Record<RuleType, string>> = {
-  rest_between_class:    'Rest between class (days)',
-  frequency_limit:       'Frequency limit (per week)',
-  weekly_load_cap:       'Weekly load cap',
-  consecutive_day_limit: 'Consecutive day limit',
-  weekly_activity_count: 'Weekly activity count (sessions)',
-};
-
-function makeRuleState(rule: Rule): EditRuleState {
-  return {
-    id: rule.id,
-    activityClassId: rule.activityClassId,
-    ruleType: rule.ruleType,
-    thresholdValue: rule.thresholdValue,
-    windowDays: rule.windowDays,
-    enabled: rule.enabled,
-    isNew: false,
-    isDeleted: false,
-  };
-}
-
-function EditRulesForm({
-  open,
-  onClose,
-  block,
-  rules,
-  onCreateRule,
-  onUpdateRule,
-  onDeleteRule,
-}: EditRulesFormProps): React.ReactElement | null {
-  const [ruleStates, setRuleStates] = React.useState<EditRuleState[]>([]);
-
-  // Reset form each time it opens
-  React.useEffect(() => {
-    if (open) {
-      setRuleStates(rules.map(makeRuleState));
-    }
-  }, [open, rules]);
-
-  if (!open) return null;
-
-  function handleThresholdChange(id: string, value: string): void {
-    const num = Number(value);
-    if (isNaN(num)) return;
-    setRuleStates((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, thresholdValue: num } : r)),
-    );
-  }
-
-  function handleDelete(id: string): void {
-    setRuleStates((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, isDeleted: true } : r)),
-    );
-  }
-
-  function handleAddRule(): void {
-    const newRule: EditRuleState = {
-      id: `new-${Date.now()}`,
-      activityClassId: null,
-      ruleType: 'rest_between_class',
-      thresholdValue: 1,
-      windowDays: 7,
-      enabled: true,
-      isNew: true,
-      isDeleted: false,
-    };
-    setRuleStates((prev) => [...prev, newRule]);
-  }
-
-  function handleNewRuleType(id: string, ruleType: RuleType): void {
-    setRuleStates((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, ruleType } : r)),
-    );
-  }
-
-  function handleSave(): void {
-    const originalRules = new Map(rules.map((r) => [r.id, r]));
-
-    for (const rs of ruleStates) {
-      if (rs.isNew && !rs.isDeleted) {
-        onCreateRule({
-          activityClassId: rs.activityClassId,
-          ruleType: rs.ruleType,
-          thresholdValue: rs.thresholdValue,
-          windowDays: rs.windowDays,
-          enabled: rs.enabled,
-        });
-      } else if (!rs.isNew && rs.isDeleted) {
-        onDeleteRule(rs.id);
-      } else if (!rs.isNew && !rs.isDeleted) {
-        const original = originalRules.get(rs.id);
-        if (original && original.thresholdValue !== rs.thresholdValue) {
-          onUpdateRule(rs.id, { thresholdValue: rs.thresholdValue });
-        }
-      }
-    }
-
-    onClose();
-  }
-
-  const visibleRules = ruleStates.filter((r) => !r.isDeleted);
-
-  return (
-    <>
-      {/* Scrim */}
-      <div
-        className="fixed inset-0 z-50 bg-black/60"
-        style={{ backdropFilter: 'blur(4px)' }}
-        onClick={onClose}
-        aria-hidden="true"
-      />
-
-      {/* Panel */}
-      <div
-        className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-[440px] rounded-t-2xl bg-bg-raised border-t border-border overflow-y-auto max-h-[90vh]"
-        role="dialog"
-        aria-modal="true"
-        aria-label={`Edit rules for ${block.name}`}
-      >
-        {/* Drag handle */}
-        <div className="flex justify-center pt-3 pb-1">
-          <div className="h-1 w-10 rounded-full bg-border" aria-hidden="true" />
-        </div>
-
-        <div className="px-4 pb-8 pt-2">
-          <div className="flex items-center justify-between mb-5">
-            <h2 className="text-title font-bold text-ink">Edit Rules</h2>
-            <button
-              type="button"
-              onClick={onClose}
-              className="h-8 w-8 flex items-center justify-center rounded-full text-ink-muted hover:text-ink hover:bg-bg-overlay transition-colors duration-snap"
-              aria-label="Close"
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 16 16"
-                fill="none"
-                aria-hidden="true"
-              >
-                <path
-                  d="M4 4l8 8M12 4l-8 8"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-              </svg>
-            </button>
-          </div>
-
-          <div className="flex flex-col gap-4">
-            {visibleRules.map((rs) => {
-              // Use the field label for the <label> element associated with the input.
-              // Do NOT also set aria-label on the input since it already has a <label>.
-              const fieldLabel = RULE_FIELD_LABELS[rs.ruleType] ?? rs.ruleType;
-              const inputId = `rule-threshold-${rs.id}`;
-
-              return (
-                <div
-                  key={rs.id}
-                  className="flex flex-col gap-2 p-3 rounded-md bg-bg-sunken border border-border"
-                >
-                  {rs.isNew && (
-                    <div>
-                      <label
-                        htmlFor={`rule-type-${rs.id}`}
-                        className="block text-body font-medium text-ink mb-1"
-                      >
-                        Rule type
-                      </label>
-                      <select
-                        id={`rule-type-${rs.id}`}
-                        value={rs.ruleType}
-                        onChange={(e) =>
-                          handleNewRuleType(rs.id, e.target.value as RuleType)
-                        }
-                        aria-label="Rule type"
-                        className="w-full rounded-md bg-bg-raised border border-border px-3 py-2 text-body text-ink"
-                      >
-                        {RULE_TYPE_OPTIONS.map((opt) => (
-                          <option key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-
-                  <div>
-                    {/* Use <label> for association — do NOT set aria-label on the input too */}
-                    <label
-                      htmlFor={inputId}
-                      className="block text-caption text-ink-muted mb-1"
-                    >
-                      {fieldLabel}
-                    </label>
-                    <input
-                      id={inputId}
-                      type="number"
-                      min={0}
-                      step={1}
-                      value={rs.thresholdValue}
-                      onChange={(e) => handleThresholdChange(rs.id, e.target.value)}
-                      className="w-full rounded-md bg-bg-raised border border-border px-3 py-2 text-body text-ink"
-                    />
-                  </div>
-
-                  <div className="flex justify-end">
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(rs.id)}
-                      className="text-caption text-danger-fg hover:underline"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-
-            <button
-              type="button"
-              onClick={handleAddRule}
-              className="w-full h-9 rounded-md border border-dashed border-border text-body text-ink-muted hover:bg-bg-overlay transition-colors"
-            >
-              Add rule
-            </button>
-
-            <div className="flex gap-3 pt-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="flex-1 h-11 rounded-md bg-bg-sunken text-body font-medium text-ink-muted transition-colors duration-snap active:bg-bg-overlay"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSave}
-                className="flex-1 h-11 rounded-md bg-ink text-ink-inverse text-body-lg font-semibold transition-colors duration-snap active:opacity-80"
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// NewTrainingBlockSheet
-// ---------------------------------------------------------------------------
-
-interface NewTrainingBlockSheetProps {
-  open: boolean;
-  onClose: () => void;
-  onCreate: (draft: BlockDraft) => void;
-}
-
-function NewTrainingBlockSheet({
-  open,
-  onClose,
-  onCreate,
-}: NewTrainingBlockSheetProps): React.ReactElement | null {
-  const [name, setName] = React.useState('');
-  const [startDate, setStartDate] = React.useState('');
-
-  React.useEffect(() => {
-    if (open) {
-      setName('');
-      setStartDate('');
-    }
-  }, [open]);
-
-  if (!open) return null;
-
-  const canSubmit = name.trim().length > 0 && startDate.length > 0;
-
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>): void {
-    e.preventDefault();
-    if (!canSubmit) return;
-
-    onCreate({
-      name: name.trim(),
-      startDate: startDate as import('../../types').ISODate,
-    });
-    onClose();
-  }
-
-  return (
-    <>
-      {/* Scrim */}
-      <div
-        className="fixed inset-0 z-50 bg-black/60"
-        style={{ backdropFilter: 'blur(4px)' }}
-        onClick={onClose}
-        aria-hidden="true"
-      />
-
-      {/* Panel */}
-      <div
-        className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-[440px] rounded-t-2xl bg-bg-raised border-t border-border"
-        role="dialog"
-        aria-modal="true"
-        aria-label="New Training Block"
-      >
-        {/* Drag handle */}
-        <div className="flex justify-center pt-3 pb-1">
-          <div className="h-1 w-10 rounded-full bg-border" aria-hidden="true" />
-        </div>
-
-        <div className="px-4 pb-8 pt-2">
-          <div className="flex items-center justify-between mb-5">
-            <h2 className="text-title font-bold text-ink">New Training Block</h2>
-            <button
-              type="button"
-              onClick={onClose}
-              className="h-8 w-8 flex items-center justify-center rounded-full text-ink-muted hover:text-ink hover:bg-bg-overlay transition-colors duration-snap"
-              aria-label="Close"
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 16 16"
-                fill="none"
-                aria-hidden="true"
-              >
-                <path
-                  d="M4 4l8 8M12 4l-8 8"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-              </svg>
-            </button>
-          </div>
-
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            {/* ── Name ── */}
-            <div>
-              <label
-                htmlFor="new-block-name"
-                className="block text-body font-medium text-ink mb-2"
-              >
-                Name
-              </label>
-              <input
-                id="new-block-name"
-                type="text"
-                required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. June Rehab Block"
-                autoFocus
-                aria-label="Name"
-                className={cn(
-                  'w-full rounded-md bg-bg-sunken border border-border px-3 py-2.5',
-                  'text-body text-ink placeholder:text-ink-faint',
-                  'focus:outline-none focus:border-border-strong',
-                )}
-              />
-            </div>
-
-            {/* ── Start date ── */}
-            <div>
-              <label
-                htmlFor="new-block-start-date"
-                className="block text-body font-medium text-ink mb-2"
-              >
-                Start date
-              </label>
-              <input
-                id="new-block-start-date"
-                type="date"
-                required
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                aria-label="Start date"
-                className={cn(
-                  'w-full rounded-md bg-bg-sunken border border-border px-3 py-2.5',
-                  'text-body text-ink',
-                  'focus:outline-none focus:border-border-strong',
-                )}
-              />
-            </div>
-
-            {/* ── Actions ── */}
-            <div className="flex gap-3 pt-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="flex-1 h-11 rounded-md bg-bg-sunken text-body font-medium text-ink-muted transition-colors duration-snap active:bg-bg-overlay"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={!canSubmit}
-                className={cn(
-                  'flex-1 h-11 rounded-md text-body-lg font-semibold transition-colors duration-snap',
-                  canSubmit
-                    ? 'bg-ink text-ink-inverse active:opacity-80'
-                    : 'bg-ink/20 text-ink-faint cursor-not-allowed',
-                )}
-              >
-                Create
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // SettingsScreen
 // ---------------------------------------------------------------------------
 
@@ -814,17 +362,11 @@ export function SettingsScreen({
     activities,
     logs,
     previousBlocks,
-    createRule,
-    updateRule,
-    deleteRule,
-    createTrainingBlock,
     deactivateActivity,
     updateActivity,
   } = engine;
 
   const queryClient = useQueryClient();
-  const [editRulesOpen, setEditRulesOpen] = React.useState(false);
-  const [newBlockOpen, setNewBlockOpen] = React.useState(false);
   const [notifications, setNotifications] = React.useState(true);
   const [metricUnits, setMetricUnits] = React.useState(true);
   const [resetState, setResetState] = React.useState<'idle' | 'confirming' | 'done'>('idle');
@@ -897,8 +439,6 @@ export function SettingsScreen({
   const showInactiveSection = inactiveSectionPinned || groupedInactive.length > 0;
 
   const showEditRules = hasBlock;
-  const handleEditRules = onEditRules ?? (() => setEditRulesOpen(true));
-  const handleNewBlock = onNewBlock ?? (() => setNewBlockOpen(true));
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">
@@ -921,7 +461,7 @@ export function SettingsScreen({
               weeklyTargets={weeklyTargets}
               activityClasses={activityClasses}
               showEditRules={showEditRules}
-              onEditRules={handleEditRules}
+              onEditRules={() => onEditRules?.()}
               onReview={onReview}
             />
           ) : (
@@ -952,6 +492,7 @@ export function SettingsScreen({
                         {pb.endDate ? formatShortDate(pb.endDate) : 'ongoing'}
                       </p>
                     </div>
+                    {pb.isReviewMilestoneHit ? <ReviewMilestoneBadge compact /> : null}
                     <button
                       type="button"
                       onClick={() => onViewBlock?.(pb.id)}
@@ -969,7 +510,7 @@ export function SettingsScreen({
         {/* ── + New Training Block ── */}
         <button
           type="button"
-          onClick={handleNewBlock}
+          onClick={() => onNewBlock?.()}
           className="w-full h-11 rounded-md bg-bg-raised border border-border text-body font-medium text-ink-muted transition-colors duration-snap hover:bg-bg-overlay"
         >
           + New Training Block
@@ -1134,26 +675,6 @@ export function SettingsScreen({
         </section>
 
       </div>
-
-      {/* ── Edit Rules dialog ── */}
-      {hasBlock && (
-        <EditRulesForm
-          open={editRulesOpen}
-          onClose={() => setEditRulesOpen(false)}
-          block={block}
-          rules={rules}
-          onCreateRule={createRule}
-          onUpdateRule={updateRule}
-          onDeleteRule={deleteRule}
-        />
-      )}
-
-      {/* ── New Training Block sheet ── */}
-      <NewTrainingBlockSheet
-        open={newBlockOpen}
-        onClose={() => setNewBlockOpen(false)}
-        onCreate={createTrainingBlock}
-      />
     </div>
   );
 }

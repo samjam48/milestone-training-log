@@ -457,3 +457,93 @@ describe('Settings stack navigation (F9.4)', () => {
     expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument();
   });
 });
+
+/**
+ * F10.7 — App-level loading and error shell (H10.2: isInitialLoading, isFatalError, refetchAll).
+ * Implementer: App.tsx should branch on engine query status before tab/overlay content.
+ */
+describe('App shell — loading and fatal error (F10.7)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetMockEngine();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('shows a dashboard skeleton inside AppShell while isInitialLoading', () => {
+    mockEngine.isInitialLoading = true;
+    renderWithProviders(<App />);
+
+    expect(screen.getByTestId('app-dashboard-skeleton')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: /Good morning, Sam\./i }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
+  });
+
+  it('shows full-column server error with Retry when isFatalError', () => {
+    mockEngine.isFatalError = true;
+    renderWithProviders(<App />);
+
+    expect(screen.getByTestId('app-fatal-error')).toBeInTheDocument();
+    expect(screen.getByText(/could not reach server/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: /Good morning, Sam\./i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('calls refetchAll when Retry is pressed', async () => {
+    const user = userEvent.setup();
+    const refetchAll = vi.fn();
+    mockEngine.isFatalError = true;
+    mockEngine.refetchAll = refetchAll;
+    renderWithProviders(<App />);
+
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+
+    expect(refetchAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders dashboard after Retry when fatal error clears', async () => {
+    const user = userEvent.setup();
+    mockEngine.isFatalError = true;
+    mockEngine.refetchAll = vi.fn(() => {
+      mockEngine.isFatalError = false;
+    });
+    const { rerender } = renderWithProviders(<App />);
+
+    expect(screen.getByTestId('app-fatal-error')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+    rerender(<App />);
+
+    expect(screen.queryByTestId('app-fatal-error')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Good morning, Sam\./i })).toBeInTheDocument();
+  });
+
+  it('does not show fatal error shell when only non-dashboard signals fail', () => {
+    mockEngine.isFatalError = false;
+    mockEngine.isInitialLoading = false;
+    mockEngine.delayedTaxError = true;
+    renderWithProviders(<App />);
+
+    expect(screen.queryByTestId('app-fatal-error')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Good morning, Sam\./i })).toBeInTheDocument();
+  });
+
+  it('does not open morning check-in overlay while isFatalError', async () => {
+    const user = userEvent.setup();
+    mockEngine.isFatalError = true;
+    renderWithProviders(<App />);
+
+    const checkInCta = screen.queryByRole('button', { name: 'Complete morning check-in' });
+    if (checkInCta !== null) {
+      await user.click(checkInCta);
+    }
+
+    expect(screen.queryByRole('heading', { name: 'Morning Check-In' })).not.toBeInTheDocument();
+  });
+});

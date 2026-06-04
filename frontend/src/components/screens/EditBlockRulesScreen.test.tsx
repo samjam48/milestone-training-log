@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, screen } from '@testing-library/react';
+import { cleanup, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import type { ActivityClass, Rule, TrainingBlock } from '../../types';
-import type { MilestoneEngineResult } from '../../hooks/useMilestoneEngine';
+import type { MilestoneEngineResult, RuleDraft } from '../../hooks/useMilestoneEngine';
 import { renderWithProviders } from '../../test/renderWithProviders';
 import { mockEngine, resetMockEngine } from '../../test/mockEngine';
 import { EditBlockRulesScreen } from './EditBlockRulesScreen';
@@ -157,7 +157,7 @@ describe('EditBlockRulesScreen', () => {
     expect(onBack).toHaveBeenCalledTimes(1);
   });
 
-  it('calls engine.updateRule with the current displayed threshold on repeated stepper increases and omits add/delete controls', async () => {
+  it('calls engine.updateRule with the current displayed threshold on repeated stepper increases', async () => {
     const user = userEvent.setup();
     const updateRule = vi.fn();
     const engine = makeEngine({
@@ -173,9 +173,6 @@ describe('EditBlockRulesScreen', () => {
         onBack={vi.fn()}
       />,
     );
-
-    expect(screen.queryByRole('button', { name: /add rule/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /delete/i })).not.toBeInTheDocument();
 
     const increaseButton = screen.getByRole('button', { name: /increase/i });
     await user.click(increaseButton);
@@ -446,5 +443,207 @@ describe('EditBlockRulesScreen', () => {
     expect(disabledToggle).toHaveClass('inline-flex', 'items-center', 'overflow-hidden');
     expect(disabledKnob).not.toBeNull();
     expect(disabledKnob).toHaveClass('translate-x-1');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F10.10 — Add/delete rules (ported from inline EditRulesForm)
+// plans/tickets-phase-10-polish-2026-06-04.md §F10.10
+// ---------------------------------------------------------------------------
+
+describe('EditBlockRulesScreen — F10.10 add and delete rules', () => {
+  it('renders an Add rule control when rules exist', () => {
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [CLASS_RUNNING],
+      rules: [RULE_RUNNING_REST],
+    });
+
+    renderWithProviders(
+      <EditBlockRulesScreen engine={engine} onBack={vi.fn()} />,
+    );
+
+    expect(screen.getByRole('button', { name: /add rule/i })).toBeInTheDocument();
+  });
+
+  it('renders Add rule in the empty state when there are zero rules', () => {
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [CLASS_RUNNING],
+      rules: [],
+    });
+
+    renderWithProviders(
+      <EditBlockRulesScreen engine={engine} onBack={vi.fn()} />,
+    );
+
+    expect(screen.getByText(/no rules configured for this block/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /add rule/i })).toBeInTheDocument();
+  });
+
+  it('renders a delete control for each existing rule row', () => {
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [CLASS_RUNNING],
+      rules: [RULE_RUNNING_REST, RULE_RUNNING_FREQ],
+    });
+
+    renderWithProviders(
+      <EditBlockRulesScreen engine={engine} onBack={vi.fn()} />,
+    );
+
+    expect(screen.getAllByRole('button', { name: /delete/i })).toHaveLength(2);
+  });
+
+  it('calls engine.createRule when a new rule is added and confirmed', async () => {
+    const user = userEvent.setup();
+    const createRule = vi.fn();
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [CLASS_RUNNING],
+      rules: [],
+      createRule,
+    });
+
+    renderWithProviders(
+      <EditBlockRulesScreen engine={engine} onBack={vi.fn()} />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /add rule/i }));
+
+    const typeSelect =
+      screen.queryByRole('combobox', { name: /rule type/i }) ??
+      screen.getByRole('combobox');
+    await user.selectOptions(typeSelect, 'rest_between_class');
+
+    const thresholdInput = screen.getByRole('spinbutton');
+    await user.clear(thresholdInput);
+    await user.type(thresholdInput, '2');
+
+    await user.click(screen.getByRole('button', { name: /save|confirm|add/i }));
+
+    expect(createRule).toHaveBeenCalledTimes(1);
+    const [draft] = createRule.mock.calls[0] as [RuleDraft];
+    expect(draft.ruleType).toBe('rest_between_class');
+    expect(draft.thresholdValue).toBe(2);
+  });
+
+  it('calls engine.deleteRule when delete is confirmed for a rule', async () => {
+    const user = userEvent.setup();
+    const deleteRule = vi.fn();
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [CLASS_RUNNING],
+      rules: [RULE_RUNNING_REST],
+      deleteRule,
+    });
+
+    renderWithProviders(
+      <EditBlockRulesScreen engine={engine} onBack={vi.fn()} />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /delete/i }));
+
+    expect(deleteRule).toHaveBeenCalledTimes(1);
+    expect(deleteRule).toHaveBeenCalledWith(RULE_RUNNING_REST.id);
+  });
+
+  it('after deleting the first of two rules, editing the remaining rule updates the second rule id', async () => {
+    const user = userEvent.setup();
+    const deleteRule = vi.fn();
+    const updateRule = vi.fn();
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [CLASS_RUNNING],
+      rules: [RULE_RUNNING_REST, RULE_RUNNING_FREQ],
+      deleteRule,
+      updateRule,
+    });
+
+    renderWithProviders(
+      <EditBlockRulesScreen engine={engine} onBack={vi.fn()} />,
+    );
+
+    const deleteButtons = screen.getAllByRole('button', { name: /delete/i });
+    await user.click(deleteButtons[0]!);
+
+    expect(deleteRule).toHaveBeenCalledWith(RULE_RUNNING_REST.id);
+
+    const remainingInput = screen.getByRole('spinbutton', {
+      name: 'Max sessions per week',
+    });
+    await user.clear(remainingInput);
+    await user.type(remainingInput, '5');
+    await user.tab();
+
+    expect(updateRule).toHaveBeenCalledWith(RULE_RUNNING_FREQ.id, {
+      thresholdValue: 5,
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F10.9 — Stack screen loading and error polish
+// ---------------------------------------------------------------------------
+
+describe('EditBlockRulesScreen — F10.9 loading and error polish', () => {
+  function renderRulesScreen(engineOverrides: Partial<MilestoneEngineResult> = {}) {
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [CLASS_RUNNING],
+      rules: [RULE_RUNNING_REST],
+      ...engineOverrides,
+    });
+
+    renderWithProviders(
+      <EditBlockRulesScreen engine={engine} onBack={vi.fn()} />,
+    );
+
+    return engine;
+  }
+
+  it('shows a loading skeleton while engine.isInitialLoading is true', () => {
+    renderRulesScreen({ isInitialLoading: true });
+
+    const loading = screen.getByTestId('stack-screen-loading');
+    expect(loading).toHaveAttribute('aria-busy', 'true');
+    expect(loading.querySelector('.skeleton')).not.toBeNull();
+  });
+
+  it('hides rule editor content while engine.isInitialLoading is true', () => {
+    renderRulesScreen({ isInitialLoading: true });
+
+    expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
+    expect(screen.queryByText(/min rest between sessions/i)).not.toBeInTheDocument();
+  });
+
+  it('shows an actionable error with Retry when engine.isFatalError is true', () => {
+    renderRulesScreen({ isFatalError: true });
+
+    expect(screen.getByTestId('stack-screen-error')).toHaveAttribute('role', 'alert');
+    expect(
+      within(screen.getByTestId('stack-screen-error')).getByRole('button', { name: /retry/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('calls engine.refetchAll when Retry is pressed on a fatal error', async () => {
+    const user = userEvent.setup();
+    const refetchAll = vi.fn();
+    renderRulesScreen({ isFatalError: true, refetchAll });
+
+    await user.click(
+      within(screen.getByTestId('stack-screen-error')).getByRole('button', { name: /retry/i }),
+    );
+
+    expect(refetchAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not use viewport-height layout on the screen root', () => {
+    renderRulesScreen();
+
+    const root = screen.getByRole('heading', { name: 'Edit Rules' }).closest('section');
+    expect(root).not.toBeNull();
+    expect(root).not.toHaveClass('h-screen', 'min-h-screen');
+    expect(root?.getAttribute('style') ?? '').not.toMatch(/100vh/i);
   });
 });

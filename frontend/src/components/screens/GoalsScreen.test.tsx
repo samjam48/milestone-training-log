@@ -16,7 +16,6 @@ import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders';
 import { mockEngine, resetMockEngine } from '../../test/mockEngine';
 import type { Goal, ActivityClass } from '../../types';
-import type { GoalDraft } from '../../hooks/useMilestoneEngine';
 import { GoalsScreen } from './GoalsScreen';
 
 // ---------------------------------------------------------------------------
@@ -73,15 +72,6 @@ const GOAL_QUARTERLY_NUMERIC: Omit<Goal, 'userId'> = {
   progressValue: 80,
   progressTarget: 200,
   progressUnit: 'km',
-  createdAt: '2026-04-01T00:00:00Z',
-};
-
-const GOAL_QUARTERLY_NO_CLASS: Omit<Goal, 'userId'> = {
-  id: 'goal-quarterly-2',
-  title: 'Maintain training consistency',
-  targetDate: '2026-06-30',
-  timeframe: 'quarterly',
-  status: 'active',
   createdAt: '2026-04-01T00:00:00Z',
 };
 
@@ -561,286 +551,143 @@ describe('GoalsScreen — empty state', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 18. "+ New Goal" CTA opens form
+// F10.8 — Illustrated empty state
 // ---------------------------------------------------------------------------
 
-describe('GoalsScreen — "+ New Goal" CTA', () => {
-  it('renders the "+ New Goal" CTA button', () => {
-    const engine = makeEngine({
-      goals: [GOAL_MONTHLY_NUMERIC],
-      activityClasses: [CLASS_RUNNING],
-    });
-
-    renderWithProviders(<GoalsScreen engine={engine} />);
-
-    expect(screen.getByRole('button', { name: /\+ new goal/i })).toBeInTheDocument();
-  });
-
-  it('opens the form/dialog when "+ New Goal" is clicked', async () => {
-    const user = userEvent.setup();
-    const engine = makeEngine({
-      goals: [GOAL_MONTHLY_NUMERIC],
-      activityClasses: [CLASS_RUNNING],
-    });
-
-    renderWithProviders(<GoalsScreen engine={engine} />);
-
-    await user.click(screen.getByRole('button', { name: /\+ new goal/i }));
-
-    // Form or dialog should now be visible
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// 19–25. Form fields
-// ---------------------------------------------------------------------------
-
-describe('GoalsScreen — New Goal form fields', () => {
-  async function openForm(engine: typeof mockEngine) {
-    const user = userEvent.setup();
-    renderWithProviders(<GoalsScreen engine={engine} />);
-    await user.click(screen.getByRole('button', { name: /\+ new goal/i }));
-    return user;
-  }
-
-  it('form has a title text input (required)', async () => {
-    const engine = makeEngine({ goals: [], activityClasses: [] });
-    await openForm(engine);
-
-    const titleInput = screen.getByRole('textbox', { name: /title/i });
-    expect(titleInput).toBeInTheDocument();
-    expect(titleInput).toBeRequired();
-  });
-
-  it('form has a target date input (required)', async () => {
-    const engine = makeEngine({ goals: [], activityClasses: [] });
-    await openForm(engine);
-
-    // date input — query by label text or by type
-    const dateInput = screen.getByLabelText(/target date/i);
-    expect(dateInput).toBeInTheDocument();
-    expect(dateInput).toBeRequired();
-  });
-
-  it('form has a timeframe selector for monthly / quarterly', async () => {
-    const engine = makeEngine({ goals: [], activityClasses: [] });
-    await openForm(engine);
-
-    // Timeframe can be a radio group or a select; check both options exist
-    const monthly = screen.getByRole('radio', { name: /monthly/i }) ??
-      screen.getByRole('option', { name: /monthly/i });
-    const quarterly = screen.getByRole('radio', { name: /quarterly/i }) ??
-      screen.getByRole('option', { name: /quarterly/i });
-
-    expect(monthly).toBeInTheDocument();
-    expect(quarterly).toBeInTheDocument();
-  });
-
-  it('form has an optional activity class picker', async () => {
+describe('GoalsScreen — F10.8 illustrated empty state', () => {
+  it('renders goals-empty-state when there are no active goals', () => {
     const engine = makeEngine({
       goals: [],
-      activityClasses: [CLASS_RUNNING, CLASS_STRENGTH],
+      activityClasses: [],
     });
-    await openForm(engine);
 
-    // Some control for selecting a class should exist
-    // It may be a combobox, listbox, or set of buttons
-    const classControl =
-      screen.queryByRole('combobox', { name: /class/i }) ??
-      screen.queryByRole('listbox', { name: /class/i }) ??
-      screen.queryByLabelText(/activity class/i);
+    renderWithProviders(<GoalsScreen engine={engine} />);
 
-    expect(classControl).toBeInTheDocument();
+    expect(screen.getByTestId('goals-empty-state')).toBeInTheDocument();
   });
 
-  it('form has an optional numeric target input', async () => {
-    const engine = makeEngine({ goals: [], activityClasses: [] });
-    await openForm(engine);
+  it('shows an illustration inside the goals empty state region', () => {
+    const engine = makeEngine({
+      goals: [],
+      activityClasses: [],
+    });
 
-    const targetInput = screen.queryByRole('spinbutton', { name: /target/i }) ??
-      screen.queryByLabelText(/progress target/i);
+    renderWithProviders(<GoalsScreen engine={engine} />);
 
-    expect(targetInput).toBeInTheDocument();
+    const emptyState = screen.getByTestId('goals-empty-state');
+    expect(within(emptyState).getByTestId('goals-empty-illustration')).toBeInTheDocument();
   });
 
-  it('form has a progress unit input linked to numeric target', async () => {
-    const engine = makeEngine({ goals: [], activityClasses: [] });
-    await openForm(engine);
+  it('keeps existing "No goals yet" copy inside the empty state region', () => {
+    const engine = makeEngine({
+      goals: [],
+      activityClasses: [],
+    });
 
-    const unitInput =
-      screen.queryByRole('combobox', { name: /unit/i }) ??
-      screen.queryByLabelText(/unit/i);
+    renderWithProviders(<GoalsScreen engine={engine} />);
 
-    expect(unitInput).toBeInTheDocument();
+    const emptyState = screen.getByTestId('goals-empty-state');
+    expect(within(emptyState).getByText(/no goals yet/i)).toBeInTheDocument();
+    expect(
+      within(emptyState).getByText(/set a monthly or quarterly target/i),
+    ).toBeInTheDocument();
+  });
+
+  it('keeps "+ New Goal" CTA visible in the illustrated empty state', () => {
+    const engine = makeEngine({
+      goals: [],
+      activityClasses: [],
+    });
+
+    renderWithProviders(<GoalsScreen engine={engine} />);
+
+    expect(screen.getByTestId('goals-empty-state')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /\+ new goal/i })).toBeVisible();
+  });
+
+  it('renders illustrated empty state when only achieved goals exist (no active)', () => {
+    const engine = makeEngine({
+      goals: [GOAL_ACHIEVED],
+      activityClasses: [],
+    });
+
+    renderWithProviders(<GoalsScreen engine={engine} />);
+
+    const emptyState = screen.getByTestId('goals-empty-state');
+    expect(within(emptyState).getByTestId('goals-empty-illustration')).toBeInTheDocument();
+    expect(within(emptyState).getByText(/no goals yet/i)).toBeInTheDocument();
+  });
+
+  it('does not render goals-empty-state when active goals exist', () => {
+    const engine = makeEngine({
+      goals: [GOAL_MONTHLY_NUMERIC],
+      activityClasses: [CLASS_RUNNING],
+    });
+
+    renderWithProviders(<GoalsScreen engine={engine} />);
+
+    expect(screen.queryByTestId('goals-empty-state')).not.toBeInTheDocument();
   });
 });
 
 // ---------------------------------------------------------------------------
-// 24–25. Form submit disabled/enabled guard
+// F10.10 — Remove inline NewGoalForm (stack-only create via onNewGoal)
+// plans/tickets-phase-10-polish-2026-06-04.md §F10.10
+// Create/edit form coverage lives in GoalEditorScreen.test.tsx.
 // ---------------------------------------------------------------------------
 
-describe('GoalsScreen — form submit guard', () => {
-  async function openForm(engine: typeof mockEngine) {
+describe('GoalsScreen — F10.10 remove inline NewGoalForm', () => {
+  it('does not mount the inline "Create new goal" dialog in the document', () => {
+    const engine = makeEngine({
+      goals: [GOAL_MONTHLY_NUMERIC],
+      activityClasses: [CLASS_RUNNING],
+    });
+
+    renderWithProviders(
+      <GoalsScreen engine={engine} onNewGoal={vi.fn()} onEditGoal={vi.fn()} />,
+    );
+
+    expect(
+      screen.queryByRole('dialog', { name: /create new goal/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('clicking "+ New Goal" without onNewGoal does not open an inline sheet', async () => {
     const user = userEvent.setup();
-    renderWithProviders(<GoalsScreen engine={engine} />);
-    await user.click(screen.getByRole('button', { name: /\+ new goal/i }));
-    return user;
-  }
-
-  it('submit button is disabled when title and date are empty', async () => {
-    const engine = makeEngine({ goals: [], activityClasses: [] });
-    await openForm(engine);
-
-    const submit = screen.getByRole('button', { name: /save|create|add goal/i });
-    expect(submit).toBeDisabled();
-  });
-
-  it('submit button is disabled when title is filled but date is empty', async () => {
-    const engine = makeEngine({ goals: [], activityClasses: [] });
-    const user = await openForm(engine);
-
-    await user.type(screen.getByRole('textbox', { name: /title/i }), 'My Goal');
-
-    const submit = screen.getByRole('button', { name: /save|create|add goal/i });
-    expect(submit).toBeDisabled();
-  });
-
-  it('submit button is enabled once title and target date are provided', async () => {
-    const engine = makeEngine({ goals: [], activityClasses: [] });
-    const user = await openForm(engine);
-
-    await user.type(screen.getByRole('textbox', { name: /title/i }), 'My Goal');
-
-    const dateInput = screen.getByLabelText(/target date/i);
-    await user.type(dateInput, '2026-06-30');
-
-    const submit = screen.getByRole('button', { name: /save|create|add goal/i });
-    expect(submit).not.toBeDisabled();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// 26–30. Form submission behaviour
-// ---------------------------------------------------------------------------
-
-describe('GoalsScreen — form submission', () => {
-  async function openForm(engine: typeof mockEngine) {
-    const user = userEvent.setup();
-    renderWithProviders(<GoalsScreen engine={engine} />);
-    await user.click(screen.getByRole('button', { name: /\+ new goal/i }));
-    return user;
-  }
-
-  it('calls engine.createGoal with a correct GoalDraft on submit', async () => {
     const createGoal = vi.fn();
     const engine = makeEngine({
       goals: [],
       activityClasses: [CLASS_RUNNING],
       createGoal,
     });
-    const user = await openForm(engine);
-
-    await user.type(screen.getByRole('textbox', { name: /title/i }), 'New monthly goal');
-    await user.type(screen.getByLabelText(/target date/i), '2026-06-30');
-
-    // Confirm monthly timeframe is selected (should be default)
-    const monthlyOption =
-      screen.queryByRole('radio', { name: /monthly/i });
-    if (monthlyOption) {
-      // Radio: click monthly
-      await user.click(monthlyOption);
-    }
-
-    await user.click(screen.getByRole('button', { name: /save|create|add goal/i }));
-
-    expect(createGoal).toHaveBeenCalledTimes(1);
-    const draft = createGoal.mock.calls[0]![0] as GoalDraft;
-    expect(draft.title).toBe('New monthly goal');
-    expect(draft.targetDate).toBe('2026-06-30');
-    expect(draft.timeframe).toBe('monthly');
-    expect(draft.status).toBe('active');
-  });
-
-  it('closes the form/dialog after a successful submit', async () => {
-    const engine = makeEngine({ goals: [], activityClasses: [] });
-    const user = await openForm(engine);
-
-    await user.type(screen.getByRole('textbox', { name: /title/i }), 'Goal');
-    await user.type(screen.getByLabelText(/target date/i), '2026-06-30');
-    await user.click(screen.getByRole('button', { name: /save|create|add goal/i }));
-
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-  });
-
-  it('new goal appears in the correct group after create (monthly)', async () => {
-    // Simulate optimistic or immediate render: the goal list is updated by
-    // the engine after invalidation; we test that the screen correctly groups
-    // a freshly provided goal in "This month" after re-render.
-    const engine = makeEngine({
-      goals: [],
-      activityClasses: [],
-    });
-
-    const { rerender } = renderWithProviders(<GoalsScreen engine={engine} />);
-
-    // After create, the engine would provide the new goal via query invalidation
-    const updatedEngine = makeEngine({
-      goals: [GOAL_MONTHLY_QUALITATIVE],
-      activityClasses: [],
-    });
-
-    rerender(<GoalsScreen engine={updatedEngine} />);
-
-    expect(screen.getByText(/this month/i)).toBeInTheDocument();
-    expect(screen.getByText(GOAL_MONTHLY_QUALITATIVE.title)).toBeInTheDocument();
-  });
-
-  it('form resets on re-open after a submit', async () => {
-    const engine = makeEngine({ goals: [], activityClasses: [] });
-    const user = await openForm(engine);
-
-    await user.type(screen.getByRole('textbox', { name: /title/i }), 'Temp goal');
-    await user.type(screen.getByLabelText(/target date/i), '2026-06-30');
-    await user.click(screen.getByRole('button', { name: /save|create|add goal/i }));
-
-    // Re-open
-    await user.click(screen.getByRole('button', { name: /\+ new goal/i }));
-
-    // Title should be reset
-    expect(screen.getByRole('textbox', { name: /title/i })).toHaveValue('');
-  });
-
-  it('goal with no class selected → no class chip on the resulting card', () => {
-    // Test the rendering path: GOAL_QUARTERLY_NO_CLASS has no activityClassId
-    const engine = makeEngine({
-      goals: [GOAL_QUARTERLY_NO_CLASS],
-      activityClasses: [CLASS_RUNNING, CLASS_STRENGTH],
-    });
 
     renderWithProviders(<GoalsScreen engine={engine} />);
 
-    // The card for GOAL_QUARTERLY_NO_CLASS should not render any class name chip
-    expect(screen.queryByText(CLASS_RUNNING.name)).not.toBeInTheDocument();
-    expect(screen.queryByText(CLASS_STRENGTH.name)).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /\+ new goal/i }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(createGoal).not.toHaveBeenCalled();
   });
 
-  it('goal with numeric progressTarget and no unit renders without error', () => {
-    const goalNoUnit: Omit<Goal, 'userId'> = {
-      ...GOAL_MONTHLY_NUMERIC,
-      id: 'goal-no-unit',
-      progressUnit: undefined,
-    };
-
+  it('clicking "+ New Goal" with onNewGoal does not call engine.createGoal on the tab screen', async () => {
+    const user = userEvent.setup();
+    const onNewGoal = vi.fn();
+    const createGoal = vi.fn();
     const engine = makeEngine({
-      goals: [goalNoUnit],
-      activityClasses: [],
+      goals: [GOAL_MONTHLY_NUMERIC],
+      activityClasses: [CLASS_RUNNING],
+      createGoal,
     });
 
-    // Should not throw; progress display degrades gracefully
-    expect(() => {
-      renderWithProviders(<GoalsScreen engine={engine} />);
-    }).not.toThrow();
+    renderWithProviders(
+      <GoalsScreen engine={engine} onNewGoal={onNewGoal} onEditGoal={vi.fn()} />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /\+ new goal/i }));
+
+    expect(onNewGoal).toHaveBeenCalledTimes(1);
+    expect(createGoal).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });
 
@@ -1114,7 +961,7 @@ describe('GoalsScreen — F8.3: onEditGoal prop wiring', () => {
   });
 });
 
-describe('GoalsScreen — F8.3: onNewGoal prop overrides inline form', () => {
+describe('GoalsScreen — F8.3 / F10.10: onNewGoal stack navigation', () => {
   it('when onNewGoal is provided, clicking "+ New Goal" calls onNewGoal and does NOT open the inline sheet', async () => {
     const user = userEvent.setup();
     const onNewGoal = vi.fn();
@@ -1135,20 +982,18 @@ describe('GoalsScreen — F8.3: onNewGoal prop overrides inline form', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('when onNewGoal is NOT provided, clicking "+ New Goal" opens the inline NewGoalForm (backward compat)', async () => {
+  it('when onNewGoal is omitted, clicking "+ New Goal" does not open an inline NewGoalForm', async () => {
     const user = userEvent.setup();
     const engine = makeEngine({
       goals: [GOAL_MONTHLY_NUMERIC],
       activityClasses: [CLASS_RUNNING],
     });
 
-    // No onNewGoal or onEditGoal passed — backward-compat mode
     renderWithProviders(<GoalsScreen engine={engine} />);
 
     await user.click(screen.getByRole('button', { name: /\+ new goal/i }));
 
-    // The inline dialog must appear
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: /create new goal/i })).not.toBeInTheDocument();
   });
 });
 

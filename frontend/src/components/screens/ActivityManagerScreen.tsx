@@ -1,6 +1,10 @@
 import * as React from 'react';
 import { cn } from '../../lib/cn';
 import { Card } from '../ui/Card';
+import {
+  StackScreenEngineBody,
+  stackScreenEngineBlocked,
+} from '../ui/StackScreenEngineBody';
 import { SegmentedControl } from '../ui/SegmentedControl';
 import { ACTIVITY_VOLUME_UNIT_OPTIONS } from './activityVolumeUnits';
 import type { Activity, ActivityType, ID, VolumeUnit } from '../../types';
@@ -31,6 +35,7 @@ export function ActivityManagerScreen({
   const [showDeactivateConfirm, setShowDeactivateConfirm] = React.useState(false);
 
   const canSave = name.trim().length > 0 && classId !== '';
+  const blocked = stackScreenEngineBlocked(engine);
 
   function handleSave(): void {
     if (!canSave) return;
@@ -69,19 +74,22 @@ export function ActivityManagerScreen({
           </svg>
         </button>
         <h1 className="flex-1 text-title font-bold text-ink">Edit Activity</h1>
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={!canSave}
-          className={cn(
-            'h-9 rounded-md px-4 text-body font-semibold transition-colors duration-snap',
-            canSave ? 'bg-ink text-ink-inverse' : 'cursor-not-allowed bg-ink/20 text-ink-faint',
-          )}
-        >
-          Save
-        </button>
+        {!blocked ? (
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={!canSave}
+            className={cn(
+              'h-9 rounded-md px-4 text-body font-semibold transition-colors duration-snap',
+              canSave ? 'bg-ink text-ink-inverse' : 'cursor-not-allowed bg-ink/20 text-ink-faint',
+            )}
+          >
+            Save
+          </button>
+        ) : null}
       </header>
 
+      <StackScreenEngineBody engine={engine}>
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-4 py-5 pb-12">
         <div>
           <p className="mb-2 text-body font-medium text-ink">Activity name</p>
@@ -220,6 +228,7 @@ export function ActivityManagerScreen({
           )}
         </div>
       </div>
+      </StackScreenEngineBody>
     </section>
   );
 }

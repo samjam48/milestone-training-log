@@ -133,6 +133,7 @@ describe('mapDashboardFromApi', () => {
     expect(mapped.weeklyProgress).toEqual([]);
     expect(mapped.dailyScores).toHaveLength(1);
     expect(mapped.loadSeries).toEqual([]);
+    expect(mapped.graphClassId).toBe('cls-foot');
     expect(mapped.flareUpDates).toEqual([]);
     expect(mapped.weekLoadThreshold).toBe(120);
     expect(mapped.cleanStreak).toBe(2);
@@ -147,14 +148,22 @@ describe('mapDashboardFromApi', () => {
         currentStreakDays: recoveryStreakReadSnake.current_streak_days,
       },
     ]);
+    expect(mapped.goals).toHaveLength(dashboardReadSnake.goals.length);
+    expect(mapped.goals[0]?.id).toBe(dashboardReadSnake.goals[0]!.id);
+    expect(mapped.goals[0]?.title).toBe(dashboardReadSnake.goals[0]!.title);
+    expect(mapped.previousBlocks).toHaveLength(dashboardReadSnake.previous_blocks.length);
+    expect(mapped.previousBlocks[0]?.id).toBe(dashboardReadSnake.previous_blocks[0]!.id);
   });
 
   it('maps block null to null (not undefined)', () => {
     const mapped = mapDashboardFromApi(dashboardReadSnakeNoBlock);
 
     expect(mapped.block).toBeNull();
+    expect(mapped.graphClassId).toBeNull();
     expect(mapped.recoveryStreaks).toEqual([]);
     expect(mapped.activityClasses).toEqual([]);
+    expect(mapped.goals).toHaveLength(dashboardReadSnakeNoBlock.goals.length);
+    expect(mapped.previousBlocks).toHaveLength(dashboardReadSnakeNoBlock.previous_blocks.length);
   });
 
   it('maps daily_scores state neutral to SafetyState | neutral', () => {

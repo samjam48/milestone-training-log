@@ -56,11 +56,12 @@ class DashboardRead(BaseModel):
     weekly_progress: list[WeeklyProgressRead]
     daily_scores: list[DailySafetyScoreRead]
     load_series: list[LoadPointRead]
+    graph_class_id: str | None
     flare_up_dates: list[str]
     week_load_threshold: int
     clean_streak: int
     recovery_streaks: list[RecoveryStreakRead]
-    goals: list[GoalRead]
+    goals: list[GoalRead]  # all local goals (Goals tab: active, achieved, paused, missed)
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -1,6 +1,10 @@
 import * as React from 'react';
 import { cn } from '../../lib/cn';
 import { Card } from '../ui/Card';
+import {
+  StackScreenEngineBody,
+  stackScreenEngineBlocked,
+} from '../ui/StackScreenEngineBody';
 import type {
   BlockDraft,
   MilestoneEngineResult,
@@ -24,6 +28,7 @@ export function NewTrainingBlockScreen({
 
   const canCreate = name.trim().length > 0 && startDate !== '';
   const hasCurrentBlock = engine.block.id !== '';
+  const blocked = stackScreenEngineBlocked(engine);
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>): void {
     event.preventDefault();
@@ -62,21 +67,24 @@ export function NewTrainingBlockScreen({
           </svg>
         </button>
         <h1 className="flex-1 text-title font-bold text-ink">New training block</h1>
-        <button
-          type="submit"
-          form="new-training-block-form"
-          disabled={!canCreate}
-          className={cn(
-            'h-9 rounded-md px-4 text-body font-semibold transition-colors duration-snap',
-            canCreate
-              ? 'bg-ink text-ink-inverse active:opacity-80'
-              : 'cursor-not-allowed bg-ink/20 text-ink-faint',
-          )}
-        >
-          Create
-        </button>
+        {!blocked ? (
+          <button
+            type="submit"
+            form="new-training-block-form"
+            disabled={!canCreate}
+            className={cn(
+              'h-9 rounded-md px-4 text-body font-semibold transition-colors duration-snap',
+              canCreate
+                ? 'bg-ink text-ink-inverse active:opacity-80'
+                : 'cursor-not-allowed bg-ink/20 text-ink-faint',
+            )}
+          >
+            Create
+          </button>
+        ) : null}
       </header>
 
+      <StackScreenEngineBody engine={engine}>
       <form
         id="new-training-block-form"
         aria-label="New training block"
@@ -181,6 +189,7 @@ export function NewTrainingBlockScreen({
           </Card>
         ) : null}
       </form>
+      </StackScreenEngineBody>
     </section>
   );
 }

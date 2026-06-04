@@ -9,6 +9,7 @@ from app.routers.flare_up_incidents import router as flare_up_incidents_router
 from app.routers.goals import router as goals_router
 from app.routers.health import router as health_router
 from app.routers.load import router as load_router
+from app.routers.mcp import router as mcp_router
 from app.routers.recovery_targets import router as recovery_targets_router
 from app.routers.rules import rules_router, training_block_rules_router
 from app.routers.training_blocks import router as training_blocks_router
@@ -36,6 +37,7 @@ def create_app() -> FastAPI:
     app.include_router(recovery_targets_router)
     app.include_router(load_router)
     app.include_router(dashboard_router)
+    app.include_router(mcp_router)
     if settings.APP_DEV_MODE:
         from app.routers import dev as dev_router_module
         app.include_router(dev_router_module.router, prefix="/api")

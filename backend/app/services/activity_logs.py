@@ -82,6 +82,9 @@ def create_activity_log(session: Session, payload: ActivityLogCreate) -> Activit
             activity_log.activity_id,
             anchor_date=activity_log.logged_date,
         )
+    from app.services.review_milestone import maybe_update_review_milestone_after_log
+
+    maybe_update_review_milestone_after_log(session)
     return activity_log
 
 

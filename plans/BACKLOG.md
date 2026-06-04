@@ -15,8 +15,8 @@ Follow-up items that are intentionally out of scope for the current task but sho
 
 ## Phase 4 follow-ups
 
-- Refactor `check_violations` in `load_engine.py` — radon F-rank complexity; extract per-rule helpers when extending.
-- Add API integration test for `elevated_load` without active block on `GET /api/load/delayed-tax`.
+- ~~Refactor `check_violations` in `load_engine.py` — radon F-rank complexity; extract per-rule helpers when extending.~~ (B10.5)
+- ~~Add API integration test for `elevated_load` without active block on `GET /api/load/delayed-tax`.~~ — **B10.6** (Phase 10).
 
 ## Phase 6 / 7 follow-ups
 

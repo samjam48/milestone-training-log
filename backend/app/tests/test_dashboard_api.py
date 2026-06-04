@@ -49,6 +49,7 @@ EXPECTED_TOP_LEVEL_KEYS = {
     "load_series",
     "flare_up_dates",
     "week_load_threshold",
+    "graph_class_id",
     "clean_streak",
     "recovery_streaks",
     "goals",
@@ -147,6 +148,7 @@ async def test_get_dashboard_without_active_block_returns_neutral_empty_payload(
     assert payload["weekly_progress"] == []
     assert payload["load_series"] == []
     assert payload["recovery_streaks"] == []
+    assert payload["graph_class_id"] is None
 
 
 async def test_get_dashboard_previous_blocks_serializes_summary_array(
@@ -254,11 +256,11 @@ async def test_get_dashboard_empty_database_returns_neutral_payload(
 # ---------------------------------------------------------------------------
 
 
-async def test_get_dashboard_goals_returns_only_active_goals(
+async def test_get_dashboard_goals_includes_all_statuses_for_goals_tab(
     app_with_test_database: FastAPI,
     client: AsyncClient,
 ) -> None:
-    """goals array contains active goals and excludes paused ones."""
+    """goals array includes active, achieved, and paused for Goals tab."""
     seed_goal(
         app_with_test_database,
         goal_id="api-goal-active-1",
@@ -281,6 +283,14 @@ async def test_get_dashboard_goals_returns_only_active_goals(
     )
     seed_goal(
         app_with_test_database,
+        goal_id="api-goal-achieved",
+        title="First 5k",
+        target_date=date(2026, 5, 1),
+        timeframe="monthly",
+        status="achieved",
+    )
+    seed_goal(
+        app_with_test_database,
         goal_id="api-goal-paused",
         title="Cycle 100k",
         target_date=date(2026, 8, 1),
@@ -293,11 +303,14 @@ async def test_get_dashboard_goals_returns_only_active_goals(
     assert response.status_code == 200
     payload = response.json()
     goals = payload["goals"]
-    assert len(goals) == 2
+    assert len(goals) == 4
     goal_ids = {g["id"] for g in goals}
-    assert "api-goal-active-1" in goal_ids
-    assert "api-goal-active-2" in goal_ids
-    assert "api-goal-paused" not in goal_ids
+    assert goal_ids == {
+        "api-goal-active-1",
+        "api-goal-active-2",
+        "api-goal-achieved",
+        "api-goal-paused",
+    }
 
 
 async def test_get_dashboard_goals_fields_are_snake_case(
@@ -325,11 +338,11 @@ async def test_get_dashboard_goals_fields_are_snake_case(
     assert goal["status"] == "active"
 
 
-async def test_get_dashboard_goals_empty_when_no_active_goals(
+async def test_get_dashboard_goals_includes_paused_when_no_active_goals(
     app_with_test_database: FastAPI,
     client: AsyncClient,
 ) -> None:
-    """goals is [] when no active goals exist."""
+    """goals includes paused goals when there are no active goals."""
     seed_goal(
         app_with_test_database,
         goal_id="api-goal-paused-only",
@@ -343,7 +356,9 @@ async def test_get_dashboard_goals_empty_when_no_active_goals(
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["goals"] == []
+    assert len(payload["goals"]) == 1
+    assert payload["goals"][0]["id"] == "api-goal-paused-only"
+    assert payload["goals"][0]["status"] == "paused"
 
 
 async def test_get_dashboard_goals_present_when_no_active_block(
