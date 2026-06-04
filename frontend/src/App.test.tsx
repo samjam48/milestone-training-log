@@ -18,6 +18,7 @@ import {
   c63StretchActivity,
   c63YogaActivity,
 } from './test/mockEngine';
+import type { Activity, ActivityClass } from './types';
 import { App } from './App';
 
 vi.mock('./hooks/useMilestoneEngine', () => ({
@@ -404,9 +405,30 @@ describe('Settings stack navigation (F9.4)', () => {
 
   it('pushing activity-manager via its hidden affordance renders the overlay, hides the tab bar, and pops back out', async () => {
     const user = userEvent.setup();
+    const activityClass: ActivityClass = {
+      id: 'cls-performance',
+      userId: 'user-1',
+      name: 'Performance',
+      type: 'performance',
+      defaultRecoveryWindowDays: 3,
+      createdAt: '2026-04-07T06:00:00Z',
+    };
+    const activity: Activity = {
+      id: 'act-morning-run',
+      userId: 'user-1',
+      activityClassId: activityClass.id,
+      name: 'Morning Run',
+      type: 'performance',
+      defaultVolumeUnit: 'km',
+      isActive: true,
+      createdAt: '2026-04-07T06:00:00Z',
+    };
+    mockEngine.activityClasses = [activityClass];
+    mockEngine.activities = [activity];
     renderWithProviders(<App />);
 
-    await user.click(screen.getByTestId('test-push-activity-manager'));
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Settings' }));
+    await user.click(screen.getByRole('button', { name: /edit morning run/i }));
 
     expect(screen.getByTestId('stack-screen-overlay')).toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();

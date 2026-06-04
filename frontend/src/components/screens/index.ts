@@ -10,3 +10,4 @@ export { SettingsScreen } from './SettingsScreen';
 export { EditBlockRulesScreen } from './EditBlockRulesScreen';
 export { BlockReviewScreen } from './BlockReviewScreen';
 export { NewTrainingBlockScreen } from './NewTrainingBlockScreen';
+export { ActivityManagerScreen } from './ActivityManagerScreen';

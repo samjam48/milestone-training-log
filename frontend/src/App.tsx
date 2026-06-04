@@ -13,6 +13,7 @@ import {
   EditBlockRulesScreen,
   BlockReviewScreen,
   NewTrainingBlockScreen,
+  ActivityManagerScreen,
 } from './components/screens';
 import type { Activity, Goal } from './types';
 import { useMilestoneEngine, type MilestoneEngineResult } from './hooks/useMilestoneEngine';
@@ -33,36 +34,6 @@ function ComingSoonPlaceholder(): React.ReactElement {
     <div className="flex min-h-[50vh] items-center justify-center px-4">
       <p className="text-body-lg text-ink-muted">Coming soon</p>
     </div>
-  );
-}
-
-interface SettingsStackPlaceholderProps {
-  title: string;
-  onBack: () => void;
-  detail?: string;
-}
-
-function SettingsStackPlaceholder({
-  title,
-  onBack,
-  detail,
-}: SettingsStackPlaceholderProps): React.ReactElement {
-  return (
-    <section className="flex min-h-full flex-col gap-6 px-5 py-6">
-      <button
-        type="button"
-        onClick={onBack}
-        className="self-start rounded-full border border-line px-4 py-2 text-body-sm font-semibold text-ink"
-      >
-        Back
-      </button>
-      <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center">
-        <h1 className="text-title-lg font-semibold text-ink">{title}</h1>
-        {detail != null && detail !== '' ? (
-          <p className="text-body-md text-ink-muted">{detail}</p>
-        ) : null}
-      </div>
-    </section>
   );
 }
 
@@ -102,11 +73,13 @@ function resolveStackScreen(
   }
   if (entry.screen === 'activity-manager') {
     const activity = entry.params.activity as Activity | undefined;
+    if (activity == null) return <></>;
     return (
-      <SettingsStackPlaceholder
-        title="Edit activity"
-        detail={activity?.name}
+      <ActivityManagerScreen
+        activity={activity}
+        engine={engine}
         onBack={onPop}
+        onComplete={onPop}
       />
     );
   }
@@ -207,7 +180,6 @@ export function App(): React.ReactElement {
   }
 
   const topEntry = screenStack.length > 0 ? screenStack[screenStack.length - 1] : null;
-
   return (
     <AppShell withTabBar={showTabBar}>
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">{mainContent}</div>
@@ -227,14 +199,6 @@ export function App(): React.ReactElement {
         type="button"
         data-testid="test-push-unknown-screen"
         onClick={() => pushScreen('unknown-key')}
-        style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', opacity: 0 }}
-        tabIndex={-1}
-        aria-hidden="true"
-      />
-      <button
-        type="button"
-        data-testid="test-push-activity-manager"
-        onClick={() => pushScreen('activity-manager', { activity: engine.activities[0] })}
         style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', opacity: 0 }}
         tabIndex={-1}
         aria-hidden="true"

@@ -5,6 +5,7 @@
 import * as React from 'react';
 import { cn } from '../../lib/cn';
 import { SegmentedControl } from '../ui/SegmentedControl';
+import { ACTIVITY_VOLUME_UNIT_OPTIONS } from './activityVolumeUnits';
 import type { ActivityClass, ActivityType, VolumeUnit } from '../../types';
 import type { NewActivityDraft } from '../../hooks/useMilestoneEngine';
 
@@ -15,15 +16,6 @@ import type { NewActivityDraft } from '../../hooks/useMilestoneEngine';
 const TYPE_OPTIONS = [
   { value: 'performance' as ActivityType, label: 'Performance', tone: 'neutral' as const },
   { value: 'recovery' as ActivityType, label: 'Recovery', tone: 'neutral' as const },
-];
-
-const UNIT_OPTIONS: { value: VolumeUnit; label: string }[] = [
-  { value: 'km', label: 'km' },
-  { value: 'mi', label: 'miles' },
-  { value: 'minutes', label: 'minutes' },
-  { value: 'reps', label: 'reps' },
-  { value: 'sets', label: 'sets' },
-  { value: 'sessions', label: 'sessions' },
 ];
 
 // ---------------------------------------------------------------------------
@@ -219,7 +211,7 @@ export function NewActivitySheet({
             <div>
               <p className="text-body font-medium text-ink mb-2">Volume unit</p>
               <div className="grid grid-cols-3 gap-1.5">
-                {UNIT_OPTIONS.map((u) => (
+                {ACTIVITY_VOLUME_UNIT_OPTIONS.map((u) => (
                   <button
                     key={u.value}
                     type="button"
