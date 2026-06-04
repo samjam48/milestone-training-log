@@ -18,7 +18,7 @@ _PRODUCTION_SETTING_KEYS = (
 def _settings_without_env_file(monkeypatch: pytest.MonkeyPatch) -> settings.Settings:
     for key in _PRODUCTION_SETTING_KEYS:
         monkeypatch.delenv(key, raising=False)
-    return settings.Settings(_env_file=None)
+    return settings.Settings.model_validate({})
 
 
 def test_settings_reads_repo_root_env_file() -> None:
