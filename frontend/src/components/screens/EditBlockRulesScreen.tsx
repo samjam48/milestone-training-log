@@ -2,7 +2,7 @@ import * as React from 'react';
 import { cn } from '../../lib/cn';
 import { Card } from '../ui/Card';
 import { StackScreenEngineBody } from '../ui/StackScreenEngineBody';
-import type { MilestoneEngineResult } from '../../hooks/useMilestoneEngine';
+import type { MilestoneEngineResult, RuleDraft } from '../../hooks/useMilestoneEngine';
 import type { Rule, RuleType } from '../../types';
 
 export interface EditBlockRulesScreenProps {
@@ -22,6 +22,14 @@ interface RuleGroup {
   label: string;
   rules: Rule[];
 }
+
+const RULE_TYPE_OPTIONS: { value: RuleType; label: string }[] = [
+  { value: 'rest_between_class', label: 'Rest between class' },
+  { value: 'frequency_limit', label: 'Frequency limit' },
+  { value: 'weekly_load_cap', label: 'Weekly load cap' },
+  { value: 'consecutive_day_limit', label: 'Consecutive day limit' },
+  { value: 'weekly_activity_count', label: 'Weekly activity count' },
+];
 
 const RULE_DEFINITIONS: Record<RuleType, RuleDefinition> = {
   rest_between_class: {
@@ -121,11 +129,21 @@ function parseDisplayedThreshold(
   return Number.isFinite(parsedValue) ? parsedValue : fallbackValue;
 }
 
+const DEFAULT_NEW_RULE_DRAFT: Pick<RuleDraft, 'ruleType' | 'thresholdValue'> = {
+  ruleType: 'rest_between_class',
+  thresholdValue: 1,
+};
+
 export function EditBlockRulesScreen({
   engine,
   onBack,
 }: EditBlockRulesScreenProps): React.ReactElement {
   const [draftThresholds, setDraftThresholds] = React.useState<Record<string, string>>({});
+  const [isAddingRule, setIsAddingRule] = React.useState(false);
+  const [newRuleType, setNewRuleType] = React.useState<RuleType>(DEFAULT_NEW_RULE_DRAFT.ruleType);
+  const [newRuleThreshold, setNewRuleThreshold] = React.useState(
+    String(DEFAULT_NEW_RULE_DRAFT.thresholdValue),
+  );
   const ruleGroups = buildRuleGroups(engine);
 
   React.useEffect(() => {
@@ -160,6 +178,37 @@ export function EditBlockRulesScreen({
     commitThreshold(rule, parsedValue);
   }
 
+  function openAddRuleForm(): void {
+    setNewRuleType(DEFAULT_NEW_RULE_DRAFT.ruleType);
+    setNewRuleThreshold(String(DEFAULT_NEW_RULE_DRAFT.thresholdValue));
+    setIsAddingRule(true);
+  }
+
+  function cancelAddRuleForm(): void {
+    setIsAddingRule(false);
+  }
+
+  function confirmAddRule(): void {
+    const parsedThreshold = Number(newRuleThreshold);
+    if (!Number.isFinite(parsedThreshold)) {
+      return;
+    }
+    const definition = RULE_DEFINITIONS[newRuleType];
+    const thresholdValue = clampThreshold(parsedThreshold, definition);
+    engine.createRule({
+      activityClassId: null,
+      ruleType: newRuleType,
+      thresholdValue,
+      windowDays: 7,
+      enabled: true,
+    });
+    setIsAddingRule(false);
+  }
+
+  function handleDeleteRule(ruleId: string): void {
+    engine.deleteRule(ruleId);
+  }
+
   return (
     <section className="flex min-h-full flex-col bg-bg">
       <header className="flex shrink-0 items-center gap-3 border-b border-border px-4 pb-3 pt-5">
@@ -187,7 +236,7 @@ export function EditBlockRulesScreen({
 
       <StackScreenEngineBody engine={engine}>
       <div className="flex flex-1 flex-col gap-5 px-4 py-5 pb-12">
-        {engine.rules.length === 0 ? (
+        {engine.rules.length === 0 && !isAddingRule ? (
           <div className="flex flex-1 items-center justify-center rounded-3xl border border-dashed border-line bg-surface px-6 py-10 text-center">
             <p className="text-body-md text-ink-muted">
               No rules configured for this block.
@@ -220,25 +269,34 @@ export function EditBlockRulesScreen({
                             </p>
                           ) : null}
                         </div>
-                        <button
-                          type="button"
-                          role="switch"
-                          aria-checked={rule.enabled}
-                          aria-label={`${definition.label} enabled`}
-                          onClick={() => engine.updateRule(rule.id, { enabled: !rule.enabled })}
-                          className={cn(
-                            'relative mt-0.5 inline-flex h-6 w-10 shrink-0 items-center overflow-hidden rounded-full transition-colors duration-snap',
-                            rule.enabled ? 'bg-safe-fg' : 'bg-border-strong',
-                          )}
-                        >
-                          <span
+                        <div className="flex shrink-0 items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteRule(rule.id)}
+                            className="text-caption font-medium text-danger-fg hover:underline"
+                          >
+                            Delete
+                          </button>
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={rule.enabled}
+                            aria-label={`${definition.label} enabled`}
+                            onClick={() => engine.updateRule(rule.id, { enabled: !rule.enabled })}
                             className={cn(
-                              'absolute top-1/2 h-4 w-4 -translate-y-1/2 rounded-full bg-white shadow-sm transition-transform duration-snap',
-                              rule.enabled ? 'translate-x-5' : 'translate-x-1',
+                              'relative mt-0.5 inline-flex h-6 w-10 shrink-0 items-center overflow-hidden rounded-full transition-colors duration-snap',
+                              rule.enabled ? 'bg-safe-fg' : 'bg-border-strong',
                             )}
-                            aria-hidden="true"
-                          />
-                        </button>
+                          >
+                            <span
+                              className={cn(
+                                'absolute top-1/2 h-4 w-4 -translate-y-1/2 rounded-full bg-white shadow-sm transition-transform duration-snap',
+                                rule.enabled ? 'translate-x-5' : 'translate-x-1',
+                              )}
+                              aria-hidden="true"
+                            />
+                          </button>
+                        </div>
                       </div>
 
                       {rule.enabled ? (
@@ -300,6 +358,77 @@ export function EditBlockRulesScreen({
             </section>
           ))
         )}
+
+        {isAddingRule ? (
+          <Card pad="md">
+            <div className="flex flex-col gap-4">
+              <div>
+                <label
+                  htmlFor="new-rule-type"
+                  className="mb-1 block text-body font-medium text-ink"
+                >
+                  Rule type
+                </label>
+                <select
+                  id="new-rule-type"
+                  value={newRuleType}
+                  onChange={(event) => setNewRuleType(event.target.value as RuleType)}
+                  aria-label="Rule type"
+                  className="w-full rounded-md border border-border bg-bg-sunken px-3 py-2 text-body text-ink"
+                >
+                  {RULE_TYPE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label
+                  htmlFor="new-rule-threshold"
+                  className="mb-1 block text-caption text-ink-muted"
+                >
+                  {RULE_DEFINITIONS[newRuleType].label}
+                </label>
+                <input
+                  id="new-rule-threshold"
+                  type="number"
+                  min={RULE_DEFINITIONS[newRuleType].min}
+                  step={RULE_DEFINITIONS[newRuleType].step}
+                  value={newRuleThreshold}
+                  onChange={(event) => setNewRuleThreshold(event.target.value)}
+                  className="w-full rounded-md border border-border bg-bg-sunken px-3 py-2 text-body text-ink"
+                />
+              </div>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={cancelAddRuleForm}
+                  className="flex-1 h-11 rounded-md bg-bg-sunken text-body font-medium text-ink-muted transition-colors duration-snap hover:bg-bg-overlay"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmAddRule}
+                  className="flex-1 h-11 rounded-md bg-ink text-body-lg font-semibold text-ink-inverse transition-colors duration-snap active:opacity-80"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          </Card>
+        ) : null}
+
+        {!isAddingRule ? (
+          <button
+            type="button"
+            onClick={openAddRuleForm}
+            className="w-full rounded-md border border-dashed border-border py-2.5 text-body text-ink-muted transition-colors hover:bg-bg-overlay"
+          >
+            Add rule
+          </button>
+        ) : null}
       </div>
       </StackScreenEngineBody>
     </section>
