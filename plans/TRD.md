@@ -570,7 +570,8 @@ exists (Phase 0, ticket B0.1).
 
 ## 12. Production deployment (Phase 11)
 
-**Approved design:** `plans/technical-design-production-deploy-2026-06-04.md`
+**Approved design:** `plans/technical-design-production-deploy-2026-06-04.md`  
+**Owner runbook:** [`docs/deploy.md`](../docs/deploy.md) (O11 checklists, backup, cold start, security).
 
 ### 12.1 Services
 
