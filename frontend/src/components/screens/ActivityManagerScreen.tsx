@@ -200,9 +200,6 @@ export function ActivityManagerScreen({
             </button>
           ) : (
             <Card intent="danger" pad="md">
-              <p className="mb-3 text-body text-ink">
-                Deactivating hides this activity from the log picker. All existing logs are preserved.
-              </p>
               <div className="flex gap-2">
                 <button
                   type="button"

@@ -155,11 +155,12 @@ describe('ActivityManagerScreen', () => {
     renderScreen({ engine });
 
     await user.click(screen.getByRole('button', { name: /deactivate activity/i }));
-    expect(screen.getByText(/deactivating hides this activity from the log picker/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /confirm/i })).toBeInTheDocument();
+    expect(screen.queryByText(/deactivating hides this activity from the log picker/i)).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /cancel/i }));
 
-    expect(screen.queryByText(/deactivating hides this activity from the log picker/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /confirm/i })).not.toBeInTheDocument();
     expect(engine.deactivateActivity).not.toHaveBeenCalled();
   });
 

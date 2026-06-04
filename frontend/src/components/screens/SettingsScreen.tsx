@@ -249,50 +249,50 @@ function ActivityManagerRow({
             Restore
           </button>
         )}
-        {onRestore == null && !deactivateConfirming && onEdit != null && onDeactivate != null && (
+        {onRestore == null && onEdit != null && onDeactivate != null && (
           <div className="flex items-center gap-1 shrink-0">
-            <button
-              type="button"
-              aria-label={`Edit ${activity.name}`}
-              onClick={onEdit}
-              className="h-8 px-2.5 rounded-md text-caption font-medium text-ink-muted bg-bg-sunken hover:bg-bg-overlay transition-colors duration-snap"
-            >
-              Edit
-            </button>
-            <button
-              type="button"
-              aria-label={`Deactivate ${activity.name}`}
-              onClick={onDeactivate}
-              className="h-8 px-2.5 rounded-md text-caption font-medium text-danger-fg hover:bg-danger/10 transition-colors duration-snap"
-            >
-              Deactivate
-            </button>
+            {deactivateConfirming && onConfirmDeactivate != null && onCancelDeactivate != null ? (
+              <>
+                <button
+                  type="button"
+                  aria-label={`Cancel deactivating ${activity.name}`}
+                  onClick={onCancelDeactivate}
+                  className="h-8 px-2.5 rounded-md text-caption font-medium text-ink-muted bg-bg-sunken hover:bg-bg-overlay transition-colors duration-snap"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Confirm deactivate ${activity.name}`}
+                  onClick={onConfirmDeactivate}
+                  className="h-8 px-2.5 rounded-md text-caption font-medium text-danger-fg hover:bg-danger/10 transition-colors duration-snap"
+                >
+                  Confirm
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  aria-label={`Edit ${activity.name}`}
+                  onClick={onEdit}
+                  className="h-8 px-2.5 rounded-md text-caption font-medium text-ink-muted bg-bg-sunken hover:bg-bg-overlay transition-colors duration-snap"
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Deactivate ${activity.name}`}
+                  onClick={onDeactivate}
+                  className="h-8 px-2.5 rounded-md text-caption font-medium text-danger-fg hover:bg-danger/10 transition-colors duration-snap"
+                >
+                  Deactivate
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
-      {deactivateConfirming && onConfirmDeactivate != null && onCancelDeactivate != null && (
-        <div className="mt-3 rounded-md border border-danger/30 bg-danger/5 p-3">
-          <p className="text-caption text-ink-muted mb-2">
-            Deactivating hides this activity from the log picker. All existing logs are preserved.
-          </p>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={onCancelDeactivate}
-              className="h-8 flex-1 rounded-md text-caption font-medium text-ink-muted bg-bg-sunken hover:bg-bg-overlay transition-colors duration-snap"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={onConfirmDeactivate}
-              className="h-8 flex-1 rounded-md text-caption font-semibold text-ink-inverse bg-danger hover:opacity-90 transition-opacity"
-            >
-              Confirm
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

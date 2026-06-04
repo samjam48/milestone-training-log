@@ -849,11 +849,9 @@ describe('SettingsScreen — stack action callbacks', () => {
     await user.click(screen.getByRole('button', { name: /deactivate morning run/i }));
 
     expect(deactivateActivity).not.toHaveBeenCalled();
-    const confirmElement =
-      screen.queryByRole('button', { name: /confirm/i })
-      ?? screen.queryByText(/deactivating hides this activity from the log picker/i)
-      ?? screen.queryByText(/confirm deactivate/i);
-    expect(confirmElement).not.toBeNull();
+    expect(screen.getByRole('button', { name: /confirm deactivate morning run/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /cancel deactivating morning run/i })).toBeInTheDocument();
+    expect(screen.queryByText(/deactivating hides this activity from the log picker/i)).not.toBeInTheDocument();
   });
 });
 
@@ -866,7 +864,7 @@ describe('SettingsScreen — Q9.11B inactive activity recovery flow', () => {
     });
 
     await user.click(screen.getByRole('button', { name: /deactivate morning run/i }));
-    await user.click(screen.getByRole('button', { name: /cancel/i }));
+    await user.click(screen.getByRole('button', { name: /cancel deactivating morning run/i }));
 
     expect(deactivateActivity).not.toHaveBeenCalled();
     expect(within(getSectionByHeading(/^activities$/i)).getByText(ACTIVITY_RUNNING.name)).toBeInTheDocument();
@@ -880,7 +878,7 @@ describe('SettingsScreen — Q9.11B inactive activity recovery flow', () => {
     });
 
     await user.click(screen.getByRole('button', { name: /deactivate morning run/i }));
-    await user.click(screen.getByRole('button', { name: /confirm/i }));
+    await user.click(screen.getByRole('button', { name: /confirm deactivate morning run/i }));
 
     expect(deactivateActivity).toHaveBeenCalledTimes(1);
     expect(deactivateActivity).toHaveBeenCalledWith(ACTIVITY_RUNNING.id);
@@ -897,7 +895,7 @@ describe('SettingsScreen — Q9.11B inactive activity recovery flow', () => {
     });
 
     await user.click(screen.getByRole('button', { name: /deactivate morning run/i }));
-    await user.click(screen.getByRole('button', { name: /confirm/i }));
+    await user.click(screen.getByRole('button', { name: /confirm deactivate morning run/i }));
 
     harness.reload();
 
