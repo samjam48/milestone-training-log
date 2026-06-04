@@ -119,6 +119,7 @@ def test_frontend_not_in_compose(root_env_file: None) -> None:
 
 
 def test_backend_dockerfile_matches_scaffold_contract() -> None:
+    """Image layout contract; production CMD is asserted in test_production_dockerfile_b11_3."""
     dockerfile_text = _read_required_text(BACKEND_DOCKERFILE)
 
     assert "FROM python:3.12-slim" in dockerfile_text
@@ -127,7 +128,6 @@ def test_backend_dockerfile_matches_scaffold_contract() -> None:
     assert "pip install" in dockerfile_text
     assert "COPY app" in dockerfile_text
     assert "EXPOSE 8084" in dockerfile_text
-    assert "uvicorn app.main:app --host 0.0.0.0 --port 8084 --reload" in dockerfile_text
 
 
 def test_gitignore_ignores_local_database_artifacts() -> None:
