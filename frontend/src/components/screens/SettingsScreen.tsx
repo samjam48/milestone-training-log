@@ -10,8 +10,14 @@ import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '../../lib/cn';
 import { Card, CardHeader, CardTitle, CardMeta } from '../ui/Card';
 import { apiFetch } from '../../lib/api/client';
-import type { MilestoneEngineResult, RuleDraft, RulePatch, BlockDraft } from '../../hooks/useMilestoneEngine';
-import type { ActivityClass, ActivityLog, Rule, RuleType, WeeklyTarget, TrainingBlock } from '../../types';
+import type {
+  MilestoneEngineResult,
+  RuleDraft,
+  RulePatch,
+  BlockDraft,
+  NewActivityDraft,
+} from '../../hooks/useMilestoneEngine';
+import type { Activity, ActivityClass, ActivityLog, ID, Rule, RuleType, WeeklyTarget, TrainingBlock } from '../../types';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -19,6 +25,11 @@ import type { ActivityClass, ActivityLog, Rule, RuleType, WeeklyTarget, Training
 
 export interface SettingsScreenProps {
   engine: MilestoneEngineResult;
+  onEditRules?: () => void;
+  onReview?: () => void;
+  onNewBlock?: () => void;
+  onViewBlock?: (blockId: ID) => void;
+  onEditActivity?: (activity: Activity) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -59,6 +70,7 @@ interface BlockSummaryCardProps {
   /** Whether the Edit rules CTA should be rendered. */
   showEditRules: boolean;
   onEditRules: () => void;
+  onReview?: () => void;
 }
 
 function BlockSummaryCard({
@@ -68,6 +80,7 @@ function BlockSummaryCard({
   activityClasses,
   showEditRules,
   onEditRules,
+  onReview,
 }: BlockSummaryCardProps): React.ReactElement {
   const classMap = new Map(activityClasses.map((c) => [c.id, c]));
   const activeRules = rules.filter((r) => r.enabled);
@@ -152,6 +165,15 @@ function BlockSummaryCard({
           >
             Edit rules
           </button>
+          {onReview != null && (
+            <button
+              type="button"
+              onClick={onReview}
+              className="flex-1 h-10 rounded-md bg-bg-sunken border border-border text-body font-medium text-ink-muted transition-colors duration-snap hover:bg-bg-overlay"
+            >
+              Review
+            </button>
+          )}
         </div>
       )}
     </Card>
@@ -170,8 +192,12 @@ interface ActivityManagerRowProps {
     defaultVolumeUnit?: string;
   };
   lastLogDate: string | null;
-  onEdit: () => void;
-  onDeactivate: () => void;
+  onEdit?: () => void;
+  onDeactivate?: () => void;
+  deactivateConfirming?: boolean;
+  onConfirmDeactivate?: () => void;
+  onCancelDeactivate?: () => void;
+  onRestore?: () => void;
 }
 
 function ActivityManagerRow({
@@ -179,6 +205,10 @@ function ActivityManagerRow({
   lastLogDate,
   onEdit,
   onDeactivate,
+  deactivateConfirming = false,
+  onConfirmDeactivate,
+  onCancelDeactivate,
+  onRestore,
 }: ActivityManagerRowProps): React.ReactElement {
   const isPerf = activity.type === 'performance';
   const typeCls = isPerf
@@ -188,43 +218,80 @@ function ActivityManagerRow({
   const lastFmt = lastLogDate ? formatShortDate(lastLogDate) : 'Never';
 
   return (
-    <div className="flex items-center gap-3 py-3 px-4">
-      <div className="min-w-0 flex-1">
-        <p className="text-body font-medium text-ink">{activity.name}</p>
-        <div className="flex items-center gap-2 mt-0.5">
-          <span
-            className={cn(
-              'text-caption font-medium rounded-full px-1.5 py-0.5',
-              typeCls,
-            )}
-          >
-            {typeLabel}
-          </span>
-          {activity.defaultVolumeUnit != null && (
-            <span className="text-caption text-ink-faint">
-              {activity.defaultVolumeUnit}
+    <div className="py-3 px-4">
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-body font-medium text-ink">{activity.name}</p>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span
+              className={cn(
+                'text-caption font-medium rounded-full px-1.5 py-0.5',
+                typeCls,
+              )}
+            >
+              {typeLabel}
             </span>
-          )}
-          <span className="text-caption text-ink-faint">· Last: {lastFmt}</span>
+            {activity.defaultVolumeUnit != null && (
+              <span className="text-caption text-ink-faint">
+                {activity.defaultVolumeUnit}
+              </span>
+            )}
+            <span className="text-caption text-ink-faint">· Last: {lastFmt}</span>
+          </div>
         </div>
-      </div>
-      <div className="flex items-center gap-1 shrink-0">
-        <button
-          type="button"
-          aria-label={`Edit ${activity.name}`}
-          onClick={onEdit}
-          className="h-8 px-2.5 rounded-md text-caption font-medium text-ink-muted bg-bg-sunken hover:bg-bg-overlay transition-colors duration-snap"
-        >
-          Edit
-        </button>
-        <button
-          type="button"
-          aria-label={`Deactivate ${activity.name}`}
-          onClick={onDeactivate}
-          className="h-8 px-2.5 rounded-md text-caption font-medium text-danger-fg hover:bg-danger/10 transition-colors duration-snap"
-        >
-          Deactivate
-        </button>
+        {onRestore != null && (
+          <button
+            type="button"
+            aria-label={`Restore ${activity.name}`}
+            onClick={onRestore}
+            className="h-8 px-2.5 rounded-md text-caption font-medium text-safe-fg bg-safe/10 hover:bg-safe/20 transition-colors duration-snap shrink-0"
+          >
+            Restore
+          </button>
+        )}
+        {onRestore == null && onEdit != null && onDeactivate != null && (
+          <div className="flex items-center gap-1 shrink-0">
+            {deactivateConfirming && onConfirmDeactivate != null && onCancelDeactivate != null ? (
+              <>
+                <button
+                  type="button"
+                  aria-label={`Cancel deactivating ${activity.name}`}
+                  onClick={onCancelDeactivate}
+                  className="h-8 px-2.5 rounded-md text-caption font-medium text-ink-muted bg-bg-sunken hover:bg-bg-overlay transition-colors duration-snap"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Confirm deactivate ${activity.name}`}
+                  onClick={onConfirmDeactivate}
+                  className="h-8 px-2.5 rounded-md text-caption font-medium text-danger-fg hover:bg-danger/10 transition-colors duration-snap"
+                >
+                  Confirm
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  aria-label={`Edit ${activity.name}`}
+                  onClick={onEdit}
+                  className="h-8 px-2.5 rounded-md text-caption font-medium text-ink-muted bg-bg-sunken hover:bg-bg-overlay transition-colors duration-snap"
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Deactivate ${activity.name}`}
+                  onClick={onDeactivate}
+                  className="h-8 px-2.5 rounded-md text-caption font-medium text-danger-fg hover:bg-danger/10 transition-colors duration-snap"
+                >
+                  Deactivate
+                </button>
+              </>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -731,7 +798,14 @@ function NewTrainingBlockSheet({
 // SettingsScreen
 // ---------------------------------------------------------------------------
 
-export function SettingsScreen({ engine }: SettingsScreenProps): React.ReactElement {
+export function SettingsScreen({
+  engine,
+  onEditRules,
+  onReview,
+  onNewBlock,
+  onViewBlock,
+  onEditActivity,
+}: SettingsScreenProps): React.ReactElement {
   const {
     block,
     rules,
@@ -744,6 +818,8 @@ export function SettingsScreen({ engine }: SettingsScreenProps): React.ReactElem
     updateRule,
     deleteRule,
     createTrainingBlock,
+    deactivateActivity,
+    updateActivity,
   } = engine;
 
   const queryClient = useQueryClient();
@@ -752,6 +828,7 @@ export function SettingsScreen({ engine }: SettingsScreenProps): React.ReactElem
   const [notifications, setNotifications] = React.useState(true);
   const [metricUnits, setMetricUnits] = React.useState(true);
   const [resetState, setResetState] = React.useState<'idle' | 'confirming' | 'done'>('idle');
+  const [pendingDeactivateId, setPendingDeactivateId] = React.useState<string | null>(null);
 
   function handleResetMockData(): void {
     if (resetState === 'idle') {
@@ -797,7 +874,31 @@ export function SettingsScreen({ engine }: SettingsScreenProps): React.ReactElem
     [activityClasses, activities],
   );
 
+  const groupedInactive = React.useMemo(
+    () =>
+      activityClasses
+        .map((cls) => ({
+          cls,
+          acts: activities.filter(
+            (a) => a.activityClassId === cls.id && !a.isActive,
+          ),
+        }))
+        .filter((g) => g.acts.length > 0),
+    [activityClasses, activities],
+  );
+
+  const [inactiveSectionPinned, setInactiveSectionPinned] = React.useState(false);
+  React.useEffect(() => {
+    if (groupedInactive.length > 0) {
+      setInactiveSectionPinned(true);
+    }
+  }, [groupedInactive.length]);
+
+  const showInactiveSection = inactiveSectionPinned || groupedInactive.length > 0;
+
   const showEditRules = hasBlock;
+  const handleEditRules = onEditRules ?? (() => setEditRulesOpen(true));
+  const handleNewBlock = onNewBlock ?? (() => setNewBlockOpen(true));
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">
@@ -820,7 +921,8 @@ export function SettingsScreen({ engine }: SettingsScreenProps): React.ReactElem
               weeklyTargets={weeklyTargets}
               activityClasses={activityClasses}
               showEditRules={showEditRules}
-              onEditRules={() => setEditRulesOpen(true)}
+              onEditRules={handleEditRules}
+              onReview={onReview}
             />
           ) : (
             <Card pad="md">
@@ -852,6 +954,7 @@ export function SettingsScreen({ engine }: SettingsScreenProps): React.ReactElem
                     </div>
                     <button
                       type="button"
+                      onClick={() => onViewBlock?.(pb.id)}
                       className="shrink-0 h-8 px-2.5 rounded-md text-caption font-medium text-ink-muted bg-bg-sunken hover:bg-bg-overlay transition-colors duration-snap"
                     >
                       View
@@ -866,7 +969,7 @@ export function SettingsScreen({ engine }: SettingsScreenProps): React.ReactElem
         {/* ── + New Training Block ── */}
         <button
           type="button"
-          onClick={() => setNewBlockOpen(true)}
+          onClick={handleNewBlock}
           className="w-full h-11 rounded-md bg-bg-raised border border-border text-body font-medium text-ink-muted transition-colors duration-snap hover:bg-bg-overlay"
         >
           + New Training Block
@@ -892,8 +995,14 @@ export function SettingsScreen({ engine }: SettingsScreenProps): React.ReactElem
                         key={act.id}
                         activity={act}
                         lastLogDate={lastByAct[act.id] ?? null}
-                        onEdit={() => undefined}
-                        onDeactivate={() => undefined}
+                        onEdit={() => onEditActivity?.(act)}
+                        onDeactivate={() => setPendingDeactivateId(act.id)}
+                        deactivateConfirming={pendingDeactivateId === act.id}
+                        onCancelDeactivate={() => setPendingDeactivateId(null)}
+                        onConfirmDeactivate={() => {
+                          deactivateActivity(act.id);
+                          setPendingDeactivateId(null);
+                        }}
                       />
                     ))}
                   </div>
@@ -902,6 +1011,43 @@ export function SettingsScreen({ engine }: SettingsScreenProps): React.ReactElem
             </Card>
           )}
         </section>
+
+        {/* ── Inactive Activities ── */}
+        {showInactiveSection && (
+        <section>
+          <p className="text-label uppercase font-medium text-ink-muted mb-3">
+            Inactive Activities
+          </p>
+          {groupedInactive.length > 0 && (
+            <Card pad="none">
+              <div className="divide-y divide-border-subtle">
+                {groupedInactive.map(({ cls, acts }) => (
+                  <div key={cls.id}>
+                    <div className="px-4 pt-3 pb-1.5">
+                      <p className="text-caption font-semibold text-ink-muted uppercase tracking-wide">
+                        {cls.name}
+                      </p>
+                    </div>
+                    {acts.map((act) => (
+                      <ActivityManagerRow
+                        key={act.id}
+                        activity={act}
+                        lastLogDate={lastByAct[act.id] ?? null}
+                        onRestore={() =>
+                          updateActivity(
+                            act.id,
+                            { isActive: true } as Partial<NewActivityDraft>,
+                          )
+                        }
+                      />
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+        </section>
+        )}
 
         {/* ── Preferences ── */}
         <section>

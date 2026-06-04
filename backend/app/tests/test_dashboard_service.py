@@ -33,6 +33,7 @@ from app.tests.helpers.seed import (
     seed_activity_log,
     seed_goal,
     seed_recovery_target,
+    seed_training_block,
     with_session,
 )
 
@@ -232,6 +233,81 @@ def test_get_dashboard_without_active_block_returns_neutral_empty_payload(
     assert dashboard.daily_scores == []
     assert dashboard.load_series == []
     assert all(status.state == "safe" for status in dashboard.class_statuses)
+
+
+def test_get_dashboard_previous_blocks_excludes_active_block_and_orders_by_end_date_desc(
+    app_with_test_database: FastAPI,
+    session: Session,
+) -> None:
+    seed_training_block(
+        app_with_test_database,
+        block_id="blk-current",
+        name="Current block",
+        start_date=date(2026, 5, 20),
+        status="active",
+    )
+    seed_training_block(
+        app_with_test_database,
+        block_id="blk-recent",
+        name="Recent block",
+        start_date=date(2026, 2, 1),
+        end_date=date(2026, 5, 10),
+        status="completed",
+    )
+    seed_training_block(
+        app_with_test_database,
+        block_id="blk-older",
+        name="Older block",
+        start_date=date(2026, 4, 1),
+        end_date=date(2026, 4, 20),
+        status="archived",
+    )
+    seed_training_block(
+        app_with_test_database,
+        block_id="blk-open-ended",
+        name="Open-ended block",
+        start_date=date(2026, 5, 1),
+        status="completed",
+    )
+
+    dashboard = get_dashboard(session, as_of=FROZEN_AS_OF)
+
+    assert [block.id for block in dashboard.previous_blocks] == [
+        "blk-recent",
+        "blk-older",
+        "blk-open-ended",
+    ]
+    assert all(block.status != "active" for block in dashboard.previous_blocks)
+
+
+def test_get_dashboard_previous_blocks_still_populates_when_no_active_block_exists(
+    app_with_test_database: FastAPI,
+    session: Session,
+) -> None:
+    seed_training_block(
+        app_with_test_database,
+        block_id="blk-completed",
+        name="Completed block",
+        start_date=date(2026, 2, 1),
+        end_date=date(2026, 5, 10),
+        status="completed",
+    )
+    seed_training_block(
+        app_with_test_database,
+        block_id="blk-archived",
+        name="Archived block",
+        start_date=date(2026, 4, 1),
+        end_date=date(2026, 4, 20),
+        status="archived",
+    )
+
+    dashboard = get_dashboard(session, as_of=FROZEN_AS_OF)
+
+    assert [block.id for block in dashboard.previous_blocks] == [
+        "blk-completed",
+        "blk-archived",
+    ]
+    assert all(block.status != "active" for block in dashboard.previous_blocks)
 
 
 def test_get_dashboard_empty_database_returns_neutral_payload(

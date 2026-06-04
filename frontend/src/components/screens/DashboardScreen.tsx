@@ -11,12 +11,13 @@ import { SuggestedActivityCard } from '../composites/SuggestedActivityCard';
 import { WeeklyLoadGraph } from '../composites/WeeklyLoadGraph';
 import { BlockSafetyMapSection } from '../composites/BlockSafetyMapSection';
 import type { MilestoneEngineResult } from '../../hooks/useMilestoneEngine';
-import type { ActivityClass, SafetyState, TrainingBlock } from '../../types';
+import type { Activity, ActivityClass, SafetyState, TrainingBlock } from '../../types';
 
 interface Props {
   engine: MilestoneEngineResult;
   onOpenCheckIn: () => void;
   onOpenLogActivity: (activityId?: string) => void;
+  onQuickLog?: (activity: Activity) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -109,12 +110,17 @@ const StreakRow: React.FC<{ count: number }> = ({ count }) => (
 // Screen
 // ---------------------------------------------------------------------------
 
-export const DashboardScreen: React.FC<Props> = ({ engine, onOpenCheckIn, onOpenLogActivity }) => {
+export const DashboardScreen: React.FC<Props> = ({
+  engine,
+  onOpenCheckIn,
+  onOpenLogActivity,
+  onQuickLog,
+}) => {
   const {
     todayDate, userName, hasCheckedInToday,
     suggestions, weeklyProgress, classStatuses,
     loadSeries, flareUpDates, weekLoadThreshold, cleanStreak,
-    block, activityClasses,
+    block, activityClasses, activities,
   } = engine;
 
   const loadGraphTitle = resolveLoadGraphTitle(block, activityClasses);
@@ -133,7 +139,14 @@ export const DashboardScreen: React.FC<Props> = ({ engine, onOpenCheckIn, onOpen
       {/* ── Suggested activities ── */}
       <SuggestedActivityCard
         suggestions={suggestions}
-        onPick={(s) => onOpenLogActivity(s.id)}
+        onPick={(s) => {
+          const activity = activities.find((candidate) => candidate.id === s.id);
+          if (activity != null && onQuickLog != null) {
+            onQuickLog(activity);
+          } else if (onQuickLog == null) {
+            onOpenLogActivity(s.id);
+          }
+        }}
         asOf="Today"
       />
 

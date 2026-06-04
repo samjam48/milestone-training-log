@@ -10,8 +10,13 @@ import {
   GoalsScreen,
   GoalEditorScreen,
   SettingsScreen,
+  EditBlockRulesScreen,
+  BlockReviewScreen,
+  NewTrainingBlockScreen,
+  ActivityManagerScreen,
+  InlineLogSheet,
 } from './components/screens';
-import type { Goal } from './types';
+import type { Activity, Goal } from './types';
 import { useMilestoneEngine, type MilestoneEngineResult } from './hooks/useMilestoneEngine';
 
 type OverlayKey = 'check-in' | 'log-activity' | 'log-incident';
@@ -49,6 +54,36 @@ function resolveStackScreen(
       />
     );
   }
+  if (entry.screen === 'edit-block-rules') {
+    return <EditBlockRulesScreen engine={engine} onBack={onPop} />;
+  }
+  if (entry.screen === 'block-review') {
+    const blockId = entry.params.blockId as string | undefined;
+    return (
+      <BlockReviewScreen engine={engine} blockId={blockId} onBack={onPop} />
+    );
+  }
+  if (entry.screen === 'new-training-block') {
+    return (
+      <NewTrainingBlockScreen
+        engine={engine}
+        onBack={onPop}
+        onComplete={onPop}
+      />
+    );
+  }
+  if (entry.screen === 'activity-manager') {
+    const activity = entry.params.activity as Activity | undefined;
+    if (activity == null) return <></>;
+    return (
+      <ActivityManagerScreen
+        activity={activity}
+        engine={engine}
+        onBack={onPop}
+        onComplete={onPop}
+      />
+    );
+  }
   return <></>;
 }
 
@@ -59,6 +94,7 @@ export function App(): React.ReactElement {
   const [logActivityPrefillId, setLogActivityPrefillId] = React.useState<
     string | undefined
   >(undefined);
+  const [inlineLogActivity, setInlineLogActivity] = React.useState<Activity | null>(null);
   const [screenStack, setScreenStack] = React.useState<StackEntry[]>([]);
 
   const pushScreen = (screen: string, params: Record<string, unknown> = {}): void =>
@@ -76,6 +112,8 @@ export function App(): React.ReactElement {
     setLogActivityPrefillId(activityId);
     setOverlay('log-activity');
   };
+
+  const closeInlineLog = (): void => setInlineLogActivity(null);
 
   let mainContent: React.ReactElement;
   if (overlay === 'check-in') {
@@ -112,6 +150,7 @@ export function App(): React.ReactElement {
         engine={engine}
         onOpenCheckIn={() => setOverlay('check-in')}
         onOpenLogActivity={openLogActivity}
+        onQuickLog={setInlineLogActivity}
       />
     );
   } else if (activeTab === 'log') {
@@ -132,14 +171,20 @@ export function App(): React.ReactElement {
     );
   } else if (activeTab === 'settings') {
     mainContent = (
-      <SettingsScreen engine={engine} />
+      <SettingsScreen
+        engine={engine}
+        onEditRules={() => pushScreen('edit-block-rules')}
+        onReview={() => pushScreen('block-review')}
+        onNewBlock={() => pushScreen('new-training-block')}
+        onViewBlock={(blockId) => pushScreen('block-review', { blockId })}
+        onEditActivity={(activity) => pushScreen('activity-manager', { activity })}
+      />
     );
   } else {
     mainContent = <ComingSoonPlaceholder />;
   }
 
   const topEntry = screenStack.length > 0 ? screenStack[screenStack.length - 1] : null;
-
   return (
     <AppShell withTabBar={showTabBar}>
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">{mainContent}</div>
@@ -154,6 +199,12 @@ export function App(): React.ReactElement {
           {resolveStackScreen(topEntry, engine, popScreen)}
         </div>
       )}
+      <InlineLogSheet
+        open={inlineLogActivity != null}
+        activity={inlineLogActivity}
+        engine={engine}
+        onClose={closeInlineLog}
+      />
       {/* Test affordance — allows exercising pushScreen with an unknown key */}
       <button
         type="button"

@@ -59,16 +59,16 @@ from `backend/` so `backend/pyproject.toml` is loaded.
 
 `make lint` and `make test` should wrap the canonical commands once the repo bootstrap is in place.
 ---
-## Current Sprint — Phase 8: Goals Flow
-**Goal:** Port the Goals tab editor flow from the export-2 prototype — extend the dashboard API with goals, make goals reactive in `useMilestoneEngine`, scaffold the push/pop navigation stack, wire `GoalsScreen` new props, and port `GoalEditorScreen`.
-**Status (2026-06-02):** Phases 0–7.5 complete and merged to `main`. Technical design approved; ready for planner agent to write Phase 8 tickets.
-**Branch:** `feat/phase-8-goals-flow`
+## Current Sprint — Phase 9: Settings Flow + InlineLogSheet
+**Goal:** Port the Settings-tab editor screens and Dashboard quick-log sheet from the export-2 prototype — backend review endpoint and block-create service, hook reactive state extensions, Settings stack navigation, SettingsScreen new props, and 5 new screens.
+**Status (2026-06-03):** Phase 8 complete and merged to `main`. Technical design approved (see primary references); ready for planner agent to write Phase 9 tickets.
+**Branch:** `feat/phase-9-settings-flow`
 **Ticket source:** Not yet written — run planner agent next.
-**Primary references:** `plans/feature-brief-v02-screen-completion-2026-06-02.md` §Phase 8, `plans/technical-design-v02-screen-completion-2026-06-02.md`, `export-2/handover.md`, `docs/api-map.md`
-**Out of scope (Phase 8):** Settings flow screens, InlineLogSheet, review endpoint, block-create service, WEEKLY_TARGETS / ACTIVITY_CLASSES editing, notification/unit toggles, auth, multi-user support
+**Primary references:** `plans/feature-brief-v02-screen-completion-2026-06-02.md` §Phase 9, `plans/technical-design-v02-screen-completion-2026-06-02.md`, `export-2/handover.md`, `docs/api-map.md`, `docs/database-schema.md`
+**Design constraint:** App is mobile-first. All new screens pushed onto the navigation stack must render with the same AppShell display settings (max-width column, safe areas, background) as the existing tab screens. No full-browser-width or unstyled overlays.
+**Out of scope (Phase 9):** WEEKLY_TARGETS / ACTIVITY_CLASSES editing, notification/unit toggles, recovery-streaks UI, delayed-tax panel, load-graph dynamic title, auth, multi-user support
 
 **Upcoming:**
-- Phase 9: Settings flow + InlineLogSheet (see feature brief §Phase 9)
 - Phase 10: Recovery streaks UI, delayed-tax panel, load-graph dynamic title, loading/error polish, review milestone, MCP stub
 
 ---

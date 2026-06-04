@@ -18,6 +18,7 @@ import {
   c63StretchActivity,
   c63YogaActivity,
 } from './test/mockEngine';
+import type { Activity, ActivityClass } from './types';
 import { App } from './App';
 
 vi.mock('./hooks/useMilestoneEngine', () => ({
@@ -28,10 +29,14 @@ function getPrimaryNav(): HTMLElement {
   return screen.getByRole('navigation', { name: 'Primary' });
 }
 
-function expectLogActivityPrefill(activityName: string): void {
-  expect(screen.getByText('Session details')).toBeInTheDocument();
-  const row = screen.getByRole('button', { name: activityName });
-  expect(row.querySelector('svg')).not.toBeNull();
+function expectQuickLogSheet(activityName: string): void {
+  expect(
+    screen.getByRole('dialog', { name: new RegExp(`Quick log — ${activityName}`, 'i') }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole('heading', { name: new RegExp(`^${activityName}$`, 'i') }),
+  ).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'Log Activity' })).not.toBeInTheDocument();
 }
 
 function expectNoLogActivityPrefill(): void {
@@ -120,7 +125,7 @@ describe('App shell (F1.1)', () => {
   });
 });
 
-describe('Dashboard suggestion → Log Activity prefill (C6.3)', () => {
+describe('Dashboard suggestion → InlineLogSheet quick log (C6.3 / F9.10)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetMockEngine();
@@ -131,17 +136,16 @@ describe('Dashboard suggestion → Log Activity prefill (C6.3)', () => {
     cleanup();
   });
 
-  it('opens Log Activity with safe suggestion activity pre-selected when CTA is tapped', async () => {
+  it('opens InlineLogSheet with the safe suggestion activity when CTA is tapped', async () => {
     const user = userEvent.setup();
     renderWithProviders(<App />);
 
     await user.click(screen.getByRole('button', { name: 'Log stretching' }));
 
-    expect(screen.getByRole('heading', { name: 'Log Activity' })).toBeInTheDocument();
-    expectLogActivityPrefill('Stretching');
+    expectQuickLogSheet('Stretching');
   });
 
-  it('opens Log Activity with caution suggestion activity pre-selected when CTA is tapped', async () => {
+  it('opens InlineLogSheet with the caution suggestion activity when CTA is tapped', async () => {
     const user = userEvent.setup();
     applyC63DashboardFixtures({
       suggestions: [c63CautionYogaSuggestion],
@@ -151,8 +155,7 @@ describe('Dashboard suggestion → Log Activity prefill (C6.3)', () => {
 
     await user.click(screen.getByRole('button', { name: 'Log lightly' }));
 
-    expect(screen.getByRole('heading', { name: 'Log Activity' })).toBeInTheDocument();
-    expectLogActivityPrefill('Yoga');
+    expectQuickLogSheet('Yoga');
   });
 
   it('does not apply stale prefill when opening Log Activity from the Log tab', async () => {
@@ -160,8 +163,8 @@ describe('Dashboard suggestion → Log Activity prefill (C6.3)', () => {
     renderWithProviders(<App />);
 
     await user.click(screen.getByRole('button', { name: 'Log stretching' }));
-    expectLogActivityPrefill('Stretching');
-    await user.click(screen.getByRole('button', { name: 'Back' }));
+    expectQuickLogSheet('Stretching');
+    await user.click(screen.getByRole('button', { name: 'Close' }));
 
     await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
     await user.click(screen.getByRole('button', { name: '+ Log Activity' }));
@@ -170,24 +173,24 @@ describe('Dashboard suggestion → Log Activity prefill (C6.3)', () => {
     expectNoLogActivityPrefill();
   });
 
-  it('clears prefill after overlay close so the next Log Activity open has no selection', async () => {
+  it('clears quick-log state after sheet close so the next Log Activity open has no selection', async () => {
     const user = userEvent.setup();
     renderWithProviders(<App />);
 
     await user.click(screen.getByRole('button', { name: 'Log stretching' }));
-    expectLogActivityPrefill('Stretching');
-    await user.click(screen.getByRole('button', { name: 'Back' }));
+    expectQuickLogSheet('Stretching');
+    await user.click(screen.getByRole('button', { name: 'Close' }));
 
     await user.click(screen.getByRole('button', { name: 'Log stretching' }));
-    expectLogActivityPrefill('Stretching');
-    await user.click(screen.getByRole('button', { name: 'Back' }));
+    expectQuickLogSheet('Stretching');
+    await user.click(screen.getByRole('button', { name: 'Close' }));
 
     await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
     await user.click(screen.getByRole('button', { name: '+ Log Activity' }));
     expectNoLogActivityPrefill();
   });
 
-  it('overwrites prefill when a second suggestion CTA is opened after closing the overlay', async () => {
+  it('opens the second suggestion activity after closing the first quick-log sheet', async () => {
     const user = userEvent.setup();
     applyC63DashboardFixtures({
       suggestions: [c63SafeStretchSuggestion, c63CautionYogaSuggestion],
@@ -196,15 +199,17 @@ describe('Dashboard suggestion → Log Activity prefill (C6.3)', () => {
     renderWithProviders(<App />);
 
     await user.click(screen.getByRole('button', { name: 'Log stretching' }));
-    expectLogActivityPrefill('Stretching');
-    await user.click(screen.getByRole('button', { name: 'Back' }));
+    expectQuickLogSheet('Stretching');
+    await user.click(screen.getByRole('button', { name: 'Close' }));
 
     await user.click(screen.getByRole('button', { name: 'Log lightly' }));
-    expectLogActivityPrefill('Yoga');
-    expect(screen.queryByRole('button', { name: 'Stretching' })?.querySelector('svg')).toBeNull();
+    expectQuickLogSheet('Yoga');
+    expect(
+      screen.queryByRole('dialog', { name: /quick log — stretching/i }),
+    ).not.toBeInTheDocument();
   });
 
-  it('ignores prefill when suggestion id is not in activities', async () => {
+  it('does not open quick log or Log Activity when suggestion id is not in activities', async () => {
     const user = userEvent.setup();
     applyC63DashboardFixtures({
       suggestions: [{ ...c63SafeStretchSuggestion, id: 'act-deleted' }],
@@ -214,8 +219,8 @@ describe('Dashboard suggestion → Log Activity prefill (C6.3)', () => {
 
     await user.click(screen.getByRole('button', { name: 'Log stretching' }));
 
-    expect(screen.getByRole('heading', { name: 'Log Activity' })).toBeInTheDocument();
-    expectNoLogActivityPrefill();
+    expect(screen.queryByRole('dialog', { name: /quick log/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Log Activity' })).not.toBeInTheDocument();
   });
 
   it('renders danger suggestions without a Log CTA on the dashboard', () => {
@@ -335,5 +340,120 @@ describe('Screen stack — push/pop navigation (F8.2)', () => {
       // this path intentionally fails to signal missing test infrastructure.
       expect(screen.getByTestId('test-push-unknown-screen')).toBeInTheDocument();
     }
+  });
+});
+
+describe('Settings stack navigation (F9.4)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetMockEngine();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('opens edit-block-rules through the visible Settings flow, then pops back out', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Settings' }));
+    await user.click(screen.getByRole('button', { name: /edit rules/i }));
+
+    expect(screen.getByTestId('stack-screen-overlay')).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /edit rules/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+
+    expect(screen.queryByTestId('stack-screen-overlay')).not.toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
+  });
+
+  it('opens block review through the visible Settings flow, then pops back out', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Settings' }));
+    await user.click(screen.getByRole('button', { name: 'Review' }));
+
+    expect(screen.getByTestId('stack-screen-overlay')).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /block review/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+
+    expect(screen.queryByTestId('stack-screen-overlay')).not.toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
+  });
+
+  it('opens new-training-block through the visible Settings flow, then pops back out', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Settings' }));
+    await user.click(screen.getByRole('button', { name: /\+ new training block/i }));
+
+    expect(screen.getByTestId('stack-screen-overlay')).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /new training block/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+
+    expect(screen.queryByTestId('stack-screen-overlay')).not.toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
+  });
+
+  it('pushing activity-manager via its hidden affordance renders the overlay, hides the tab bar, and pops back out', async () => {
+    const user = userEvent.setup();
+    const activityClass: ActivityClass = {
+      id: 'cls-performance',
+      userId: 'user-1',
+      name: 'Performance',
+      type: 'performance',
+      defaultRecoveryWindowDays: 3,
+      createdAt: '2026-04-07T06:00:00Z',
+    };
+    const activity: Activity = {
+      id: 'act-morning-run',
+      userId: 'user-1',
+      activityClassId: activityClass.id,
+      name: 'Morning Run',
+      type: 'performance',
+      defaultVolumeUnit: 'km',
+      isActive: true,
+      createdAt: '2026-04-07T06:00:00Z',
+    };
+    mockEngine.activityClasses = [activityClass];
+    mockEngine.activities = [activity];
+    renderWithProviders(<App />);
+
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Settings' }));
+    await user.click(screen.getByRole('button', { name: /edit morning run/i }));
+
+    expect(screen.getByTestId('stack-screen-overlay')).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /edit activity/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+
+    expect(screen.queryByTestId('stack-screen-overlay')).not.toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
+  });
+
+  it('still renders nothing for an unknown stack key without crashing', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    await user.click(screen.getByTestId('test-push-unknown-screen'));
+
+    const overlay = screen.getByTestId('stack-screen-overlay');
+    expect(overlay).toBeInTheDocument();
+    expect(overlay.textContent).toBe('');
+    expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument();
   });
 });

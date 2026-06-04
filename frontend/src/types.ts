@@ -241,3 +241,5 @@ export interface ActivityClassStatus {
   nextSafeDate?: ISODate;
   reason?: string;                    // "Last done 2 days ago, rest 3"
 }
+
+export type { LoadPoint } from './lib/load';

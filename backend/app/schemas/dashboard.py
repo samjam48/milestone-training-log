@@ -45,6 +45,7 @@ class DashboardRead(BaseModel):
     as_of: date
     user_name: str
     block: TrainingBlockRead | None
+    previous_blocks: list[TrainingBlockRead]
     activity_classes: list[ActivityClassRead]
     activities: list[ActivityRead]
     logs: list[ActivityLogRead]

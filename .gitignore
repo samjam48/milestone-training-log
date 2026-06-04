@@ -1,5 +1,7 @@
 .env
+.DS_Store
 data/
+node_modules/
 *.db
 __pycache__/
 .mypy_cache/

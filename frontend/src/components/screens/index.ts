@@ -7,3 +7,8 @@ export { NewActivitySheet } from './NewActivitySheet';
 export { GoalsScreen } from './GoalsScreen';
 export { GoalEditorScreen } from './GoalEditorScreen';
 export { SettingsScreen } from './SettingsScreen';
+export { EditBlockRulesScreen } from './EditBlockRulesScreen';
+export { BlockReviewScreen } from './BlockReviewScreen';
+export { NewTrainingBlockScreen } from './NewTrainingBlockScreen';
+export { ActivityManagerScreen } from './ActivityManagerScreen';
+export { InlineLogSheet } from './InlineLogSheet';

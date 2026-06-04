@@ -8,11 +8,12 @@
  *
  * Extends with tests for the new queries (goals, rules, weeklyTargets,
  * previousBlocks) and mutations (submitNewActivity, createGoal, archiveGoal,
- * createRule, deleteRule, createTrainingBlock, updateGoal, updateRule).
+ * createRule, deleteRule, createTrainingBlock, updateGoal, updateRule,
+ * updateActivity, deactivateActivity).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { waitFor, act } from '@testing-library/react';
-import type { Goal, Rule, WeeklyTarget, TrainingBlock, RecoveryStreak } from '../types';
+import type { Activity, Goal, Rule, WeeklyTarget, TrainingBlock, RecoveryStreak } from '../types';
 import {
   dashboardReadSnake,
   activityLogReadSnake,
@@ -47,6 +48,7 @@ vi.mock('../lib/api', () => ({
   deleteRule: vi.fn(),
   createTrainingBlock: vi.fn(),
   createActivity: vi.fn(),
+  patchActivity: vi.fn(),
   listActivities: vi.fn(),
 }));
 
@@ -67,6 +69,7 @@ import {
   deleteRule as deleteRuleApi,
   createTrainingBlock as createTrainingBlockApi,
   createActivity,
+  patchActivity,
   listActivities,
 } from '../lib/api';
 
@@ -111,6 +114,16 @@ const weeklyTargetFixture: WeeklyTarget = {
   targetUnit: 'km',
   createdAt: '2026-04-07T06:00:00Z',
 };
+
+const activityFixture = {
+  id: 'act-walk',
+  activityClassId: 'cls-foot',
+  name: 'Morning Walk',
+  type: 'performance',
+  defaultVolumeUnit: 'km',
+  isActive: true,
+  createdAt: '2026-05-30T06:00:00Z',
+} satisfies Omit<Activity, 'userId'>;
 
 const activeBlockFixture: Omit<TrainingBlock, 'userId'> = {
   id: ACTIVE_BLOCK_ID,
@@ -173,6 +186,7 @@ function setupDefaultApiMocks(): void {
     isActive: true,
     createdAt: '2026-05-30T06:00:00Z',
   });
+  vi.mocked(patchActivity).mockResolvedValue(activityFixture);
   vi.mocked(listActivities).mockResolvedValue([]);
 }
 
@@ -554,6 +568,70 @@ describe('useMilestoneEngine data plane (F2.0)', () => {
         defaultVolumeUnit: 'km',
       });
     });
+
+    await waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['dashboard'] });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['activities'] });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // H9.0 — activity update / deactivate mutations
+  // ---------------------------------------------------------------------------
+
+  it('updateActivity calls patchActivity with the provided patch and invalidates ["dashboard"] and ["activities"]', async () => {
+    const { result, queryClient } = renderHookWithProviders(() => useMilestoneEngine());
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    await waitFor(() => {
+      expect(result.current.todayDate).toBe(dashboardPayload.todayDate);
+    });
+
+    const engine = result.current as typeof result.current & {
+      updateActivity?: (activityId: string, patch: Record<string, unknown>) => void;
+    };
+
+    expect(typeof engine.updateActivity).toBe('function');
+
+    act(() => {
+      engine.updateActivity?.('act-walk', { name: 'Brisk Walk' });
+    });
+
+    await waitFor(() => {
+      expect(patchActivity).toHaveBeenCalledTimes(1);
+    });
+
+    expect(patchActivity).toHaveBeenCalledWith('act-walk', { name: 'Brisk Walk' });
+
+    await waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['dashboard'] });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['activities'] });
+    });
+  });
+
+  it('deactivateActivity calls patchActivity with isActive false and invalidates ["dashboard"] and ["activities"]', async () => {
+    const { result, queryClient } = renderHookWithProviders(() => useMilestoneEngine());
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    await waitFor(() => {
+      expect(result.current.todayDate).toBe(dashboardPayload.todayDate);
+    });
+
+    const engine = result.current as typeof result.current & {
+      deactivateActivity?: (activityId: string) => void;
+    };
+
+    expect(typeof engine.deactivateActivity).toBe('function');
+
+    act(() => {
+      engine.deactivateActivity?.('act-walk');
+    });
+
+    await waitFor(() => {
+      expect(patchActivity).toHaveBeenCalledTimes(1);
+    });
+
+    expect(patchActivity).toHaveBeenCalledWith('act-walk', { isActive: false });
 
     await waitFor(() => {
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['dashboard'] });

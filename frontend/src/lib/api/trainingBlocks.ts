@@ -1,10 +1,12 @@
-import type { DailySafetyScore, TrainingBlock } from '../../types';
+import type { DailySafetyScore, ISODate, TrainingBlock } from '../../types';
+import type { LoadPoint } from '../load';
 import { apiFetch, apiFetchOrNullOn404 } from './client';
 import {
   mapTrainingBlockCreateBody,
   mapTrainingBlockFromApi,
   mapTrainingBlockPatchBody,
   mapDailySafetyScoreFromApi,
+  mapLoadPointFromApi,
 } from './mappers';
 
 type TrainingBlockRead = Omit<TrainingBlock, 'userId'>;
@@ -50,4 +52,36 @@ interface TrainingBlockScoresResponse {
 export async function getTrainingBlockScores(blockId: string): Promise<DailySafetyScore[]> {
   const raw = await apiFetch<TrainingBlockScoresResponse>(`/training-blocks/${blockId}/scores`);
   return raw.scores.map((item) => mapDailySafetyScoreFromApi(item));
+}
+
+interface TrainingBlockReviewResponse {
+  block: Record<string, unknown>;
+  daily_scores: Record<string, unknown>[];
+  load_series: Record<string, unknown>[];
+  flare_up_dates: string[];
+  total_sessions: number;
+  clean_days: number;
+}
+
+export interface TrainingBlockReview {
+  block: TrainingBlockRead;
+  dailyScores: DailySafetyScore[];
+  loadSeries: LoadPoint[];
+  flareUpDates: ISODate[];
+  totalSessions: number;
+  cleanDays: number;
+}
+
+export async function getTrainingBlockReview(blockId: string): Promise<TrainingBlockReview> {
+  const raw = await apiFetch<TrainingBlockReviewResponse>(
+    `/training-blocks/${blockId}/review`,
+  );
+  return {
+    block: mapTrainingBlockFromApi(raw.block),
+    dailyScores: raw.daily_scores.map((item) => mapDailySafetyScoreFromApi(item)),
+    loadSeries: raw.load_series.map((item) => mapLoadPointFromApi(item)),
+    flareUpDates: raw.flare_up_dates.map((date) => String(date) as ISODate),
+    totalSessions: raw.total_sessions,
+    cleanDays: raw.clean_days,
+  };
 }

@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { screen, cleanup } from '@testing-library/react';
+import { screen, cleanup, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders';
 import { mockEngine, resetMockEngine } from '../../test/mockEngine';
@@ -23,7 +23,7 @@ import type {
   WeeklyTarget,
   TrainingBlock,
 } from '../../types';
-import type { RuleDraft, RulePatch } from '../../hooks/useMilestoneEngine';
+import type { NewActivityDraft, RuleDraft, RulePatch } from '../../hooks/useMilestoneEngine';
 import { SettingsScreen } from './SettingsScreen';
 
 // Module-level mock for apiFetch used in F2.6 onClick wiring tests.
@@ -228,6 +228,126 @@ function makeEngine(
   overrides: Partial<typeof mockEngine> = {},
 ): typeof mockEngine {
   return { ...mockEngine, ...overrides };
+}
+
+interface SettingsScreenCallbackProps {
+  engine: typeof mockEngine;
+  onEditRules?: () => void;
+  onReview?: () => void;
+  onNewBlock?: () => void;
+  onViewBlock?: (blockId: string) => void;
+  onEditActivity?: (activity: Activity) => void;
+}
+
+const SettingsScreenWithCallbacks = SettingsScreen as unknown as (
+  props: SettingsScreenCallbackProps,
+) => JSX.Element;
+
+function renderSettingsScreenWithCallbacks(props: SettingsScreenCallbackProps): void {
+  renderWithProviders(<SettingsScreenWithCallbacks {...props} />);
+}
+
+function getSectionByHeading(name: RegExp): HTMLElement {
+  const heading = screen.getByText(name);
+  const section = heading.closest('section');
+  expect(section).not.toBeNull();
+  return section as HTMLElement;
+}
+
+function getInactiveSection(): HTMLElement {
+  const heading =
+    screen.queryByText(/^inactive activities$/i)
+    ?? screen.queryByText(/^archived activities$/i);
+  expect(heading).not.toBeNull();
+  const section = heading?.closest('section');
+  expect(section).not.toBeNull();
+  return section as HTMLElement;
+}
+
+function renderStatefulSettingsScreen(options: {
+  activities?: Activity[];
+  activityClasses?: ActivityClass[];
+  logs?: ActivityLog[];
+} = {}) {
+  let currentActivities = options.activities ?? [ACTIVITY_RUNNING, ACTIVITY_INACTIVE];
+  const activityClasses = options.activityClasses ?? [CLASS_RUNNING];
+  const logs = options.logs ?? [];
+
+  let renderApi = renderWithProviders(<div />);
+
+  const rerenderCurrent = () => {
+    renderApi.rerender(
+      <SettingsScreen
+        engine={makeEngine({
+          block: ACTIVE_BLOCK,
+          activityClasses,
+          activities: currentActivities,
+          logs,
+          deactivateActivity,
+          updateActivity,
+        })}
+      />,
+    );
+  };
+
+  const deactivateActivity = vi.fn((activityId: string) => {
+    currentActivities = currentActivities.map((activity) => (
+      activity.id === activityId
+        ? { ...activity, isActive: false }
+        : activity
+    ));
+    rerenderCurrent();
+  });
+
+  const updateActivity = vi.fn((
+    activityId: string,
+    patch: Partial<NewActivityDraft> & { isActive?: boolean },
+  ) => {
+    currentActivities = currentActivities.map((activity) => (
+      activity.id === activityId
+        ? {
+            ...activity,
+            ...patch,
+            isActive: patch.isActive ?? activity.isActive,
+          }
+        : activity
+    ));
+    rerenderCurrent();
+  });
+
+  renderApi.unmount();
+  renderApi = renderWithProviders(
+    <SettingsScreen
+      engine={makeEngine({
+        block: ACTIVE_BLOCK,
+        activityClasses,
+        activities: currentActivities,
+        logs,
+        deactivateActivity,
+        updateActivity,
+      })}
+    />,
+  );
+
+  return {
+    deactivateActivity,
+    updateActivity,
+    reload() {
+      renderApi.unmount();
+      renderApi = renderWithProviders(
+        <SettingsScreen
+          engine={makeEngine({
+            block: ACTIVE_BLOCK,
+            activityClasses,
+            activities: currentActivities,
+            logs,
+            deactivateActivity,
+            updateActivity,
+          })}
+        />,
+      );
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -600,7 +720,7 @@ describe('SettingsScreen — Activities Manager', () => {
     expect(screen.getByText(/never/i)).toBeInTheDocument();
   });
 
-  it('excludes inactive activities from the Activities Manager', () => {
+  it('keeps active and inactive activities in separate sections', () => {
     const engine = makeEngine({
       block: ACTIVE_BLOCK,
       activityClasses: [CLASS_RUNNING],
@@ -610,7 +730,191 @@ describe('SettingsScreen — Activities Manager', () => {
 
     renderWithProviders(<SettingsScreen engine={engine} />);
 
-    expect(screen.queryByText(ACTIVITY_INACTIVE.name)).not.toBeInTheDocument();
+    const activeSection = getSectionByHeading(/^activities$/i);
+    expect(within(activeSection).getByText(ACTIVITY_RUNNING.name)).toBeInTheDocument();
+    expect(within(activeSection).queryByText(ACTIVITY_INACTIVE.name)).not.toBeInTheDocument();
+
+    const inactiveSection = getInactiveSection();
+    expect(within(inactiveSection).getByText(ACTIVITY_INACTIVE.name)).toBeInTheDocument();
+    expect(within(inactiveSection).queryByText(ACTIVITY_RUNNING.name)).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 9b. Stack action callbacks
+// ---------------------------------------------------------------------------
+
+describe('SettingsScreen — stack action callbacks', () => {
+  it('calls onEditRules and does not open the inline form when Edit rules is clicked', async () => {
+    const user = userEvent.setup();
+    const onEditRules = vi.fn();
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      rules: [RULE_REST],
+      weeklyTargets: [],
+      activityClasses: [CLASS_RUNNING],
+    });
+
+    renderSettingsScreenWithCallbacks({ engine, onEditRules });
+
+    await user.click(screen.getByRole('button', { name: /edit rules/i }));
+
+    expect(onEditRules).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('dialog', { name: /edit rules/i })).not.toBeInTheDocument();
+  });
+
+  it('calls onReview when Review is clicked', async () => {
+    const user = userEvent.setup();
+    const onReview = vi.fn();
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      rules: [],
+      weeklyTargets: [],
+      activityClasses: [],
+    });
+
+    renderSettingsScreenWithCallbacks({ engine, onReview });
+
+    await user.click(screen.getByRole('button', { name: /review/i }));
+
+    expect(onReview).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls onNewBlock and does not open the inline sheet when + New Training Block is clicked', async () => {
+    const user = userEvent.setup();
+    const onNewBlock = vi.fn();
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+    });
+
+    renderSettingsScreenWithCallbacks({ engine, onNewBlock });
+
+    await user.click(screen.getByRole('button', { name: /\+ new training block/i }));
+
+    expect(onNewBlock).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('dialog', { name: /new training block/i })).not.toBeInTheDocument();
+  });
+
+  it('calls onViewBlock with the previous block id when View is clicked', async () => {
+    const user = userEvent.setup();
+    const onViewBlock = vi.fn();
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      previousBlocks: [PREVIOUS_BLOCK_1],
+      rules: [],
+      weeklyTargets: [],
+      activityClasses: [],
+    });
+
+    renderSettingsScreenWithCallbacks({ engine, onViewBlock });
+
+    await user.click(screen.getByRole('button', { name: /view/i }));
+
+    expect(onViewBlock).toHaveBeenCalledTimes(1);
+    expect(onViewBlock).toHaveBeenCalledWith(PREVIOUS_BLOCK_1.id);
+  });
+
+  it('calls onEditActivity with the activity when Edit is clicked', async () => {
+    const user = userEvent.setup();
+    const onEditActivity = vi.fn();
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [CLASS_RUNNING],
+      activities: [ACTIVITY_RUNNING],
+      logs: [],
+    });
+
+    renderSettingsScreenWithCallbacks({ engine, onEditActivity });
+
+    await user.click(screen.getByRole('button', { name: /edit morning run/i }));
+
+    expect(onEditActivity).toHaveBeenCalledTimes(1);
+    expect(onEditActivity).toHaveBeenCalledWith(ACTIVITY_RUNNING);
+  });
+
+  it('requires confirmation before calling engine.deactivateActivity from the activity list', async () => {
+    const user = userEvent.setup();
+    const deactivateActivity = vi.fn();
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [CLASS_RUNNING],
+      activities: [ACTIVITY_RUNNING],
+      logs: [],
+      deactivateActivity,
+    });
+
+    renderSettingsScreenWithCallbacks({ engine });
+
+    await user.click(screen.getByRole('button', { name: /deactivate morning run/i }));
+
+    expect(deactivateActivity).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: /confirm deactivate morning run/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /cancel deactivating morning run/i })).toBeInTheDocument();
+    expect(screen.queryByText(/deactivating hides this activity from the log picker/i)).not.toBeInTheDocument();
+  });
+});
+
+describe('SettingsScreen — Q9.11B inactive activity recovery flow', () => {
+  it('canceling deactivation leaves the activity active and visible in the active section', async () => {
+    const user = userEvent.setup();
+    const { deactivateActivity } = renderStatefulSettingsScreen({
+      activities: [ACTIVITY_RUNNING],
+      logs: [LOG_RECENT],
+    });
+
+    await user.click(screen.getByRole('button', { name: /deactivate morning run/i }));
+    await user.click(screen.getByRole('button', { name: /cancel deactivating morning run/i }));
+
+    expect(deactivateActivity).not.toHaveBeenCalled();
+    expect(within(getSectionByHeading(/^activities$/i)).getByText(ACTIVITY_RUNNING.name)).toBeInTheDocument();
+  });
+
+  it('confirmed deactivation moves the activity into the inactive section and preserves its log history metadata', async () => {
+    const user = userEvent.setup();
+    const { deactivateActivity } = renderStatefulSettingsScreen({
+      activities: [ACTIVITY_RUNNING],
+      logs: [LOG_RECENT],
+    });
+
+    await user.click(screen.getByRole('button', { name: /deactivate morning run/i }));
+    await user.click(screen.getByRole('button', { name: /confirm deactivate morning run/i }));
+
+    expect(deactivateActivity).toHaveBeenCalledTimes(1);
+    expect(deactivateActivity).toHaveBeenCalledWith(ACTIVITY_RUNNING.id);
+    expect(within(getSectionByHeading(/^activities$/i)).queryByText(ACTIVITY_RUNNING.name)).not.toBeInTheDocument();
+    expect(within(getInactiveSection()).getByText(ACTIVITY_RUNNING.name)).toBeInTheDocument();
+    expect(within(getInactiveSection()).getByText(/may 28/i)).toBeInTheDocument();
+  });
+
+  it('keeps inactive activities visible after a reload', async () => {
+    const user = userEvent.setup();
+    const harness = renderStatefulSettingsScreen({
+      activities: [ACTIVITY_RUNNING],
+      logs: [LOG_RECENT],
+    });
+
+    await user.click(screen.getByRole('button', { name: /deactivate morning run/i }));
+    await user.click(screen.getByRole('button', { name: /confirm deactivate morning run/i }));
+
+    harness.reload();
+
+    expect(within(getInactiveSection()).getByText(ACTIVITY_RUNNING.name)).toBeInTheDocument();
+    expect(within(getSectionByHeading(/^activities$/i)).queryByText(ACTIVITY_RUNNING.name)).not.toBeInTheDocument();
+  });
+
+  it('restores an inactive activity to the active list after refresh', async () => {
+    const user = userEvent.setup();
+    const { updateActivity } = renderStatefulSettingsScreen({
+      activities: [ACTIVITY_INACTIVE],
+      logs: [LOG_RECENT],
+    });
+
+    await user.click(screen.getByRole('button', { name: /restore inactive activity/i }));
+
+    expect(updateActivity).toHaveBeenCalledTimes(1);
+    expect(updateActivity).toHaveBeenCalledWith(ACTIVITY_INACTIVE.id, { isActive: true });
+    expect(within(getSectionByHeading(/^activities$/i)).getByText(ACTIVITY_INACTIVE.name)).toBeInTheDocument();
+    expect(within(getInactiveSection()).queryByText(ACTIVITY_INACTIVE.name)).not.toBeInTheDocument();
   });
 });
 

@@ -25,7 +25,7 @@ from app.schemas.load import (
     SuggestionRead,
     WeeklyProgressRead,
 )
-from app.schemas.load_engine import ActivityClassDict, RuleDict
+from app.schemas.load_engine import RuleDict
 from app.schemas.training_blocks import TrainingBlockRead
 from app.services.activities import list_activities
 from app.services.activity_classes import list_activity_classes
@@ -49,12 +49,17 @@ from app.services.load_queries import (
     incident_dict,
     log_dict,
     resolve_as_of,
+    resolve_graph_class_id,
     rule_dict,
     weekly_target_dict,
 )
 from app.services.recovery_targets import list_recovery_targets
 from app.services.rules import list_rules
-from app.services.training_blocks import TrainingBlockNotFoundError, get_active_training_block
+from app.services.training_blocks import (
+    TrainingBlockNotFoundError,
+    get_active_training_block,
+    list_training_blocks,
+)
 from app.services.weekly_targets import list_weekly_targets
 from app.settings import settings
 
@@ -137,7 +142,7 @@ def get_dashboard(session: Session, *, as_of: date | None = None) -> DashboardRe
         else []
     )
 
-    graph_class_id = _resolve_graph_class_id(rule_dicts, class_dicts)
+    graph_class_id = resolve_graph_class_id(rule_dicts, class_dicts)
     load_series = (
         compute_load_series(
             graph_class_id,
@@ -155,6 +160,7 @@ def get_dashboard(session: Session, *, as_of: date | None = None) -> DashboardRe
     recovery_streaks = _build_recovery_streaks(recovery_targets, activities)
     flare_up_dates = sorted({format_iso_date(incident.incident_date) for incident in incidents})
     active_goals = list_goals(session, status="active")
+    previous_blocks = _build_previous_blocks(session)
     has_checked_in_today = any(
         check_in.check_in_date == resolved for check_in in check_ins
     )
@@ -163,6 +169,7 @@ def get_dashboard(session: Session, *, as_of: date | None = None) -> DashboardRe
         as_of=resolved,
         user_name=settings.DEFAULT_USER_NAME,
         block=block_read,
+        previous_blocks=previous_blocks,
         activity_classes=[
             ActivityClassRead.model_validate(cls) for cls in activity_classes
         ],
@@ -187,30 +194,19 @@ def get_dashboard(session: Session, *, as_of: date | None = None) -> DashboardRe
     )
 
 
-def _resolve_graph_class_id(
-    rules: list[RuleDict],
-    activity_classes: list[ActivityClassDict],
-) -> str | None:
-    enabled_caps = sorted(
-        (
-            rule
-            for rule in rules
-            if rule.get("enabled", True)
-            and rule["rule_type"] == "weekly_load_cap"
-            and rule.get("activity_class_id")
-        ),
-        key=lambda rule: rule["activity_class_id"],
+def _build_previous_blocks(session: Session) -> list[TrainingBlockRead]:
+    blocks = [
+        block for block in list_training_blocks(session) if block.status != "active"
+    ]
+    blocks.sort(
+        key=lambda block: (
+            block.end_date is None,
+            -(block.end_date or date.min).toordinal(),
+            -block.start_date.toordinal(),
+            block.id,
+        )
     )
-    if enabled_caps:
-        class_id = enabled_caps[0]["activity_class_id"]
-        return str(class_id) if class_id is not None else None
-
-    performance_class_ids = sorted(
-        cls["id"] for cls in activity_classes if cls.get("type") == "performance"
-    )
-    if performance_class_ids:
-        return str(performance_class_ids[0])
-    return None
+    return [TrainingBlockRead.model_validate(block) for block in blocks]
 
 
 def _week_load_threshold(graph_class_id: str | None, rules: list[RuleDict]) -> int:
