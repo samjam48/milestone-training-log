@@ -73,17 +73,27 @@ export const LogIncidentScreen: React.FC<Props> = ({ engine, onBack, onComplete 
     };
     submitIncident(draft);
     setSubmitted(true);
-    setTimeout(onComplete, 800);
   }
 
   if (submitted) return (
-    <div className="flex flex-col items-center justify-center gap-4 px-4 text-center" style={{ minHeight: '60vh' }}>
+    <div className="flex flex-col items-center gap-4 px-4 pb-8 pt-8 text-center overflow-y-auto">
       <span className="flex h-14 w-14 items-center justify-center rounded-full bg-danger/20">
         <svg width={28} height={28} viewBox="0 0 28 28" fill="none"><path d="M14 5v10M14 21v1" stroke="#FF8780" strokeWidth={2.5} strokeLinecap="round"/></svg>
       </span>
       <p className="text-title font-semibold text-danger-fg">Incident recorded.</p>
       <p className="text-body text-ink-muted">Rest up. The heatmap and dashboard reflect today's status.</p>
-      <DelayedTaxAttributionSection delayedTax={delayedTax} delayedTaxError={delayedTaxError} />
+      <DelayedTaxAttributionSection
+        delayedTax={delayedTax}
+        delayedTaxError={delayedTaxError}
+        activityClasses={activityClasses}
+      />
+      <button
+        type="button"
+        onClick={onComplete}
+        className="mt-2 h-12 w-full max-w-md rounded-md bg-danger text-body-lg font-semibold text-ink-inverse active:brightness-90"
+      >
+        Done
+      </button>
     </div>
   );
 

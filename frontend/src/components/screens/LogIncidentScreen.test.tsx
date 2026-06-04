@@ -121,12 +121,15 @@ describe('LogIncidentScreen — F10.4 delayed-tax attribution', () => {
     await submitIncident();
 
     const section = getAttributionSection();
-    expect(within(section).getByText(/Pain or flare recorded on May 28/i)).toBeInTheDocument();
+    const rows = within(section).getAllByTestId('delayed-tax-hit-row');
+    expect(rows.length).toBeGreaterThanOrEqual(2);
+    expect(within(section).getByText(/Pain or flare recorded/i)).toBeInTheDocument();
+    expect(within(section).getAllByText(/28th May/i).length).toBeGreaterThanOrEqual(1);
     expect(
       within(section).getByText(/Return session after 14 days off, symptoms within 3 days/i),
     ).toBeInTheDocument();
     expect(
-      within(section).getByText(/Earlier elevated load in the week before symptoms/i),
+      within(section).getByText(/Earlier load on 21st May may have contributed/i),
     ).toBeInTheDocument();
     expect(mockEngine.submitIncident).toHaveBeenCalledOnce();
   });
@@ -136,12 +139,11 @@ describe('LogIncidentScreen — F10.4 delayed-tax attribution', () => {
     await submitIncident();
 
     const section = getAttributionSection();
-    expect(
-      within(section).getByText(/Foot load on May 22 was above your 14-day baseline/i),
-    ).toBeInTheDocument();
-    expect(
-      within(section).getByText(/Back-to-back foot sessions without enough rest/i),
-    ).toBeInTheDocument();
+    expect(within(section).getAllByTestId('delayed-tax-hit-row')).toHaveLength(2);
+    expect(within(section).getByText(/22nd May/i)).toBeInTheDocument();
+    expect(within(section).getByText(/Load above your recent baseline/i)).toBeInTheDocument();
+    expect(within(section).getByText(/24th May/i)).toBeInTheDocument();
+    expect(within(section).getByText(/Sessions closer together/i)).toBeInTheDocument();
   });
 
   it('shows empty-week copy when delayed tax has no hits', async () => {
@@ -169,5 +171,20 @@ describe('LogIncidentScreen — F10.4 delayed-tax attribution', () => {
     const section = getAttributionSection();
     expect(within(section).getByText(/could not load attribution/i)).toBeInTheDocument();
     expect(within(section).queryByText(/loading attribution/i)).not.toBeInTheDocument();
+  });
+
+  it('keeps success screen open until Done is pressed', async () => {
+    setupEngine(SYMPTOM_LINKED_DELAYED_TAX);
+    const onComplete = vi.fn();
+    const user = userEvent.setup();
+    renderWithProviders(
+      <LogIncidentScreen engine={mockEngine} onBack={vi.fn()} onComplete={onComplete} />,
+    );
+    await user.click(screen.getByRole('button', { name: 'Left heel' }));
+    await user.click(screen.getByRole('button', { name: /record incident/i }));
+    expect(screen.getByText('Incident recorded.')).toBeInTheDocument();
+    expect(onComplete).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: /^done$/i }));
+    expect(onComplete).toHaveBeenCalledOnce();
   });
 });

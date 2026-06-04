@@ -458,7 +458,7 @@ existing `TrainingBlock` update path in `services/training_blocks.py`.
 ## Manual verification checklist (phase handoff)
 
 1. Dashboard shows **Clean streak** and **Recovery streaks** as separate sections.
-2. Dashboard **Load risk** panel shows proactive delayed-tax flags on seeded elevated-load data.
+2. ~~Dashboard **Load risk** panel~~ **Removed** (owner feedback 2026-06-04): delayed-tax context remains on incident/check-in success only.
 3. Log incident with cause class → post-submit attribution subsection visible.
 4. Check-in with flare-up → attribution on success screen.
 5. Load graph title matches weekly-cap class name from rules.
@@ -497,4 +497,4 @@ After owner signs off this ticket set, update `AGENTS.md` **CURRENT SPRINT** to 
 
 ---
 
-**Status:** `NEEDS OWNER` — pending review of ticket set; owner decisions D1–D6 applied.
+**Status:** `IMPLEMENTED` (2026-06-04) — all tickets B10.1–F10.10 committed on `feat/phase-10-polish`. Post-handoff UX: dashboard Load risk panel removed (owner feedback); incident/check-in attribution uses dismissible success + friendly dates. Owner verification: `make lint`, `make test`, manual checklist below.

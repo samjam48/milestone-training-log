@@ -86,7 +86,9 @@ describe('MorningCheckInScreen — F10.4 delayed-tax attribution', () => {
     await submitCheckIn({ flare: true });
 
     const section = getAttributionSection();
-    expect(within(section).getByText(/Pain or flare recorded on May 28/i)).toBeInTheDocument();
+    expect(within(section).getAllByTestId('delayed-tax-hit-row').length).toBeGreaterThanOrEqual(1);
+    expect(within(section).getByText(/Pain or flare recorded/i)).toBeInTheDocument();
+    expect(within(section).getAllByText(/28th May/i).length).toBeGreaterThanOrEqual(1);
     expect(
       within(section).getByText(/Return session after 14 days off, symptoms within 3 days/i),
     ).toBeInTheDocument();

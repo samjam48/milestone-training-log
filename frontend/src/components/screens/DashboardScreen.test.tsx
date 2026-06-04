@@ -3,7 +3,7 @@
  * B10.4 — previous-block fetches use getTrainingBlockReview (/review), not /scores.
  * F10.1 — Dashboard recovery streaks section (plans/tickets-phase-10-polish-2026-06-04.md).
  * F10.2 — Dashboard clean streak relabel (plans/tickets-phase-10-polish-2026-06-04.md).
- * F10.3 — Dashboard delayed-tax / load-risk panel (plans/tickets-phase-10-polish-2026-06-04.md).
+ * Load-risk panel removed from dashboard (owner feedback 2026-06-04); delayed tax kept on incident/check-in flows.
  * F10.5 — Load graph title from engine.graphClassId (plans/tickets-phase-10-polish-2026-06-04.md).
  *
  * Mocking strategy (mirrors BlockReviewScreen.test.tsx):
@@ -195,13 +195,6 @@ function setupDashboardWithDelayedTax(
   mockEngine.graphClassId = 'cls-foot';
   mockEngine.hasCheckedInToday = true;
   mockEngine.delayedTax = delayedTax;
-}
-
-function getLoadRiskSectionRoot(): HTMLElement {
-  const label = screen.getByText('Load risk');
-  const section = label.parentElement;
-  expect(section).not.toBeNull();
-  return section!;
 }
 
 function assertAppearsAfter(earlier: HTMLElement, later: HTMLElement): void {
@@ -505,123 +498,15 @@ describe('DashboardScreen — F10.5 load graph title (engine.graphClassId / B10.
   });
 });
 
-describe('DashboardScreen — F10.3 load-risk panel (engine.delayedTax / H10.1)', () => {
-  it('renders Load risk after the load graph and before Block Safety Map', () => {
+describe('DashboardScreen — delayed tax not on dashboard', () => {
+  it('does not render Load risk even when engine.delayedTax has hits', () => {
     setupDashboardWithDelayedTax(PROACTIVE_ONLY_DELAYED_TAX);
     useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
 
     renderDashboard();
 
-    const loadGraphTitle = screen.getByText('Foot load');
-    const loadRiskLabel = screen.getByText('Load risk');
-    const blockSafetyLabel = screen.getByText('Block Safety Map');
-
-    assertAppearsAfter(loadGraphTitle, loadRiskLabel);
-    assertAppearsAfter(loadRiskLabel, blockSafetyLabel);
-  });
-
-  it('lists proactive elevated_load and rest_debt hits with class name and contributing date', () => {
-    setupDashboardWithDelayedTax(PROACTIVE_ONLY_DELAYED_TAX);
-    useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
-
-    renderDashboard();
-
-    const section = getLoadRiskSectionRoot();
-    expect(
-      within(section).getByText(/Foot load on May 22 was above your 14-day baseline/i),
-    ).toBeInTheDocument();
-    expect(
-      within(section).getByText(/Back-to-back foot sessions without enough rest/i),
-    ).toBeInTheDocument();
-    expect(within(section).getByText(/May 22/i)).toBeInTheDocument();
-    expect(within(section).getByText(/May 24/i)).toBeInTheDocument();
-  });
-
-  it('uses caution Card styling when proactive hits are present', () => {
-    setupDashboardWithDelayedTax(PROACTIVE_ONLY_DELAYED_TAX);
-    useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
-
-    renderDashboard();
-
-    const section = getLoadRiskSectionRoot();
-    expect(section.querySelector('.bg-caution-bg')).not.toBeNull();
-  });
-
-  it('shows distinct symptom-linked attribution copy for marker, acute, and contributor hits', () => {
-    setupDashboardWithDelayedTax(SYMPTOM_LINKED_DELAYED_TAX);
-    useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
-
-    renderDashboard();
-
-    const section = getLoadRiskSectionRoot();
-    expect(within(section).getByText(/Pain or flare recorded on May 23/i)).toBeInTheDocument();
-    expect(
-      within(section).getByText(/Return session after 14 days off, symptoms within 3 days/i),
-    ).toBeInTheDocument();
-    expect(
-      within(section).getByText(/Earlier elevated load in the week before symptoms/i),
-    ).toBeInTheDocument();
-  });
-
-  it('shows compact safe copy when delayedTax has no hits', () => {
-    setupDashboardWithDelayedTax(EMPTY_DELAYED_TAX);
-    useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
-
-    renderDashboard();
-
-    expect(
-      screen.getByText(/No elevated load or rest-debt flags in the last 7 days/i),
-    ).toBeInTheDocument();
-  });
-
-  it('omits load-risk hit copy while delayedTax is undefined (query still pending)', () => {
-    setupDashboardWithDelayedTax(undefined);
-    useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
-
-    renderDashboard();
-
-    expect(screen.getByText(/Good morning/i)).toBeInTheDocument();
     expect(screen.getByText('Block Safety Map')).toBeInTheDocument();
     expect(screen.queryByText('Load risk')).not.toBeInTheDocument();
-    expect(
-      screen.queryByText(/No elevated load or rest-debt flags/i),
-    ).not.toBeInTheDocument();
-  });
-
-  it('caps visible proactive hits at five with an overflow summary', () => {
-    const manyHits = Array.from({ length: 7 }, (_, index) => ({
-      hitType: 'elevated_load' as const,
-      activityClassId: 'cls-foot',
-      contributingDate: `2026-05-${String(10 + index).padStart(2, '0')}`,
-      message: `Elevated load flag ${index + 1}`,
-    }));
-    setupDashboardWithDelayedTax({ ...DELAYED_TAX_BASE, hits: manyHits });
-    useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
-
-    renderDashboard();
-
-    expect(screen.getByText(/and 2 more/i)).toBeInTheDocument();
-    expect(screen.queryByText('Elevated load flag 7')).not.toBeInTheDocument();
-  });
-
-  it('falls back to Unknown class when activityClassId is not in activityClasses', () => {
-    setupDashboardWithDelayedTax({
-      ...DELAYED_TAX_BASE,
-      hits: [
-        {
-          hitType: 'elevated_load',
-          activityClassId: 'cls-missing',
-          contributingDate: '2026-05-22',
-          message: 'Load spike on May 22',
-        },
-      ],
-    });
-    useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
-
-    renderDashboard();
-
-    expect(screen.getByText(/Unknown class/i)).toBeInTheDocument();
-    expect(screen.getByText(/May 22/i)).toBeInTheDocument();
   });
 });
 

@@ -3,8 +3,14 @@
 // =============================================================================
 
 import * as React from 'react';
+import { cn } from '../../lib/cn';
 import { Card } from '../ui/Card';
+import {
+  summarizeDelayedTaxHits,
+  type DelayedTaxHitDisplay,
+} from '../../lib/delayedTaxDisplay';
 import type { DelayedTaxResponse } from '../../hooks/useMilestoneEngine';
+import type { ActivityClass } from '../../types';
 
 const PROACTIVE_HIT_TYPES = new Set(['elevated_load', 'rest_debt']);
 const SYMPTOM_HIT_TYPES = new Set([
@@ -20,6 +26,7 @@ const ERROR_COPY = 'Could not load attribution';
 export interface DelayedTaxAttributionSectionProps {
   delayedTax: DelayedTaxResponse | undefined;
   delayedTaxError?: boolean;
+  activityClasses?: ActivityClass[];
 }
 
 function filterHits(
@@ -29,19 +36,48 @@ function filterHits(
   return hits.filter((hit) => types.has(String(hit.hitType)));
 }
 
-function hitKey(hit: DelayedTaxResponse['hits'][number], index: number): string {
-  return `${String(hit.hitType)}-${String(hit.symptomDate ?? hit.contributingDate)}-${index}`;
+function HitRow({ row }: { row: DelayedTaxHitDisplay }) {
+  const isCaution =
+    row.hitType === 'elevated_load' ||
+    row.hitType === 'rest_debt' ||
+    row.hitType === 'symptom_contributor';
+
+  return (
+    <li
+      className="flex gap-3 py-2 first:pt-0 last:pb-0"
+      data-testid="delayed-tax-hit-row"
+    >
+      <span
+        className={cn(
+          'mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full',
+          isCaution ? 'bg-caution' : 'bg-danger',
+        )}
+        aria-hidden="true"
+      />
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <span className="text-body font-medium text-ink truncate">{row.className}</span>
+          {row.dateLabel.length > 0 ? (
+            <span className="text-caption text-ink-muted shrink-0">{row.dateLabel}</span>
+          ) : null}
+        </div>
+        <p className="text-caption text-ink-muted mt-0.5">{row.summary}</p>
+      </div>
+    </li>
+  );
 }
 
 export const DelayedTaxAttributionSection: React.FC<DelayedTaxAttributionSectionProps> = ({
   delayedTax,
   delayedTaxError = false,
+  activityClasses = [],
 }) => {
   const symptomHits =
     delayedTax === undefined ? [] : filterHits(delayedTax.hits, SYMPTOM_HIT_TYPES);
   const proactiveHits =
     delayedTax === undefined ? [] : filterHits(delayedTax.hits, PROACTIVE_HIT_TYPES);
-  const visibleHits = symptomHits.length > 0 ? symptomHits : proactiveHits;
+  const sourceHits = symptomHits.length > 0 ? symptomHits : proactiveHits;
+  const rows = summarizeDelayedTaxHits(sourceHits, activityClasses);
 
   return (
     <div className="w-full max-w-md text-left">
@@ -53,12 +89,10 @@ export const DelayedTaxAttributionSection: React.FC<DelayedTaxAttributionSection
           <p className="text-caption text-ink-muted py-0.5">{ERROR_COPY}</p>
         ) : delayedTax === undefined ? (
           <p className="text-caption text-ink-muted py-0.5">{LOADING_COPY}</p>
-        ) : visibleHits.length > 0 ? (
-          <ul className="flex flex-col gap-2">
-            {visibleHits.map((hit, index) => (
-              <li key={hitKey(hit, index)} className="text-body text-ink">
-                {typeof hit.message === 'string' ? hit.message : ''}
-              </li>
+        ) : rows.length > 0 ? (
+          <ul className="flex flex-col divide-y divide-border-subtle">
+            {rows.map((row) => (
+              <HitRow key={row.key} row={row} />
             ))}
           </ul>
         ) : (

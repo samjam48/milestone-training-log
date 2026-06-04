@@ -61,7 +61,7 @@ from `backend/` so `backend/pyproject.toml` is loaded.
 ---
 ## Current Sprint — Phase 10: MVP Polish
 **Goal:** Close remaining PRD MVP gaps and Phase 8 deferred polish — recovery streaks UI, delayed-tax panel + incident attribution, load-graph title, review milestone, loading/error UX, MCP stub; plus hook consolidation, inline-form cleanup, `/scores`→`/review` merge, and `check_violations` refactor.
-**Status (2026-06-04):** Phase 9 complete. Owner decisions locked; ticket set written — review and sign off before Test Writer.
+**Status (2026-06-04):** Phase 10 implementation complete on `feat/phase-10-polish`. Owner manual verification and `make lint` / `make test` pending before merge.
 **Branch:** `feat/phase-10-polish`
 **Ticket source:** `plans/tickets-phase-10-polish-2026-06-04.md`
 **Primary references:** `plans/PRD.md` F4/F5, `plans/TRD.md` §Phase 8 F3.x, `plans/feature-brief-v02-screen-completion-2026-06-02.md` §Phase 10, `MOCKUPS.md` §Screen 1, `DESIGN.md` §Delayed tax / Training Block Milestones
