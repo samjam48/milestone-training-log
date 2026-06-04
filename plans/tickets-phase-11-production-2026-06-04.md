@@ -8,17 +8,19 @@
 
 ## Owner decisions locked (2026-06-04)
 
-| # | Topic | Decision |
-| --- | --- | --- |
-| D1 | Hosting | Netlify (frontend, GitHub deploy) + Render (backend, free) + Supabase (Postgres, free) |
-| D2 | Auth | Netlify `/api` proxy **and** app session cookie (shared password, ~30 days) |
-| D3 | URLs | Default `*.netlify.app` / `*.onrender.com` |
-| D4 | Render cold start | Acceptable |
-| D5 | Local DB | SQLite + Docker; Postgres prod only |
-| D6 | Prod data | Empty after migrate; no `scripts/seed.py` |
-| D7 | PWA | Stage 2 — out of Phase 11 |
-| D8 | Primary client | Android Chrome (Pixel 9 Pro) |
-| D9 | Backup | Document Supabase backup/export; do not lose prod casually |
+
+| #   | Topic             | Decision                                                                               |
+| --- | ----------------- | -------------------------------------------------------------------------------------- |
+| D1  | Hosting           | Netlify (frontend, GitHub deploy) + Render (backend, free) + Supabase (Postgres, free) |
+| D2  | Auth              | Netlify `/api` proxy **and** app session cookie (shared password, ~30 days)            |
+| D3  | URLs              | Default `*.netlify.app` / `*.onrender.com`                                             |
+| D4  | Render cold start | Acceptable                                                                             |
+| D5  | Local DB          | SQLite + Docker; Postgres prod only                                                    |
+| D6  | Prod data         | Empty after migrate; no `scripts/seed.py`                                              |
+| D7  | PWA               | Stage 2 — out of Phase 11                                                              |
+| D8  | Primary client    | Android Chrome (Pixel 9 Pro)                                                           |
+| D9  | Backup            | Document Supabase backup/export; do not lose prod casually                             |
+
 
 ### Hard constraints (from `AGENTS.md`)
 
@@ -36,37 +38,40 @@ Complete **O11.0** before starting **B11.1**. Store values in a password manager
 
 After implementation tickets through **I11.1** are merged on the branch, complete **O11.1** once (platform wiring). Then agents run remaining code tickets without further owner steps until **O11.2** smoke on your phone.
 
-| Ticket | When | Blocks |
-| --- | --- | --- |
-| **O11.0** | Now, before B11.1 | All implementation |
+
+| Ticket    | When                                       | Blocks                         |
+| --------- | ------------------------------------------ | ------------------------------ |
+| **O11.0** | ✅ **Done** (2026-06-04) — unblocks B11.1     | —                              |
 | **O11.1** | After B11.3 + B11.4 + I11.1 land on branch | F11.2 manual prod check, O11.2 |
-| **O11.2** | After full ticket batch + O11.1 | Phase 11 sign-off |
+| **O11.2** | After full ticket batch + O11.1            | Phase 11 sign-off              |
+
 
 ---
 
 ## O11.0 — Owner platform preflight (accounts + secrets + Supabase DB)
 
+**Status:** ✅ **DONE** — owner sign-off 2026-06-04  
 **Type:** owner-only (no code)  
-**Blocks:** B11.1 and all following implementation tickets
+**Blocks:** ~~B11.1~~ (cleared)
 
 ### Checklist — accounts
 
-- [ ] **Supabase:** account + new project (any region). Note project name: `____________`
-- [ ] **Render:** account (free tier). Note login email: `____________`
-- [ ] **Netlify:** account (free tier). Note login email: `____________`
-- [ ] **GitHub → Netlify:** authorize Netlify to access `milestone-training-log` repo (can finish site creation in O11.1)
+- **Supabase:** account + new project (any region). Note project name: `milestone`
+- **Render:** account (free tier). Note login email: `s.w.h@live.co.uk`
+- **Netlify:** account (free tier). Note login email: `s.w.h@live.co.uk`
+- **GitHub → Netlify:** authorize Netlify to access `milestone-training-log` repo (can finish site creation in O11.1)
 
 ### Checklist — Supabase database
 
-- [ ] Project Settings → Database → copy **Connection string** → **URI** (or **Session pooler** if Render cannot reach direct host — try pooler first: port 6543).
-- [ ] Convert to SQLAlchemy URL: `postgresql+psycopg://USER:PASSWORD@HOST:PORT/postgres` (replace `postgresql://` prefix).
-- [ ] Save as `DATABASE_URL` in password manager. **Do not** run seed against this DB yet.
+- Project Settings → Database → copy **Connection string** → **URI** (or **Session pooler** if Render cannot reach direct host — try pooler first: port 6543).
+- Convert to SQLAlchemy URL: `postgresql+psycopg://USER:PASSWORD@HOST:PORT/postgres` (replace `postgresql://` prefix).
+- Save as `DATABASE_URL` in password manager. **Do not** run seed against this DB yet.
 
 ### Checklist — secrets (generate now)
 
-- [ ] `SESSION_SECRET` — e.g. `openssl rand -hex 32`
-- [ ] `AUTH_PASSWORD` — strong shared password you will type on phone (not the same as Supabase DB password unless you choose)
-- [ ] Save both in password manager
+- `SESSION_SECRET` — e.g. `openssl rand -hex 32`
+- `AUTH_PASSWORD` — strong shared password you will type on phone (not the same as Supabase DB password unless you choose)
+- Save both in password manager
 
 ### Checklist — optional local reference file
 
@@ -83,11 +88,12 @@ NETLIFY_SITE_URL=             # e.g. https://something.netlify.app
 
 ### Done when
 
-- All three accounts exist.
-- `DATABASE_URL`, `SESSION_SECRET`, and `AUTH_PASSWORD` are saved securely.
-- You have **not** committed any of the above to git.
+- [x] All three accounts exist.
+- [x] `DATABASE_URL`, `SESSION_SECRET`, and `AUTH_PASSWORD` saved securely (local `.env` / password manager; `DATABASE_URL` on Render).
+- [x] Secrets **not** committed to git.
+- [x] Prod hostnames noted for O11.1: Render `milestone-training-log.onrender.com`, Netlify `milestone-activity.netlify.app`.
 
-**Owner sign-off:** tick all boxes → reply `O11.0 done` (or equivalent) before starting B11.1.
+**Owner sign-off:** ✅ **2026-06-04** — orchestrator may start **B11.1**. Remaining Render/Netlify env wiring per **O11.1** after B11.3, B11.4, I11.1.
 
 ---
 
@@ -99,36 +105,36 @@ NETLIFY_SITE_URL=             # e.g. https://something.netlify.app
 
 ### Render Web Service
 
-- [ ] New **Web Service** → deploy from repo → root `backend/` (or Dockerfile path `backend/Dockerfile` per Render UI).
-- [ ] Environment variables:
+- New **Web Service** → deploy from repo → root `backend/` (or Dockerfile path `backend/Dockerfile` per Render UI).
+- Environment variables:
 
-  | Key | Value |
-  | --- | --- |
-  | `DATABASE_URL` | From O11.0 (Supabase) |
-  | `SESSION_SECRET` | From O11.0 |
-  | `AUTH_PASSWORD` | From O11.0 |
-  | `APP_DEV_MODE` | `false` |
-  | `SESSION_MAX_AGE_DAYS` | `30` (optional) |
+  | Key                    | Value                 |
+  | ---------------------- | --------------------- |
+  | `DATABASE_URL`         | From O11.0 (Supabase) |
+  | `SESSION_SECRET`       | From O11.0            |
+  | `AUTH_PASSWORD`        | From O11.0            |
+  | `APP_DEV_MODE`         | `false`               |
+  | `SESSION_MAX_AGE_DAYS` | `30` (optional)       |
 
-- [ ] Health check path: `/api/health`
-- [ ] Deploy; wait until live. Copy **service hostname** (no `https://`): `____________`
-- [ ] Open `https://<hostname>/api/health` → `{"status":"ok"}` or equivalent
-- [ ] Open `https://<hostname>/docs` → Swagger loads (optional)
-- [ ] Confirm Supabase Table Editor shows **empty** application tables (migrations ran, no seed rows)
+- Health check path: `/api/health`
+- Deploy; wait until live. Copy **service hostname** (no `https://`): `____________`
+- Open `https://<hostname>/api/health` → `{"status":"ok"}` or equivalent
+- Open `https://<hostname>/docs` → Swagger loads (optional)
+- Confirm Supabase Table Editor shows **empty** application tables (migrations ran, no seed rows)
 
 ### Netlify site
 
-- [ ] Import site from GitHub → repo `milestone-training-log`, branch `feat/phase-11-production` (or `main` after merge)
-- [ ] Build settings: base `frontend`, command `npm ci && npm run build`, publish `dist`
-- [ ] Environment: `VITE_DEV_MODE=false` (and `VITE_API_BASE_URL` empty/unset)
-- [ ] Ensure `frontend/netlify.toml` proxy target uses your Render hostname from above (commit from I11.1 may use placeholder — **update** `to = "https://<RENDER_HOST>/api/:splat"` if still placeholder)
-- [ ] Deploy site; copy **site URL**: `____________`
-- [ ] Enable automatic deploys on push to chosen production branch
+- Import site from GitHub → repo `milestone-training-log`, branch `feat/phase-11-production` (or `main` after merge)
+- Build settings: base `frontend`, command `npm ci && npm run build`, publish `dist`
+- Environment: `VITE_DEV_MODE=false` (and `VITE_API_BASE_URL` empty/unset)
+- Ensure `frontend/netlify.toml` proxy target uses your Render hostname from above (commit from I11.1 may use placeholder — **update** `to = "https://<RENDER_HOST>/api/:splat"` if still placeholder)
+- Deploy site; copy **site URL**: `____________`
+- Enable automatic deploys on push to chosen production branch
 
 ### Quick wiring test (desktop)
 
-- [ ] Open Netlify URL → login screen appears (or 401 → login after F11.2)
-- [ ] `curl -i https://<NETLIFY_HOST>/api/health` → 200 through proxy
+- Open Netlify URL → login screen appears (or 401 → login after F11.2)
+- `curl -i https://<NETLIFY_HOST>/api/health` → 200 through proxy
 
 ### Done when
 
@@ -145,26 +151,26 @@ NETLIFY_SITE_URL=             # e.g. https://something.netlify.app
 
 ### On Pixel 9 Pro (Chrome)
 
-- [ ] Open Netlify production URL (bookmark for daily use)
-- [ ] First load after cold start: acceptable delay; app loads
-- [ ] Login with shared password → session persists after closing tab (same day)
-- [ ] Empty dashboard → create activity class + activity via Settings flow
-- [ ] Log activity from Log tab
-- [ ] Morning check-in
-- [ ] Flare-up incident (optional path)
-- [ ] Goal create/edit (Goals tab)
-- [ ] Training block / rules surface loads without error
-- [ ] Confirm Settings has **no** “Reset mock data” button
-- [ ] In Render dashboard: restart service → data still in app after reload
+- Open Netlify production URL (bookmark for daily use)
+- First load after cold start: acceptable delay; app loads
+- Login with shared password → session persists after closing tab (same day)
+- Empty dashboard → create activity class + activity via Settings flow
+- Log activity from Log tab
+- Morning check-in
+- Flare-up incident (optional path)
+- Goal create/edit (Goals tab)
+- Training block / rules surface loads without error
+- Confirm Settings has **no** “Reset mock data” button
+- In Render dashboard: restart service → data still in app after reload
 
 ### Security spot-check
 
-- [ ] `POST https://<RENDER_HOST>/api/dev/reset` → **404** (not 200)
-- [ ] Unauthenticated `GET https://<RENDER_HOST>/api/dashboard` → **401**
+- `POST https://<RENDER_HOST>/api/dev/reset` → **404** (not 200)
+- Unauthenticated `GET https://<RENDER_HOST>/api/dashboard` → **401**
 
 ### Backup
 
-- [ ] Skim `docs/deploy.md` (or README deploy section) — note how to export Supabase backup
+- Skim `docs/deploy.md` (or README deploy section) — note how to export Supabase backup
 
 ### Done when
 
@@ -375,7 +381,7 @@ router pattern from `health.py`.
 
 - `frontend/netlify.toml` committed with:
   - build `npm ci && npm run build`, publish `dist`
-  - force proxy `/api/*` → `https://REPLACE_ME.onrender.com/api/:splat` with comment to replace after first Render deploy
+  - force proxy `/api/`* → `https://REPLACE_ME.onrender.com/api/:splat` with comment to replace after first Render deploy
   - SPA fallback `/*` → `/index.html`
 - `docs/deploy.md` section “Netlify” with build settings screenshot-level bullet list and GitHub connect steps.
 - `AGENTS.md` ticket source line updated to this file (Planner / follow-up commit).
@@ -411,11 +417,11 @@ router pattern from `health.py`.
 
 ## Phase 11 definition of done
 
-- [ ] O11.0, O11.1, O11.2 complete (owner)
-- [ ] All B11.*, F11.*, I11.* tickets committed on `feat/phase-11-production`
-- [ ] `make lint` and `make test` green at end-of-batch handoff
-- [ ] Production app usable on Android Chrome with empty DB and session auth
-- [ ] Owner reviewed; owner decides merge to `main`
+- O11.0, O11.1, O11.2 complete (owner)
+- All B11.*, F11.*, I11.* tickets committed on `feat/phase-11-production`
+- `make lint` and `make test` green at end-of-batch handoff
+- Production app usable on Android Chrome with empty DB and session auth
+- Owner reviewed; owner decides merge to `main`
 
 ---
 
