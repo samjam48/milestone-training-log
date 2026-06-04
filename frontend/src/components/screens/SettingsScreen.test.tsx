@@ -10,8 +10,9 @@
  * Spec: export/preview/SettingsScreen.jsx, MOCKUPS.md §Screen 5 / 5b
  */
 
+import * as React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { screen, cleanup } from '@testing-library/react';
+import { screen, cleanup, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders';
 import { mockEngine, resetMockEngine } from '../../test/mockEngine';
@@ -23,7 +24,7 @@ import type {
   WeeklyTarget,
   TrainingBlock,
 } from '../../types';
-import type { RuleDraft, RulePatch } from '../../hooks/useMilestoneEngine';
+import type { NewActivityDraft, RuleDraft, RulePatch } from '../../hooks/useMilestoneEngine';
 import { SettingsScreen } from './SettingsScreen';
 
 // Module-level mock for apiFetch used in F2.6 onClick wiring tests.
@@ -245,6 +246,109 @@ const SettingsScreenWithCallbacks = SettingsScreen as unknown as (
 
 function renderSettingsScreenWithCallbacks(props: SettingsScreenCallbackProps): void {
   renderWithProviders(<SettingsScreenWithCallbacks {...props} />);
+}
+
+function getSectionByHeading(name: RegExp): HTMLElement {
+  const heading = screen.getByText(name);
+  const section = heading.closest('section');
+  expect(section).not.toBeNull();
+  return section as HTMLElement;
+}
+
+function getInactiveSection(): HTMLElement {
+  const heading =
+    screen.queryByText(/^inactive activities$/i)
+    ?? screen.queryByText(/^archived activities$/i);
+  expect(heading).not.toBeNull();
+  const section = heading?.closest('section');
+  expect(section).not.toBeNull();
+  return section as HTMLElement;
+}
+
+function renderStatefulSettingsScreen(options: {
+  activities?: Activity[];
+  activityClasses?: ActivityClass[];
+  logs?: ActivityLog[];
+} = {}) {
+  let currentActivities = options.activities ?? [ACTIVITY_RUNNING, ACTIVITY_INACTIVE];
+  const activityClasses = options.activityClasses ?? [CLASS_RUNNING];
+  const logs = options.logs ?? [];
+
+  let renderApi = renderWithProviders(<div />);
+
+  const rerenderCurrent = () => {
+    renderApi.rerender(
+      <SettingsScreen
+        engine={makeEngine({
+          block: ACTIVE_BLOCK,
+          activityClasses,
+          activities: currentActivities,
+          logs,
+          deactivateActivity,
+          updateActivity,
+        })}
+      />,
+    );
+  };
+
+  const deactivateActivity = vi.fn((activityId: string) => {
+    currentActivities = currentActivities.map((activity) => (
+      activity.id === activityId
+        ? { ...activity, isActive: false }
+        : activity
+    ));
+    rerenderCurrent();
+  });
+
+  const updateActivity = vi.fn((
+    activityId: string,
+    patch: Partial<NewActivityDraft> & { isActive?: boolean },
+  ) => {
+    currentActivities = currentActivities.map((activity) => (
+      activity.id === activityId
+        ? {
+            ...activity,
+            ...patch,
+            isActive: patch.isActive ?? activity.isActive,
+          }
+        : activity
+    ));
+    rerenderCurrent();
+  });
+
+  renderApi.unmount();
+  renderApi = renderWithProviders(
+    <SettingsScreen
+      engine={makeEngine({
+        block: ACTIVE_BLOCK,
+        activityClasses,
+        activities: currentActivities,
+        logs,
+        deactivateActivity,
+        updateActivity,
+      })}
+    />,
+  );
+
+  return {
+    deactivateActivity,
+    updateActivity,
+    reload() {
+      renderApi.unmount();
+      renderApi = renderWithProviders(
+        <SettingsScreen
+          engine={makeEngine({
+            block: ACTIVE_BLOCK,
+            activityClasses,
+            activities: currentActivities,
+            logs,
+            deactivateActivity,
+            updateActivity,
+          })}
+        />,
+      );
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -617,7 +721,7 @@ describe('SettingsScreen — Activities Manager', () => {
     expect(screen.getByText(/never/i)).toBeInTheDocument();
   });
 
-  it('excludes inactive activities from the Activities Manager', () => {
+  it('keeps active and inactive activities in separate sections', () => {
     const engine = makeEngine({
       block: ACTIVE_BLOCK,
       activityClasses: [CLASS_RUNNING],
@@ -627,7 +731,13 @@ describe('SettingsScreen — Activities Manager', () => {
 
     renderWithProviders(<SettingsScreen engine={engine} />);
 
-    expect(screen.queryByText(ACTIVITY_INACTIVE.name)).not.toBeInTheDocument();
+    const activeSection = getSectionByHeading(/^activities$/i);
+    expect(within(activeSection).getByText(ACTIVITY_RUNNING.name)).toBeInTheDocument();
+    expect(within(activeSection).queryByText(ACTIVITY_INACTIVE.name)).not.toBeInTheDocument();
+
+    const inactiveSection = getInactiveSection();
+    expect(within(inactiveSection).getByText(ACTIVITY_INACTIVE.name)).toBeInTheDocument();
+    expect(within(inactiveSection).queryByText(ACTIVITY_RUNNING.name)).not.toBeInTheDocument();
   });
 });
 
@@ -723,7 +833,7 @@ describe('SettingsScreen — stack action callbacks', () => {
     expect(onEditActivity).toHaveBeenCalledWith(ACTIVITY_RUNNING);
   });
 
-  it('calls engine.deactivateActivity with the activity id when Deactivate is clicked', async () => {
+  it('requires confirmation before calling engine.deactivateActivity from the activity list', async () => {
     const user = userEvent.setup();
     const deactivateActivity = vi.fn();
     const engine = makeEngine({
@@ -738,8 +848,76 @@ describe('SettingsScreen — stack action callbacks', () => {
 
     await user.click(screen.getByRole('button', { name: /deactivate morning run/i }));
 
+    expect(deactivateActivity).not.toHaveBeenCalled();
+    const confirmElement =
+      screen.queryByRole('button', { name: /confirm/i })
+      ?? screen.queryByText(/deactivating hides this activity from the log picker/i)
+      ?? screen.queryByText(/confirm deactivate/i);
+    expect(confirmElement).not.toBeNull();
+  });
+});
+
+describe('SettingsScreen — Q9.11B inactive activity recovery flow', () => {
+  it('canceling deactivation leaves the activity active and visible in the active section', async () => {
+    const user = userEvent.setup();
+    const { deactivateActivity } = renderStatefulSettingsScreen({
+      activities: [ACTIVITY_RUNNING],
+      logs: [LOG_RECENT],
+    });
+
+    await user.click(screen.getByRole('button', { name: /deactivate morning run/i }));
+    await user.click(screen.getByRole('button', { name: /cancel/i }));
+
+    expect(deactivateActivity).not.toHaveBeenCalled();
+    expect(within(getSectionByHeading(/^activities$/i)).getByText(ACTIVITY_RUNNING.name)).toBeInTheDocument();
+  });
+
+  it('confirmed deactivation moves the activity into the inactive section and preserves its log history metadata', async () => {
+    const user = userEvent.setup();
+    const { deactivateActivity } = renderStatefulSettingsScreen({
+      activities: [ACTIVITY_RUNNING],
+      logs: [LOG_RECENT],
+    });
+
+    await user.click(screen.getByRole('button', { name: /deactivate morning run/i }));
+    await user.click(screen.getByRole('button', { name: /confirm/i }));
+
     expect(deactivateActivity).toHaveBeenCalledTimes(1);
     expect(deactivateActivity).toHaveBeenCalledWith(ACTIVITY_RUNNING.id);
+    expect(within(getSectionByHeading(/^activities$/i)).queryByText(ACTIVITY_RUNNING.name)).not.toBeInTheDocument();
+    expect(within(getInactiveSection()).getByText(ACTIVITY_RUNNING.name)).toBeInTheDocument();
+    expect(within(getInactiveSection()).getByText(/may 28/i)).toBeInTheDocument();
+  });
+
+  it('keeps inactive activities visible after a reload', async () => {
+    const user = userEvent.setup();
+    const harness = renderStatefulSettingsScreen({
+      activities: [ACTIVITY_RUNNING],
+      logs: [LOG_RECENT],
+    });
+
+    await user.click(screen.getByRole('button', { name: /deactivate morning run/i }));
+    await user.click(screen.getByRole('button', { name: /confirm/i }));
+
+    harness.reload();
+
+    expect(within(getInactiveSection()).getByText(ACTIVITY_RUNNING.name)).toBeInTheDocument();
+    expect(within(getSectionByHeading(/^activities$/i)).queryByText(ACTIVITY_RUNNING.name)).not.toBeInTheDocument();
+  });
+
+  it('restores an inactive activity to the active list after refresh', async () => {
+    const user = userEvent.setup();
+    const { updateActivity } = renderStatefulSettingsScreen({
+      activities: [ACTIVITY_INACTIVE],
+      logs: [LOG_RECENT],
+    });
+
+    await user.click(screen.getByRole('button', { name: /restore inactive activity/i }));
+
+    expect(updateActivity).toHaveBeenCalledTimes(1);
+    expect(updateActivity).toHaveBeenCalledWith(ACTIVITY_INACTIVE.id, { isActive: true });
+    expect(within(getSectionByHeading(/^activities$/i)).getByText(ACTIVITY_INACTIVE.name)).toBeInTheDocument();
+    expect(within(getInactiveSection()).queryByText(ACTIVITY_INACTIVE.name)).not.toBeInTheDocument();
   });
 });
 

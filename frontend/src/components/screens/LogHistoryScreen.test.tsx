@@ -4,7 +4,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { screen, cleanup } from '@testing-library/react';
 import { renderWithProviders } from '../../test/renderWithProviders';
-import { createLogHistoryEngine } from '../../test/fixtures/c62Fixtures';
+import { createLogHistoryEngine, logActivityWalk } from '../../test/fixtures/c62Fixtures';
 import { LogHistoryScreen } from './LogHistoryScreen';
 
 const VIEWPORT_HEIGHT = 520;
@@ -89,5 +89,22 @@ describe('LogHistoryScreen sticky CTAs (C6.2)', () => {
     expect(scrollRegion.className).toMatch(/flex-1/);
     expect(scrollRegion.className).toMatch(/overflow-y-auto/);
     expect(actionBar.className).toMatch(/shrink-0/);
+  });
+
+  it('still resolves activity labels for logs tied to inactive activities', () => {
+    const engine = createLogHistoryEngine(1, {
+      activities: [{ ...logActivityWalk, isActive: false }],
+    });
+
+    renderWithProviders(
+      <LogHistoryScreen
+        engine={engine}
+        onOpenLogActivity={vi.fn()}
+        onOpenLogIncident={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(logActivityWalk.name)).toBeInTheDocument();
+    expect(screen.queryByText('Unknown')).not.toBeInTheDocument();
   });
 });

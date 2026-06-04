@@ -10,7 +10,13 @@ import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '../../lib/cn';
 import { Card, CardHeader, CardTitle, CardMeta } from '../ui/Card';
 import { apiFetch } from '../../lib/api/client';
-import type { MilestoneEngineResult, RuleDraft, RulePatch, BlockDraft } from '../../hooks/useMilestoneEngine';
+import type {
+  MilestoneEngineResult,
+  RuleDraft,
+  RulePatch,
+  BlockDraft,
+  NewActivityDraft,
+} from '../../hooks/useMilestoneEngine';
 import type { Activity, ActivityClass, ActivityLog, ID, Rule, RuleType, WeeklyTarget, TrainingBlock } from '../../types';
 
 // ---------------------------------------------------------------------------
@@ -186,8 +192,12 @@ interface ActivityManagerRowProps {
     defaultVolumeUnit?: string;
   };
   lastLogDate: string | null;
-  onEdit: () => void;
-  onDeactivate: () => void;
+  onEdit?: () => void;
+  onDeactivate?: () => void;
+  deactivateConfirming?: boolean;
+  onConfirmDeactivate?: () => void;
+  onCancelDeactivate?: () => void;
+  onRestore?: () => void;
 }
 
 function ActivityManagerRow({
@@ -195,6 +205,10 @@ function ActivityManagerRow({
   lastLogDate,
   onEdit,
   onDeactivate,
+  deactivateConfirming = false,
+  onConfirmDeactivate,
+  onCancelDeactivate,
+  onRestore,
 }: ActivityManagerRowProps): React.ReactElement {
   const isPerf = activity.type === 'performance';
   const typeCls = isPerf
@@ -204,44 +218,81 @@ function ActivityManagerRow({
   const lastFmt = lastLogDate ? formatShortDate(lastLogDate) : 'Never';
 
   return (
-    <div className="flex items-center gap-3 py-3 px-4">
-      <div className="min-w-0 flex-1">
-        <p className="text-body font-medium text-ink">{activity.name}</p>
-        <div className="flex items-center gap-2 mt-0.5">
-          <span
-            className={cn(
-              'text-caption font-medium rounded-full px-1.5 py-0.5',
-              typeCls,
-            )}
-          >
-            {typeLabel}
-          </span>
-          {activity.defaultVolumeUnit != null && (
-            <span className="text-caption text-ink-faint">
-              {activity.defaultVolumeUnit}
+    <div className="py-3 px-4">
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-body font-medium text-ink">{activity.name}</p>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span
+              className={cn(
+                'text-caption font-medium rounded-full px-1.5 py-0.5',
+                typeCls,
+              )}
+            >
+              {typeLabel}
             </span>
-          )}
-          <span className="text-caption text-ink-faint">· Last: {lastFmt}</span>
+            {activity.defaultVolumeUnit != null && (
+              <span className="text-caption text-ink-faint">
+                {activity.defaultVolumeUnit}
+              </span>
+            )}
+            <span className="text-caption text-ink-faint">· Last: {lastFmt}</span>
+          </div>
         </div>
+        {onRestore != null && (
+          <button
+            type="button"
+            aria-label={`Restore ${activity.name}`}
+            onClick={onRestore}
+            className="h-8 px-2.5 rounded-md text-caption font-medium text-safe-fg bg-safe/10 hover:bg-safe/20 transition-colors duration-snap shrink-0"
+          >
+            Restore
+          </button>
+        )}
+        {onRestore == null && !deactivateConfirming && onEdit != null && onDeactivate != null && (
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              type="button"
+              aria-label={`Edit ${activity.name}`}
+              onClick={onEdit}
+              className="h-8 px-2.5 rounded-md text-caption font-medium text-ink-muted bg-bg-sunken hover:bg-bg-overlay transition-colors duration-snap"
+            >
+              Edit
+            </button>
+            <button
+              type="button"
+              aria-label={`Deactivate ${activity.name}`}
+              onClick={onDeactivate}
+              className="h-8 px-2.5 rounded-md text-caption font-medium text-danger-fg hover:bg-danger/10 transition-colors duration-snap"
+            >
+              Deactivate
+            </button>
+          </div>
+        )}
       </div>
-      <div className="flex items-center gap-1 shrink-0">
-        <button
-          type="button"
-          aria-label={`Edit ${activity.name}`}
-          onClick={onEdit}
-          className="h-8 px-2.5 rounded-md text-caption font-medium text-ink-muted bg-bg-sunken hover:bg-bg-overlay transition-colors duration-snap"
-        >
-          Edit
-        </button>
-        <button
-          type="button"
-          aria-label={`Deactivate ${activity.name}`}
-          onClick={onDeactivate}
-          className="h-8 px-2.5 rounded-md text-caption font-medium text-danger-fg hover:bg-danger/10 transition-colors duration-snap"
-        >
-          Deactivate
-        </button>
-      </div>
+      {deactivateConfirming && onConfirmDeactivate != null && onCancelDeactivate != null && (
+        <div className="mt-3 rounded-md border border-danger/30 bg-danger/5 p-3">
+          <p className="text-caption text-ink-muted mb-2">
+            Deactivating hides this activity from the log picker. All existing logs are preserved.
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onCancelDeactivate}
+              className="h-8 flex-1 rounded-md text-caption font-medium text-ink-muted bg-bg-sunken hover:bg-bg-overlay transition-colors duration-snap"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={onConfirmDeactivate}
+              className="h-8 flex-1 rounded-md text-caption font-semibold text-ink-inverse bg-danger hover:opacity-90 transition-opacity"
+            >
+              Confirm
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -768,6 +819,7 @@ export function SettingsScreen({
     deleteRule,
     createTrainingBlock,
     deactivateActivity,
+    updateActivity,
   } = engine;
 
   const queryClient = useQueryClient();
@@ -776,6 +828,7 @@ export function SettingsScreen({
   const [notifications, setNotifications] = React.useState(true);
   const [metricUnits, setMetricUnits] = React.useState(true);
   const [resetState, setResetState] = React.useState<'idle' | 'confirming' | 'done'>('idle');
+  const [pendingDeactivateId, setPendingDeactivateId] = React.useState<string | null>(null);
 
   function handleResetMockData(): void {
     if (resetState === 'idle') {
@@ -820,6 +873,28 @@ export function SettingsScreen({
         .filter((g) => g.acts.length > 0),
     [activityClasses, activities],
   );
+
+  const groupedInactive = React.useMemo(
+    () =>
+      activityClasses
+        .map((cls) => ({
+          cls,
+          acts: activities.filter(
+            (a) => a.activityClassId === cls.id && !a.isActive,
+          ),
+        }))
+        .filter((g) => g.acts.length > 0),
+    [activityClasses, activities],
+  );
+
+  const [inactiveSectionPinned, setInactiveSectionPinned] = React.useState(false);
+  React.useEffect(() => {
+    if (groupedInactive.length > 0) {
+      setInactiveSectionPinned(true);
+    }
+  }, [groupedInactive.length]);
+
+  const showInactiveSection = inactiveSectionPinned || groupedInactive.length > 0;
 
   const showEditRules = hasBlock;
   const handleEditRules = onEditRules ?? (() => setEditRulesOpen(true));
@@ -921,7 +996,13 @@ export function SettingsScreen({
                         activity={act}
                         lastLogDate={lastByAct[act.id] ?? null}
                         onEdit={() => onEditActivity?.(act)}
-                        onDeactivate={() => deactivateActivity(act.id)}
+                        onDeactivate={() => setPendingDeactivateId(act.id)}
+                        deactivateConfirming={pendingDeactivateId === act.id}
+                        onCancelDeactivate={() => setPendingDeactivateId(null)}
+                        onConfirmDeactivate={() => {
+                          deactivateActivity(act.id);
+                          setPendingDeactivateId(null);
+                        }}
                       />
                     ))}
                   </div>
@@ -930,6 +1011,43 @@ export function SettingsScreen({
             </Card>
           )}
         </section>
+
+        {/* ── Inactive Activities ── */}
+        {showInactiveSection && (
+        <section>
+          <p className="text-label uppercase font-medium text-ink-muted mb-3">
+            Inactive Activities
+          </p>
+          {groupedInactive.length > 0 && (
+            <Card pad="none">
+              <div className="divide-y divide-border-subtle">
+                {groupedInactive.map(({ cls, acts }) => (
+                  <div key={cls.id}>
+                    <div className="px-4 pt-3 pb-1.5">
+                      <p className="text-caption font-semibold text-ink-muted uppercase tracking-wide">
+                        {cls.name}
+                      </p>
+                    </div>
+                    {acts.map((act) => (
+                      <ActivityManagerRow
+                        key={act.id}
+                        activity={act}
+                        lastLogDate={lastByAct[act.id] ?? null}
+                        onRestore={() =>
+                          updateActivity(
+                            act.id,
+                            { isActive: true } as Partial<NewActivityDraft>,
+                          )
+                        }
+                      />
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+        </section>
+        )}
 
         {/* ── Preferences ── */}
         <section>
