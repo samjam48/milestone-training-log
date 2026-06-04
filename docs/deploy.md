@@ -32,7 +32,7 @@ Set these on the Render service (values come from **O11.0**; first deploy wiring
 | `SESSION_SECRET` | Signing key for session cookies |
 | `AUTH_PASSWORD` | Shared app login password |
 
-Also set `APP_DEV_MODE=false` for production. Optional: `SESSION_MAX_AGE_DAYS`, `CORS_ORIGINS`.
+Also set `APP_DEV_MODE=false` for production. Optional: `SESSION_MAX_AGE_DAYS`, `CORS_ORIGINS` (omit when the browser only calls the API via the Netlify `/api` proxy — same origin, no CORS).
 
 **Do not** commit secrets to the repo. Store values in a password manager and paste them into Render’s dashboard during **O11.1**.
 

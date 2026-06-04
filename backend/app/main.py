@@ -1,4 +1,5 @@
 from fastapi import Depends, FastAPI
+from starlette.middleware.cors import CORSMiddleware
 
 from app.dependencies.session import require_session
 from app.routers.activities import router as activities_router
@@ -22,10 +23,26 @@ from app.routers.weekly_targets import (
 from app.services.auth import validate_production_auth_settings
 from app.settings import APP_VERSION, settings
 
+_CORS_ALLOW_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+_CORS_ALLOW_HEADERS = ["Authorization", "Content-Type", "Accept"]
+
+
+def _parse_cors_origins(cors_origins: str) -> list[str]:
+    return [origin.strip() for origin in cors_origins.split(",") if origin.strip()]
+
 
 def create_app() -> FastAPI:
     validate_production_auth_settings()
     app = FastAPI(title="Milestone Backend", version=APP_VERSION)
+    cors_origins = _parse_cors_origins(settings.CORS_ORIGINS)
+    if cors_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=cors_origins,
+            allow_credentials=True,
+            allow_methods=_CORS_ALLOW_METHODS,
+            allow_headers=_CORS_ALLOW_HEADERS,
+        )
     session_required = [Depends(require_session)]
 
     app.include_router(health_router)
