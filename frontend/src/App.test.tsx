@@ -29,10 +29,14 @@ function getPrimaryNav(): HTMLElement {
   return screen.getByRole('navigation', { name: 'Primary' });
 }
 
-function expectLogActivityPrefill(activityName: string): void {
-  expect(screen.getByText('Session details')).toBeInTheDocument();
-  const row = screen.getByRole('button', { name: activityName });
-  expect(row.querySelector('svg')).not.toBeNull();
+function expectQuickLogSheet(activityName: string): void {
+  expect(
+    screen.getByRole('dialog', { name: new RegExp(`Quick log — ${activityName}`, 'i') }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole('heading', { name: new RegExp(`^${activityName}$`, 'i') }),
+  ).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'Log Activity' })).not.toBeInTheDocument();
 }
 
 function expectNoLogActivityPrefill(): void {
@@ -121,7 +125,7 @@ describe('App shell (F1.1)', () => {
   });
 });
 
-describe('Dashboard suggestion → Log Activity prefill (C6.3)', () => {
+describe('Dashboard suggestion → InlineLogSheet quick log (C6.3 / F9.10)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetMockEngine();
@@ -132,17 +136,16 @@ describe('Dashboard suggestion → Log Activity prefill (C6.3)', () => {
     cleanup();
   });
 
-  it('opens Log Activity with safe suggestion activity pre-selected when CTA is tapped', async () => {
+  it('opens InlineLogSheet with the safe suggestion activity when CTA is tapped', async () => {
     const user = userEvent.setup();
     renderWithProviders(<App />);
 
     await user.click(screen.getByRole('button', { name: 'Log stretching' }));
 
-    expect(screen.getByRole('heading', { name: 'Log Activity' })).toBeInTheDocument();
-    expectLogActivityPrefill('Stretching');
+    expectQuickLogSheet('Stretching');
   });
 
-  it('opens Log Activity with caution suggestion activity pre-selected when CTA is tapped', async () => {
+  it('opens InlineLogSheet with the caution suggestion activity when CTA is tapped', async () => {
     const user = userEvent.setup();
     applyC63DashboardFixtures({
       suggestions: [c63CautionYogaSuggestion],
@@ -152,8 +155,7 @@ describe('Dashboard suggestion → Log Activity prefill (C6.3)', () => {
 
     await user.click(screen.getByRole('button', { name: 'Log lightly' }));
 
-    expect(screen.getByRole('heading', { name: 'Log Activity' })).toBeInTheDocument();
-    expectLogActivityPrefill('Yoga');
+    expectQuickLogSheet('Yoga');
   });
 
   it('does not apply stale prefill when opening Log Activity from the Log tab', async () => {
@@ -161,8 +163,8 @@ describe('Dashboard suggestion → Log Activity prefill (C6.3)', () => {
     renderWithProviders(<App />);
 
     await user.click(screen.getByRole('button', { name: 'Log stretching' }));
-    expectLogActivityPrefill('Stretching');
-    await user.click(screen.getByRole('button', { name: 'Back' }));
+    expectQuickLogSheet('Stretching');
+    await user.click(screen.getByRole('button', { name: 'Close' }));
 
     await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
     await user.click(screen.getByRole('button', { name: '+ Log Activity' }));
@@ -171,24 +173,24 @@ describe('Dashboard suggestion → Log Activity prefill (C6.3)', () => {
     expectNoLogActivityPrefill();
   });
 
-  it('clears prefill after overlay close so the next Log Activity open has no selection', async () => {
+  it('clears quick-log state after sheet close so the next Log Activity open has no selection', async () => {
     const user = userEvent.setup();
     renderWithProviders(<App />);
 
     await user.click(screen.getByRole('button', { name: 'Log stretching' }));
-    expectLogActivityPrefill('Stretching');
-    await user.click(screen.getByRole('button', { name: 'Back' }));
+    expectQuickLogSheet('Stretching');
+    await user.click(screen.getByRole('button', { name: 'Close' }));
 
     await user.click(screen.getByRole('button', { name: 'Log stretching' }));
-    expectLogActivityPrefill('Stretching');
-    await user.click(screen.getByRole('button', { name: 'Back' }));
+    expectQuickLogSheet('Stretching');
+    await user.click(screen.getByRole('button', { name: 'Close' }));
 
     await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
     await user.click(screen.getByRole('button', { name: '+ Log Activity' }));
     expectNoLogActivityPrefill();
   });
 
-  it('overwrites prefill when a second suggestion CTA is opened after closing the overlay', async () => {
+  it('opens the second suggestion activity after closing the first quick-log sheet', async () => {
     const user = userEvent.setup();
     applyC63DashboardFixtures({
       suggestions: [c63SafeStretchSuggestion, c63CautionYogaSuggestion],
@@ -197,15 +199,17 @@ describe('Dashboard suggestion → Log Activity prefill (C6.3)', () => {
     renderWithProviders(<App />);
 
     await user.click(screen.getByRole('button', { name: 'Log stretching' }));
-    expectLogActivityPrefill('Stretching');
-    await user.click(screen.getByRole('button', { name: 'Back' }));
+    expectQuickLogSheet('Stretching');
+    await user.click(screen.getByRole('button', { name: 'Close' }));
 
     await user.click(screen.getByRole('button', { name: 'Log lightly' }));
-    expectLogActivityPrefill('Yoga');
-    expect(screen.queryByRole('button', { name: 'Stretching' })?.querySelector('svg')).toBeNull();
+    expectQuickLogSheet('Yoga');
+    expect(
+      screen.queryByRole('dialog', { name: /quick log — stretching/i }),
+    ).not.toBeInTheDocument();
   });
 
-  it('ignores prefill when suggestion id is not in activities', async () => {
+  it('does not open quick log or Log Activity when suggestion id is not in activities', async () => {
     const user = userEvent.setup();
     applyC63DashboardFixtures({
       suggestions: [{ ...c63SafeStretchSuggestion, id: 'act-deleted' }],
@@ -215,8 +219,8 @@ describe('Dashboard suggestion → Log Activity prefill (C6.3)', () => {
 
     await user.click(screen.getByRole('button', { name: 'Log stretching' }));
 
-    expect(screen.getByRole('heading', { name: 'Log Activity' })).toBeInTheDocument();
-    expectNoLogActivityPrefill();
+    expect(screen.queryByRole('dialog', { name: /quick log/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Log Activity' })).not.toBeInTheDocument();
   });
 
   it('renders danger suggestions without a Log CTA on the dashboard', () => {

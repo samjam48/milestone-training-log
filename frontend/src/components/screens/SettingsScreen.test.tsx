@@ -10,7 +10,6 @@
  * Spec: export/preview/SettingsScreen.jsx, MOCKUPS.md §Screen 5 / 5b
  */
 
-import * as React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, cleanup, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
