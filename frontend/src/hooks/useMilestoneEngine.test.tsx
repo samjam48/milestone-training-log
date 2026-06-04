@@ -12,6 +12,8 @@
  * updateActivity, deactivateActivity).
  *
  * H10.1 — delayed-tax useQuery on useMilestoneEngine.
+ *
+ * H10.2 — query status surface for app shell (isInitialLoading, isFatalError, refetchAll).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { waitFor, act } from '@testing-library/react';
@@ -96,6 +98,16 @@ type EngineWithDelayedTax = MilestoneEngineResult & {
 
 function readDelayedTax(engine: MilestoneEngineResult): DelayedTaxResponse | undefined {
   return (engine as EngineWithDelayedTax).delayedTax;
+}
+
+type EngineWithQueryStatus = MilestoneEngineResult & {
+  isInitialLoading: boolean;
+  isFatalError: boolean;
+  refetchAll: () => void;
+};
+
+function readQueryStatus(engine: MilestoneEngineResult): EngineWithQueryStatus {
+  return engine as EngineWithQueryStatus;
 }
 
 const delayedTaxFixture: DelayedTaxResponse = {
@@ -1131,6 +1143,153 @@ describe('useMilestoneEngine delayed tax (H10.1)', () => {
     await waitFor(() => {
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['dashboard'] });
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['delayed-tax'] });
+    });
+  });
+});
+
+// =============================================================================
+// H10.2 — query status for app shell
+// =============================================================================
+
+describe('useMilestoneEngine query status (H10.2)', () => {
+  beforeEach(() => {
+    vi.stubGlobal('crypto', { randomUUID: () => MOCK_UUID });
+    setupDefaultApiMocks();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  it('exposes isInitialLoading, isFatalError, and refetchAll on the result', async () => {
+    const { result } = renderHookWithProviders(() => useMilestoneEngine());
+
+    await waitFor(() => {
+      const status = readQueryStatus(result.current);
+      expect(typeof status.isInitialLoading).toBe('boolean');
+      expect(typeof status.isFatalError).toBe('boolean');
+      expect(typeof status.refetchAll).toBe('function');
+    });
+  });
+
+  it('transitions pending → success: isInitialLoading true until dashboard resolves, then false with data', async () => {
+    let resolveDashboard!: (value: typeof dashboardPayload) => void;
+    vi.mocked(getDashboard).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveDashboard = resolve;
+        }),
+    );
+
+    const { result } = renderHookWithProviders(() => useMilestoneEngine());
+
+    await waitFor(() => {
+      expect(getDashboard).toHaveBeenCalledTimes(1);
+    });
+
+    const statusWhilePending = readQueryStatus(result.current);
+    expect(statusWhilePending.isInitialLoading).toBe(true);
+    expect(statusWhilePending.isFatalError).toBe(false);
+    expect(result.current.todayDate).toBe('');
+    expect(result.current.userName).toBe('');
+
+    resolveDashboard(dashboardPayload);
+
+    await waitFor(() => {
+      const status = readQueryStatus(result.current);
+      expect(status.isInitialLoading).toBe(false);
+      expect(status.isFatalError).toBe(false);
+      expect(result.current.todayDate).toBe(dashboardPayload.todayDate);
+      expect(result.current.userName).toBe(dashboardPayload.userName);
+    });
+  });
+
+  it('transitions pending → error: isFatalError true when dashboard fails with no cache', async () => {
+    let rejectDashboard!: (reason: Error) => void;
+    vi.mocked(getDashboard).mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectDashboard = reject;
+        }),
+    );
+
+    const { result } = renderHookWithProviders(() => useMilestoneEngine());
+
+    await waitFor(() => {
+      expect(getDashboard).toHaveBeenCalledTimes(1);
+    });
+
+    const statusWhilePending = readQueryStatus(result.current);
+    expect(statusWhilePending.isInitialLoading).toBe(true);
+    expect(statusWhilePending.isFatalError).toBe(false);
+
+    rejectDashboard(new Error('network unreachable'));
+
+    await waitFor(() => {
+      const status = readQueryStatus(result.current);
+      expect(status.isInitialLoading).toBe(false);
+      expect(status.isFatalError).toBe(true);
+      expect(result.current.todayDate).toBe('');
+    });
+  });
+
+  it('keeps isInitialLoading false during background dashboard refetch when cached data exists', async () => {
+    const { result, queryClient } = renderHookWithProviders(() => useMilestoneEngine());
+
+    await waitFor(() => {
+      expect(readQueryStatus(result.current).isInitialLoading).toBe(false);
+      expect(result.current.userName).toBe(dashboardPayload.userName);
+    });
+
+    let resolveSlowRefetch!: (value: typeof dashboardPayload) => void;
+    vi.mocked(getDashboard).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveSlowRefetch = resolve;
+        }),
+    );
+
+    void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+
+    await waitFor(() => {
+      expect(getDashboard).toHaveBeenCalledTimes(2);
+    });
+
+    expect(readQueryStatus(result.current).isInitialLoading).toBe(false);
+    expect(result.current.userName).toBe(dashboardPayload.userName);
+
+    resolveSlowRefetch({
+      ...dashboardPayload,
+      userName: 'Sam (refreshed)',
+    });
+
+    await waitFor(() => {
+      expect(result.current.userName).toBe('Sam (refreshed)');
+    });
+
+    expect(readQueryStatus(result.current).isInitialLoading).toBe(false);
+  });
+
+  it('refetchAll refetches dashboard, activity-logs, and delayed-tax', async () => {
+    const { result } = renderHookWithProviders(() => useMilestoneEngine());
+
+    await waitFor(() => {
+      expect(readDelayedTax(result.current)).toEqual(delayedTaxFixture);
+    });
+
+    vi.mocked(getDashboard).mockClear();
+    vi.mocked(listActivityLogs).mockClear();
+    vi.mocked(getDelayedTax).mockClear();
+
+    act(() => {
+      readQueryStatus(result.current).refetchAll();
+    });
+
+    await waitFor(() => {
+      expect(getDashboard).toHaveBeenCalledTimes(1);
+      expect(listActivityLogs).toHaveBeenCalledTimes(1);
+      expect(getDelayedTax).toHaveBeenCalledWith({ asOf: dashboardPayload.todayDate });
     });
   });
 });

@@ -185,6 +185,10 @@ export interface MilestoneEngineResult {
   updateRule: (ruleId: ID, patch: RulePatch) => void;
   deleteRule: (ruleId: ID) => void;
   createTrainingBlock: (draft: BlockDraft) => void;
+  // H10.2 — app shell query status (no raw React Query objects)
+  isInitialLoading: boolean;
+  isFatalError: boolean;
+  refetchAll: () => void;
   // F1.3 mutations
   submitCheckIn: (draft: CheckInDraft) => void;
   submitLog: (draft: LogDraft) => void;
@@ -503,6 +507,15 @@ export function useMilestoneEngine(): MilestoneEngineResult {
   const allBlocks = trainingBlocksQuery.data ?? [];
   const previousBlocks = allBlocks.filter((b) => b.id !== (dashboard?.block?.id ?? null));
 
+  const isInitialLoading = dashboardQuery.isPending;
+  const isFatalError = dashboardQuery.isError && dashboard === undefined;
+
+  const refetchAll = React.useCallback(() => {
+    void dashboardQuery.refetch();
+    void activityLogsQuery.refetch();
+    void delayedTaxQuery.refetch();
+  }, [dashboardQuery, activityLogsQuery, delayedTaxQuery]);
+
   return {
     todayDate,
     userName: dashboard?.userName ?? '',
@@ -538,6 +551,10 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     updateRule,
     deleteRule,
     createTrainingBlock,
+    // H10.2 — app shell query status
+    isInitialLoading,
+    isFatalError,
+    refetchAll,
     // F1.3 mutations
     submitCheckIn,
     submitLog,
