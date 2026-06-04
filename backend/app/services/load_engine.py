@@ -517,6 +517,235 @@ def _severity_from_ratio(count: float, threshold: float) -> ViolationSeverity | 
     return None
 
 
+def _violations_rest_between_class(
+    rest_rule: RuleDict,
+    class_activity_ids: set[str],
+    logs: list[LogDict],
+    as_of: str,
+) -> list[RuleViolationSnapshot]:
+    prior_logs = [
+        log
+        for log in logs
+        if log["activity_id"] in class_activity_ids and log["logged_date"] < as_of
+    ]
+    prior_logs.sort(key=lambda log: log["logged_date"], reverse=True)
+    last = prior_logs[0] if prior_logs else None
+    if last is None:
+        return []
+
+    days_since = _days_between(last["logged_date"], as_of)
+    threshold = int(rest_rule["threshold_value"])
+    if days_since > threshold:
+        return []
+
+    day_label = "day" if days_since == 1 else "days"
+    return [
+        {
+            "rule_id": rest_rule["id"],
+            "rule_type": "rest_between_class",
+            "message": (
+                f"Breaks {threshold}-day rest rule — "
+                f"{days_since} {day_label} since last session"
+            ),
+            "severity": "danger" if days_since <= 1 else "caution",
+        }
+    ]
+
+
+def _violations_weekly_load_cap(
+    cap_rule: RuleDict,
+    class_activity_ids: set[str],
+    logs: list[LogDict],
+    as_of: str,
+    volume_value: float,
+    rpe: int,
+) -> list[RuleViolationSnapshot]:
+    window = int(cap_rule["window_days"])
+    win_start = add_days(as_of, -(window - 1))
+    current_load = sum(
+        log_load(log)
+        for log in logs
+        if log["activity_id"] in class_activity_ids
+        and win_start <= log["logged_date"] <= as_of
+    )
+    projected = current_load + volume_value * rpe
+    cap = float(cap_rule["threshold_value"])
+    if projected >= cap:
+        return [
+            {
+                "rule_id": cap_rule["id"],
+                "rule_type": "weekly_load_cap",
+                "severity": "danger",
+                "message": f"Projected load {round(projected)} / {int(cap)} cap",
+            }
+        ]
+    if projected >= cap * 0.8:
+        return [
+            {
+                "rule_id": cap_rule["id"],
+                "rule_type": "weekly_load_cap",
+                "severity": "caution",
+                "message": f"Approaching cap — {round(projected)} / {int(cap)}",
+            }
+        ]
+    return []
+
+
+def _violations_frequency_limit(
+    rule: RuleDict,
+    class_activity_ids: set[str],
+    logs: list[LogDict],
+    as_of: str,
+) -> list[RuleViolationSnapshot]:
+    window = int(rule["window_days"])
+    win_start = add_days(as_of, -(window - 1))
+    freq_count = float(
+        sum(
+            1
+            for log in logs
+            if log["activity_id"] in class_activity_ids
+            and win_start <= log["logged_date"] <= as_of
+        )
+        + 1
+    )
+    freq_threshold = float(rule["threshold_value"])
+    severity = _severity_from_ratio(freq_count, freq_threshold)
+    if severity is None:
+        return []
+    return [
+        {
+            "rule_id": rule["id"],
+            "rule_type": "frequency_limit",
+            "severity": severity,
+            "message": (
+                f"Frequency {int(freq_count)} / {int(freq_threshold)} "
+                f"in {window}-day window"
+            ),
+        }
+    ]
+
+
+def _violations_consecutive_day_limit(
+    rule: RuleDict,
+    class_activity_ids: set[str],
+    logs: list[LogDict],
+    as_of: str,
+) -> list[RuleViolationSnapshot]:
+    threshold = int(rule["threshold_value"])
+    consecutive = 0
+    cursor = as_of
+    while True:
+        if cursor == as_of:
+            has_log = True
+        else:
+            has_log = any(
+                log["activity_id"] in class_activity_ids
+                and log["logged_date"] == cursor
+                for log in logs
+            )
+        if not has_log:
+            break
+        consecutive += 1
+        cursor = add_days(cursor, -1)
+    if consecutive < threshold:
+        return []
+    return [
+        {
+            "rule_id": rule["id"],
+            "rule_type": "consecutive_day_limit",
+            "severity": "danger",
+            "message": f"{consecutive} consecutive days (limit {threshold})",
+        }
+    ]
+
+
+def _enabled_class_rule(
+    enabled_rules: list[RuleDict],
+    class_id: str,
+    rule_type: str,
+) -> RuleDict | None:
+    return next(
+        (
+            rule
+            for rule in enabled_rules
+            if rule["activity_class_id"] == class_id and rule["rule_type"] == rule_type
+        ),
+        None,
+    )
+
+
+def _violations_loop_rules(
+    class_id: str,
+    class_activity_ids: set[str],
+    activity: ActivityDict,
+    activities: list[ActivityDict],
+    logs: list[LogDict],
+    as_of: str,
+    enabled_rules: list[RuleDict],
+) -> list[RuleViolationSnapshot]:
+    violations: list[RuleViolationSnapshot] = []
+    for rule in enabled_rules:
+        if (
+            rule["rule_type"] == "frequency_limit"
+            and rule["activity_class_id"] == class_id
+        ):
+            violations.extend(
+                _violations_frequency_limit(rule, class_activity_ids, logs, as_of)
+            )
+        elif (
+            rule["rule_type"] == "consecutive_day_limit"
+            and rule["activity_class_id"] == class_id
+        ):
+            violations.extend(
+                _violations_consecutive_day_limit(
+                    rule, class_activity_ids, logs, as_of
+                )
+            )
+        elif (
+            rule["rule_type"] == "weekly_activity_count"
+            and rule.get("activity_class_id") is None
+            and _is_performance_activity(activity)
+        ):
+            violations.extend(
+                _violations_weekly_activity_count(rule, activities, logs, as_of)
+            )
+    return violations
+
+
+def _violations_weekly_activity_count(
+    rule: RuleDict,
+    activities: list[ActivityDict],
+    logs: list[LogDict],
+    as_of: str,
+) -> list[RuleViolationSnapshot]:
+    window = int(rule["window_days"])
+    win_start = add_days(as_of, -(window - 1))
+    perf_ids = {a["id"] for a in activities if _is_performance_activity(a)}
+    perf_count = float(
+        sum(
+            1
+            for log in logs
+            if log["activity_id"] in perf_ids
+            and win_start <= log["logged_date"] <= as_of
+        )
+        + 1
+    )
+    perf_threshold = float(rule["threshold_value"])
+    severity = _severity_from_ratio(perf_count, perf_threshold)
+    if severity is None:
+        return []
+    return [
+        {
+            "rule_id": rule["id"],
+            "rule_type": "weekly_activity_count",
+            "severity": severity,
+            "message": (
+                f"Weekly activity count {int(perf_count)} / {int(perf_threshold)}"
+            ),
+        }
+    ]
+
+
 def check_violations(
     activity_id: str,
     volume_value: float,
@@ -534,184 +763,44 @@ def check_violations(
     class_activity_ids = {
         a["id"] for a in activities if a["activity_class_id"] == class_id
     }
+    enabled_rules = [rule for rule in rules if rule.get("enabled", True)]
     violations: list[RuleViolationSnapshot] = []
 
-    enabled_rules = [rule for rule in rules if rule.get("enabled", True)]
-
-    rest_rule = next(
-        (
-            rule
-            for rule in enabled_rules
-            if rule["activity_class_id"] == class_id
-            and rule["rule_type"] == "rest_between_class"
-        ),
-        None,
+    rest_rule = _enabled_class_rule(
+        enabled_rules, class_id, "rest_between_class"
     )
     if rest_rule is not None:
-        prior_logs = [
-            log
-            for log in logs
-            if log["activity_id"] in class_activity_ids
-            and log["logged_date"] < as_of
-        ]
-        prior_logs.sort(key=lambda log: log["logged_date"], reverse=True)
-        last = prior_logs[0] if prior_logs else None
-        if last is not None:
-            days_since = _days_between(last["logged_date"], as_of)
-            threshold = int(rest_rule["threshold_value"])
-            if days_since <= threshold:
-                day_label = "day" if days_since == 1 else "days"
-                violations.append(
-                    {
-                        "rule_id": rest_rule["id"],
-                        "rule_type": "rest_between_class",
-                        "message": (
-                            f"Breaks {threshold}-day rest rule — "
-                            f"{days_since} {day_label} since last session"
-                        ),
-                        "severity": "danger" if days_since <= 1 else "caution",
-                    }
-                )
+        violations.extend(
+            _violations_rest_between_class(
+                rest_rule, class_activity_ids, logs, as_of
+            )
+        )
 
     if volume_value > 0 and rpe > 0:
-        cap_rule = next(
-            (
-                rule
-                for rule in enabled_rules
-                if rule["activity_class_id"] == class_id
-                and rule["rule_type"] == "weekly_load_cap"
-            ),
-            None,
-        )
+        cap_rule = _enabled_class_rule(enabled_rules, class_id, "weekly_load_cap")
         if cap_rule is not None:
-            window = int(cap_rule["window_days"])
-            win_start = add_days(as_of, -(window - 1))
-            current_load = sum(
-                log_load(log)
-                for log in logs
-                if log["activity_id"] in class_activity_ids
-                and win_start <= log["logged_date"] <= as_of
+            violations.extend(
+                _violations_weekly_load_cap(
+                    cap_rule,
+                    class_activity_ids,
+                    logs,
+                    as_of,
+                    volume_value,
+                    rpe,
+                )
             )
-            projected = current_load + volume_value * rpe
-            cap = float(cap_rule["threshold_value"])
-            if projected >= cap:
-                violations.append(
-                    {
-                        "rule_id": cap_rule["id"],
-                        "rule_type": "weekly_load_cap",
-                        "severity": "danger",
-                        "message": (
-                            f"Projected load {round(projected)} / {int(cap)} cap"
-                        ),
-                    }
-                )
-            elif projected >= cap * 0.8:
-                violations.append(
-                    {
-                        "rule_id": cap_rule["id"],
-                        "rule_type": "weekly_load_cap",
-                        "severity": "caution",
-                        "message": (
-                            f"Approaching cap — {round(projected)} / {int(cap)}"
-                        ),
-                    }
-                )
 
-    for rule in enabled_rules:
-        if rule["rule_type"] == "frequency_limit" and rule["activity_class_id"] == class_id:
-            window = int(rule["window_days"])
-            win_start = add_days(as_of, -(window - 1))
-            freq_count = float(
-                sum(
-                    1
-                    for log in logs
-                    if log["activity_id"] in class_activity_ids
-                    and win_start <= log["logged_date"] <= as_of
-                )
-                + 1
-            )
-            freq_threshold = float(rule["threshold_value"])
-            severity = _severity_from_ratio(freq_count, freq_threshold)
-            if severity is not None:
-                violations.append(
-                    {
-                        "rule_id": rule["id"],
-                        "rule_type": "frequency_limit",
-                        "severity": severity,
-                        "message": (
-                            f"Frequency {int(freq_count)} / {int(freq_threshold)} "
-                            f"in {window}-day window"
-                        ),
-                    }
-                )
-
-        elif (
-            rule["rule_type"] == "consecutive_day_limit"
-            and rule["activity_class_id"] == class_id
-        ):
-            threshold = int(rule["threshold_value"])
-            consecutive = 0
-            cursor = as_of
-            while True:
-                if cursor == as_of:
-                    has_log = True
-                else:
-                    has_log = any(
-                        log["activity_id"] in class_activity_ids
-                        and log["logged_date"] == cursor
-                        for log in logs
-                    )
-                if not has_log:
-                    break
-                consecutive += 1
-                cursor = add_days(cursor, -1)
-            if consecutive >= threshold:
-                violations.append(
-                    {
-                        "rule_id": rule["id"],
-                        "rule_type": "consecutive_day_limit",
-                        "severity": "danger",
-                        "message": (
-                            f"{consecutive} consecutive days "
-                            f"(limit {threshold})"
-                        ),
-                    }
-                )
-
-        elif (
-            rule["rule_type"] == "weekly_activity_count"
-            and rule.get("activity_class_id") is None
-            and _is_performance_activity(activity)
-        ):
-            window = int(rule["window_days"])
-            win_start = add_days(as_of, -(window - 1))
-            perf_ids = {
-                a["id"] for a in activities if _is_performance_activity(a)
-            }
-            perf_count = float(
-                sum(
-                    1
-                    for log in logs
-                    if log["activity_id"] in perf_ids
-                    and win_start <= log["logged_date"] <= as_of
-                )
-                + 1
-            )
-            perf_threshold = float(rule["threshold_value"])
-            severity = _severity_from_ratio(perf_count, perf_threshold)
-            if severity is not None:
-                violations.append(
-                    {
-                        "rule_id": rule["id"],
-                        "rule_type": "weekly_activity_count",
-                        "severity": severity,
-                        "message": (
-                            f"Weekly activity count {int(perf_count)} / "
-                            f"{int(perf_threshold)}"
-                        ),
-                    }
-                )
-
+    violations.extend(
+        _violations_loop_rules(
+            class_id,
+            class_activity_ids,
+            activity,
+            activities,
+            logs,
+            as_of,
+            enabled_rules,
+        )
+    )
     return violations
 
 
