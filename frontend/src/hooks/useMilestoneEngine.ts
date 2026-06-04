@@ -55,7 +55,10 @@ import {
   createTrainingBlock as createTrainingBlockApi,
   createActivity,
   patchActivity,
+  getDelayedTax,
 } from '../lib/api';
+
+export type DelayedTaxResponse = Awaited<ReturnType<typeof getDelayedTax>>;
 
 type EntityWithoutUserId<T extends { userId: string }> = Omit<T, 'userId'>;
 
@@ -165,6 +168,7 @@ export interface MilestoneEngineResult {
   weekLoadThreshold: number;
   cleanStreak: number;
   recoveryStreaks: RecoveryStreak[];
+  delayedTax?: DelayedTaxResponse;
   // F2.0 read fields
   goals: Omit<Goal, 'userId'>[];
   rules: Rule[];
@@ -240,6 +244,15 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     refetchOnWindowFocus: false,
   });
 
+  const delayedTaxAsOf = dashboard?.todayDate;
+
+  const delayedTaxQuery = useQuery({
+    queryKey: ['delayed-tax', delayedTaxAsOf],
+    queryFn: () => getDelayedTax({ asOf: delayedTaxAsOf as ISODate }),
+    enabled: delayedTaxAsOf !== undefined,
+    gcTime: 0,
+  });
+
   const [liveViolations, setLiveViolations] = React.useState<RuleViolationSnapshot[]>([]);
   const violationDebounceRef = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -261,6 +274,7 @@ export function useMilestoneEngine(): MilestoneEngineResult {
       void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       void queryClient.invalidateQueries({ queryKey: ['activity-logs'] });
       void queryClient.invalidateQueries({ queryKey: ['activities'] });
+      void queryClient.invalidateQueries({ queryKey: ['delayed-tax'] });
     },
   });
 
@@ -284,6 +298,7 @@ export function useMilestoneEngine(): MilestoneEngineResult {
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['delayed-tax'] });
     },
   });
 
@@ -299,6 +314,7 @@ export function useMilestoneEngine(): MilestoneEngineResult {
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['delayed-tax'] });
     },
   });
 
@@ -505,6 +521,7 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     weekLoadThreshold: dashboard?.weekLoadThreshold ?? 0,
     cleanStreak: dashboard?.cleanStreak ?? 0,
     recoveryStreaks: dashboard?.recoveryStreaks ?? [],
+    delayedTax: delayedTaxQuery.data,
     // F2.0 read fields
     goals: (goalsQuery.data ?? []) as Omit<Goal, 'userId'>[],
     rules: (rulesQuery.data ?? []) as Rule[],

@@ -10,6 +10,8 @@
  * previousBlocks) and mutations (submitNewActivity, createGoal, archiveGoal,
  * createRule, deleteRule, createTrainingBlock, updateGoal, updateRule,
  * updateActivity, deactivateActivity).
+ *
+ * H10.1 — delayed-tax useQuery on useMilestoneEngine.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { waitFor, act } from '@testing-library/react';
@@ -25,7 +27,11 @@ import {
   mapDashboardFromApi,
 } from '../lib/api/mappers';
 import { renderHookWithProviders } from '../test/renderHookWithProviders';
-import { useMilestoneEngine } from './useMilestoneEngine';
+import {
+  useMilestoneEngine,
+  type DelayedTaxResponse,
+  type MilestoneEngineResult,
+} from './useMilestoneEngine';
 
 const MOCK_UUID = '11111111-1111-4111-8111-111111111111';
 
@@ -50,6 +56,7 @@ vi.mock('../lib/api', () => ({
   createActivity: vi.fn(),
   patchActivity: vi.fn(),
   listActivities: vi.fn(),
+  getDelayedTax: vi.fn(),
 }));
 
 import {
@@ -71,6 +78,9 @@ import {
   createActivity,
   patchActivity,
   listActivities,
+  getDelayedTax,
+  createDailyCheckIn,
+  createFlareUpIncident,
 } from '../lib/api';
 
 const activityLogsListOnlyLog = mapActivityLogFromApi({
@@ -79,6 +89,28 @@ const activityLogsListOnlyLog = mapActivityLogFromApi({
 });
 
 const dashboardPayload = mapDashboardFromApi(dashboardReadSnake);
+
+type EngineWithDelayedTax = MilestoneEngineResult & {
+  delayedTax?: DelayedTaxResponse;
+};
+
+function readDelayedTax(engine: MilestoneEngineResult): DelayedTaxResponse | undefined {
+  return (engine as EngineWithDelayedTax).delayedTax;
+}
+
+const delayedTaxFixture: DelayedTaxResponse = {
+  asOf: dashboardPayload.todayDate,
+  riskWindowDays: 7,
+  baselineDays: 14,
+  painThreshold: 3,
+  hits: [
+    {
+      hitType: 'elevated_load',
+      activityClassId: 'cls-foot',
+      message: 'Foot load above 14-day baseline',
+    },
+  ],
+};
 
 // ---------------------------------------------------------------------------
 // F2.0 fixtures
@@ -188,6 +220,25 @@ function setupDefaultApiMocks(): void {
   });
   vi.mocked(patchActivity).mockResolvedValue(activityFixture);
   vi.mocked(listActivities).mockResolvedValue([]);
+  vi.mocked(getDelayedTax).mockResolvedValue(delayedTaxFixture);
+  vi.mocked(createDailyCheckIn).mockResolvedValue({
+    id: 'ci-test',
+    checkInDate: dashboardPayload.todayDate,
+    painLevel: 2,
+    readinessLevel: 7,
+    stiffnessLevel: 3,
+    hasFlareUp: false,
+    createdAt: '2026-05-25T07:00:00Z',
+    updatedAt: '2026-05-25T07:00:00Z',
+  });
+  vi.mocked(createFlareUpIncident).mockResolvedValue({
+    id: 'inc-test',
+    incidentDate: dashboardPayload.todayDate,
+    bodyPart: 'Left heel',
+    severity: 5,
+    createdAt: '2026-05-25T08:00:00Z',
+    updatedAt: '2026-05-25T08:00:00Z',
+  });
 }
 
 describe('useMilestoneEngine API rewire (F1.3)', () => {
@@ -913,5 +964,173 @@ describe('useMilestoneEngine data plane (F2.0)', () => {
     expect(typeof result.current.updateRule).toBe('function');
     expect(typeof result.current.deleteRule).toBe('function');
     expect(typeof result.current.createTrainingBlock).toBe('function');
+  });
+});
+
+// =============================================================================
+// H10.1 — delayed-tax query on useMilestoneEngine
+// =============================================================================
+
+describe('useMilestoneEngine delayed tax (H10.1)', () => {
+  beforeEach(() => {
+    vi.stubGlobal('crypto', { randomUUID: () => MOCK_UUID });
+    setupDefaultApiMocks();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  it('calls getDelayedTax with dashboard todayDate and exposes delayedTax on the result', async () => {
+    const { result } = renderHookWithProviders(() => useMilestoneEngine());
+
+    await waitFor(() => {
+      expect(getDelayedTax).toHaveBeenCalledWith({ asOf: dashboardPayload.todayDate });
+      expect(readDelayedTax(result.current)).toEqual(delayedTaxFixture);
+    });
+  });
+
+  it('registers a stable delayed-tax query key scoped to todayDate', async () => {
+    const { queryClient } = renderHookWithProviders(() => useMilestoneEngine());
+
+    await waitFor(() => {
+      expect(getDelayedTax).toHaveBeenCalledTimes(1);
+    });
+
+    const delayedTaxQueries = queryClient
+      .getQueryCache()
+      .findAll({ queryKey: ['delayed-tax'] });
+
+    expect(delayedTaxQueries).toHaveLength(1);
+    expect(delayedTaxQueries[0]?.queryKey).toEqual([
+      'delayed-tax',
+      dashboardPayload.todayDate,
+    ]);
+  });
+
+  it('does not fetch delayed tax while todayDate is empty before dashboard resolves', async () => {
+    let resolveDashboard!: (value: typeof dashboardPayload) => void;
+    vi.mocked(getDashboard).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveDashboard = resolve;
+        }),
+    );
+
+    renderHookWithProviders(() => useMilestoneEngine());
+
+    await waitFor(() => {
+      expect(getDashboard).toHaveBeenCalledTimes(1);
+    });
+
+    expect(getDelayedTax).not.toHaveBeenCalled();
+
+    resolveDashboard(dashboardPayload);
+
+    await waitFor(() => {
+      expect(getDelayedTax).toHaveBeenCalledWith({ asOf: dashboardPayload.todayDate });
+    });
+  });
+
+  it('does not fetch delayed tax when dashboard is unavailable', async () => {
+    vi.mocked(getDashboard).mockRejectedValue(new Error('dashboard unavailable'));
+
+    const { result } = renderHookWithProviders(() => useMilestoneEngine());
+
+    await waitFor(() => {
+      expect(getDashboard).toHaveBeenCalledTimes(1);
+    });
+
+    expect(getDelayedTax).not.toHaveBeenCalled();
+    expect(readDelayedTax(result.current)).toBeUndefined();
+    expect(result.current.todayDate).toBe('');
+  });
+
+  it('leaves delayedTax undefined when getDelayedTax fails', async () => {
+    vi.mocked(getDelayedTax).mockRejectedValue(new Error('delayed tax unavailable'));
+
+    const { result } = renderHookWithProviders(() => useMilestoneEngine());
+
+    await waitFor(() => {
+      expect(getDelayedTax).toHaveBeenCalledWith({ asOf: dashboardPayload.todayDate });
+    });
+
+    expect(readDelayedTax(result.current)).toBeUndefined();
+  });
+
+  it('submitLog invalidates ["delayed-tax"] alongside dashboard and activity-logs', async () => {
+    const { result, queryClient } = renderHookWithProviders(() => useMilestoneEngine());
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    await waitFor(() => {
+      expect(readDelayedTax(result.current)).toEqual(delayedTaxFixture);
+    });
+
+    result.current.submitLog({
+      activityId: 'act-walk',
+      durationMinutes: 20,
+      volumeValue: 1.5,
+      volumeUnit: 'km',
+      rpe: 3,
+    });
+
+    await waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['dashboard'] });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['activity-logs'] });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['delayed-tax'] });
+    });
+  });
+
+  it('submitCheckIn invalidates ["delayed-tax"] alongside dashboard', async () => {
+    const { result, queryClient } = renderHookWithProviders(() => useMilestoneEngine());
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    await waitFor(() => {
+      expect(readDelayedTax(result.current)).toEqual(delayedTaxFixture);
+    });
+
+    act(() => {
+      result.current.submitCheckIn({
+        painLevel: 2,
+        readinessLevel: 7,
+        stiffnessLevel: 3,
+        hasFlareUp: false,
+      });
+    });
+
+    await waitFor(() => {
+      expect(createDailyCheckIn).toHaveBeenCalledTimes(1);
+    });
+
+    await waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['dashboard'] });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['delayed-tax'] });
+    });
+  });
+
+  it('submitIncident invalidates ["delayed-tax"] alongside dashboard', async () => {
+    const { result, queryClient } = renderHookWithProviders(() => useMilestoneEngine());
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    await waitFor(() => {
+      expect(readDelayedTax(result.current)).toEqual(delayedTaxFixture);
+    });
+
+    act(() => {
+      result.current.submitIncident({
+        bodyPart: 'Left heel',
+        severity: 6,
+      });
+    });
+
+    await waitFor(() => {
+      expect(createFlareUpIncident).toHaveBeenCalledTimes(1);
+    });
+
+    await waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['dashboard'] });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['delayed-tax'] });
+    });
   });
 });
