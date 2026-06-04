@@ -22,3 +22,6 @@ export type {
 
 export { BlockSafetyMapSection } from './BlockSafetyMapSection';
 export type { BlockSafetyMapSectionProps } from './BlockSafetyMapSection';
+
+export { LoadRiskSection } from './LoadRiskSection';
+export type { LoadRiskSectionProps } from './LoadRiskSection';
