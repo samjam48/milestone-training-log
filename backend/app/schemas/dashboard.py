@@ -56,6 +56,7 @@ class DashboardRead(BaseModel):
     weekly_progress: list[WeeklyProgressRead]
     daily_scores: list[DailySafetyScoreRead]
     load_series: list[LoadPointRead]
+    graph_class_id: str | None
     flare_up_dates: list[str]
     week_load_threshold: int
     clean_streak: int

@@ -49,6 +49,7 @@ EXPECTED_TOP_LEVEL_KEYS = {
     "load_series",
     "flare_up_dates",
     "week_load_threshold",
+    "graph_class_id",
     "clean_streak",
     "recovery_streaks",
     "goals",
@@ -147,6 +148,7 @@ async def test_get_dashboard_without_active_block_returns_neutral_empty_payload(
     assert payload["weekly_progress"] == []
     assert payload["load_series"] == []
     assert payload["recovery_streaks"] == []
+    assert payload["graph_class_id"] is None
 
 
 async def test_get_dashboard_previous_blocks_serializes_summary_array(
