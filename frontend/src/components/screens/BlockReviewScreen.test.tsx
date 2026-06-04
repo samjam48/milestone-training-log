@@ -1,3 +1,9 @@
+/**
+ * BlockReviewScreen — route wiring and stack integration tests.
+ * F10.6 — Review milestone badge in block review header
+ *         (plans/tickets-phase-10-polish-2026-06-04.md).
+ */
+
 import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest';
 import { cleanup, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -291,5 +297,69 @@ describe('BlockReviewScreen route wiring', () => {
 
     expect(screen.getByRole('heading', { name: /settings/i })).toBeInTheDocument();
     expect(screen.queryByTestId('stack-screen-overlay')).not.toBeInTheDocument();
+  });
+});
+
+const REVIEW_MILESTONE_BADGE = /review milestone reached/i;
+
+describe('BlockReviewScreen — F10.6 review milestone badge', () => {
+  it('shows review milestone state in header for active block when isReviewMilestoneHit is true', async () => {
+    mockEngine.block = { ...ACTIVE_BLOCK, isReviewMilestoneHit: true };
+    mockEngine.logs = ACTIVE_LOGS;
+    mockEngine.dailyScores = ACTIVE_DAILY_SCORES;
+    mockEngine.loadSeries = ACTIVE_LOAD_SERIES;
+    mockEngine.flareUpDates = ACTIVE_FLARE_UP_DATES;
+
+    renderApp();
+    await openActiveBlockReview();
+
+    const review = within(screen.getByTestId('stack-screen-overlay'));
+    expect(review.getByText(REVIEW_MILESTONE_BADGE)).toBeInTheDocument();
+  });
+
+  it('does not show review milestone badge in header when active block isReviewMilestoneHit is false', async () => {
+    mockEngine.block = { ...ACTIVE_BLOCK, isReviewMilestoneHit: false };
+    mockEngine.logs = ACTIVE_LOGS;
+    mockEngine.dailyScores = ACTIVE_DAILY_SCORES;
+    mockEngine.loadSeries = ACTIVE_LOAD_SERIES;
+    mockEngine.flareUpDates = ACTIVE_FLARE_UP_DATES;
+
+    renderApp();
+    await openActiveBlockReview();
+
+    const review = within(screen.getByTestId('stack-screen-overlay'));
+    expect(review.queryByText(REVIEW_MILESTONE_BADGE)).not.toBeInTheDocument();
+  });
+
+  it('shows review milestone state in header for previous block from review payload', async () => {
+    renderApp();
+    await openPreviousBlockReview();
+
+    const review = within(screen.getByTestId('stack-screen-overlay'));
+    expect(review.getByText(REVIEW_MILESTONE_BADGE)).toBeInTheDocument();
+  });
+
+  it('does not show review milestone badge when fetched block has isReviewMilestoneHit false', async () => {
+    getTrainingBlockReviewMock.mockResolvedValue({
+      ...REVIEW_RESPONSE,
+      block: { ...PREVIOUS_BLOCK, isReviewMilestoneHit: false },
+    });
+
+    renderApp();
+    await openPreviousBlockReview();
+
+    const review = within(screen.getByTestId('stack-screen-overlay'));
+    expect(review.queryByText(REVIEW_MILESTONE_BADGE)).not.toBeInTheDocument();
+  });
+
+  it('shows review milestone in header when BlockReviewScreen is rendered directly for active block', () => {
+    mockEngine.block = { ...ACTIVE_BLOCK, isReviewMilestoneHit: true };
+    mockEngine.logs = ACTIVE_LOGS;
+    mockEngine.dailyScores = ACTIVE_DAILY_SCORES;
+    mockEngine.loadSeries = ACTIVE_LOAD_SERIES;
+
+    renderWithProviders(<BlockReviewScreen engine={mockEngine} onBack={vi.fn()} />);
+
+    expect(screen.getByText(REVIEW_MILESTONE_BADGE)).toBeInTheDocument();
   });
 });

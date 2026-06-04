@@ -1,11 +1,10 @@
 /**
  * F2.3 — SettingsScreen component tests (failing first, TDD).
+ * F10.6 — Review milestone badge on BlockSummaryCard and previous-block rows
+ *         (plans/tickets-phase-10-polish-2026-06-04.md).
  *
  * Tests are written against the public contract defined in the ticket:
  *   Props: { engine: MilestoneEngineResult }
- *
- * The component (SettingsScreen.tsx) does NOT exist yet — all tests below
- * must fail until the implementation is in place.
  *
  * Spec: export/preview/SettingsScreen.jsx, MOCKUPS.md §Screen 5 / 5b
  */
@@ -263,6 +262,16 @@ function getInactiveSection(): HTMLElement {
   expect(section).not.toBeNull();
   return section as HTMLElement;
 }
+
+/** Previous-blocks list row (name cell → inner column → flex row). */
+function withinPreviousBlockRow(blockName: string) {
+  const nameEl = screen.getByText(blockName);
+  const row = nameEl.parentElement?.parentElement;
+  expect(row).not.toBeNull();
+  return within(row as HTMLElement);
+}
+
+const REVIEW_MILESTONE_BADGE = /review milestone reached/i;
 
 function renderStatefulSettingsScreen(options: {
   activities?: Activity[];
@@ -1605,6 +1614,75 @@ describe('SettingsScreen — Reset mock data button: onClick wiring', () => {
       '/dev/reset',
       expect.objectContaining({ method: 'POST' }),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F10.6 — Review milestone badge (B10.1 isReviewMilestoneHit)
+// ---------------------------------------------------------------------------
+
+describe('SettingsScreen — F10.6 review milestone badge', () => {
+  it('shows review milestone badge on active BlockSummaryCard when isReviewMilestoneHit is true', () => {
+    const engine = makeEngine({
+      block: { ...ACTIVE_BLOCK, isReviewMilestoneHit: true },
+      previousBlocks: [],
+      rules: [],
+      weeklyTargets: [],
+      activityClasses: [],
+    });
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    expect(screen.getByText(REVIEW_MILESTONE_BADGE)).toBeInTheDocument();
+  });
+
+  it('does not show review milestone badge on active block when isReviewMilestoneHit is false', () => {
+    const engine = makeEngine({
+      block: { ...ACTIVE_BLOCK, isReviewMilestoneHit: false },
+      previousBlocks: [],
+      rules: [],
+      weeklyTargets: [],
+      activityClasses: [],
+    });
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    expect(screen.queryByText(REVIEW_MILESTONE_BADGE)).not.toBeInTheDocument();
+  });
+
+  it('shows review milestone indicator on previous block rows when pb.isReviewMilestoneHit is true', () => {
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      previousBlocks: [PREVIOUS_BLOCK_1, PREVIOUS_BLOCK_2],
+      rules: [],
+      weeklyTargets: [],
+      activityClasses: [],
+    });
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    expect(
+      withinPreviousBlockRow(PREVIOUS_BLOCK_1.name).getByText(REVIEW_MILESTONE_BADGE),
+    ).toBeInTheDocument();
+    expect(
+      withinPreviousBlockRow(PREVIOUS_BLOCK_2.name).queryByText(REVIEW_MILESTONE_BADGE),
+    ).not.toBeInTheDocument();
+  });
+
+  it('allows an accessible label on previous-block milestone indicator (icon-only row)', () => {
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      previousBlocks: [PREVIOUS_BLOCK_1],
+      rules: [],
+      weeklyTargets: [],
+      activityClasses: [],
+    });
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    expect(
+      withinPreviousBlockRow(PREVIOUS_BLOCK_1.name).getByLabelText(REVIEW_MILESTONE_BADGE),
+    ).toBeInTheDocument();
   });
 });
 

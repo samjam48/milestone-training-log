@@ -9,6 +9,7 @@ import * as React from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '../../lib/cn';
 import { Card, CardHeader, CardTitle, CardMeta } from '../ui/Card';
+import { ReviewMilestoneBadge } from '../ui/ReviewMilestoneBadge';
 import { apiFetch } from '../../lib/api/client';
 import type {
   MilestoneEngineResult,
@@ -94,6 +95,9 @@ function BlockSummaryCard({
             Started {formatShortDate(block.startDate)}
             {block.endDate ? ` · Ends ${formatShortDate(block.endDate)}` : ''}
           </CardMeta>
+          {block.isReviewMilestoneHit ? (
+            <ReviewMilestoneBadge className="mt-2" />
+          ) : null}
         </div>
         <span className="inline-flex items-center gap-1.5 text-caption font-medium text-safe-fg">
           <span
@@ -952,6 +956,7 @@ export function SettingsScreen({
                         {pb.endDate ? formatShortDate(pb.endDate) : 'ongoing'}
                       </p>
                     </div>
+                    {pb.isReviewMilestoneHit ? <ReviewMilestoneBadge compact /> : null}
                     <button
                       type="button"
                       onClick={() => onViewBlock?.(pb.id)}
