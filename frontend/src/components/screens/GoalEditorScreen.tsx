@@ -7,6 +7,10 @@
 import * as React from 'react';
 import { cn } from '../../lib/cn';
 import { SegmentedControl } from '../ui/SegmentedControl';
+import {
+  StackScreenEngineBody,
+  stackScreenEngineBlocked,
+} from '../ui/StackScreenEngineBody';
 import type { MilestoneEngineResult, GoalDraft, GoalPatch } from '../../hooks/useMilestoneEngine';
 import type { Goal, VolumeUnit, GoalTimeframe, ISODate } from '../../types';
 
@@ -43,6 +47,7 @@ export function GoalEditorScreen({
   const [progressUnit,  setProgressUnit]  = React.useState<VolumeUnit>(goal?.progressUnit ?? 'km');
 
   const canSave = title.trim().length > 0 && targetDate !== '';
+  const blocked = stackScreenEngineBlocked(engine, { skipLoading: isEdit });
 
   function handleSave(): void {
     if (!canSave) return;
@@ -122,10 +127,8 @@ export function GoalEditorScreen({
   }
 
   return (
-    <div className="flex flex-col bg-bg" style={{ minHeight: '100vh' }}>
-
-      {/* Header */}
-      <div className="flex items-center gap-3 px-4 pt-5 pb-3 border-b border-border shrink-0">
+    <section className="flex min-h-0 flex-1 flex-col bg-bg">
+      <header className="flex shrink-0 items-center gap-3 border-b border-border px-4 pb-3 pt-5">
         <button
           type="button"
           onClick={onBack}
@@ -145,23 +148,25 @@ export function GoalEditorScreen({
         <h1 className="text-title font-bold text-ink flex-1">
           {isEdit ? 'Edit Goal' : 'New Goal'}
         </h1>
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={!canSave}
-          className={cn(
-            'h-9 px-4 rounded-md text-body font-semibold transition-colors',
-            canSave
-              ? 'bg-ink text-ink-inverse'
-              : 'bg-ink/20 text-ink-faint cursor-not-allowed',
-          )}
-        >
-          {isEdit ? 'Save' : 'Create'}
-        </button>
-      </div>
+        {!blocked ? (
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={!canSave}
+            className={cn(
+              'h-9 rounded-md px-4 text-body font-semibold transition-colors',
+              canSave
+                ? 'bg-ink text-ink-inverse'
+                : 'cursor-not-allowed bg-ink/20 text-ink-faint',
+            )}
+          >
+            {isEdit ? 'Save' : 'Create'}
+          </button>
+        ) : null}
+      </header>
 
-      {/* Form */}
-      <div className="px-4 py-5 flex flex-col gap-6 pb-12">
+      <StackScreenEngineBody engine={engine} skipLoading={isEdit}>
+      <div className="flex flex-1 flex-col gap-6 overflow-y-auto px-4 py-5 pb-12">
 
         {/* Title */}
         <div>
@@ -384,6 +389,7 @@ export function GoalEditorScreen({
         </div>
 
       </div>
-    </div>
+      </StackScreenEngineBody>
+    </section>
   );
 }

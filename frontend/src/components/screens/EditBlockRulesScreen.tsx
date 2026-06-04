@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { cn } from '../../lib/cn';
 import { Card } from '../ui/Card';
+import { StackScreenEngineBody } from '../ui/StackScreenEngineBody';
 import type { MilestoneEngineResult } from '../../hooks/useMilestoneEngine';
 import type { Rule, RuleType } from '../../types';
 
@@ -184,6 +185,7 @@ export function EditBlockRulesScreen({
         </div>
       </header>
 
+      <StackScreenEngineBody engine={engine}>
       <div className="flex flex-1 flex-col gap-5 px-4 py-5 pb-12">
         {engine.rules.length === 0 ? (
           <div className="flex flex-1 items-center justify-center rounded-3xl border border-dashed border-line bg-surface px-6 py-10 text-center">
@@ -299,6 +301,7 @@ export function EditBlockRulesScreen({
           ))
         )}
       </div>
+      </StackScreenEngineBody>
     </section>
   );
 }

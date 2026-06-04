@@ -18,7 +18,7 @@
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { screen, cleanup } from '@testing-library/react';
+import { screen, cleanup, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders';
 import { mockEngine, resetMockEngine } from '../../test/mockEngine';
@@ -598,5 +598,127 @@ describe('GoalEditorScreen — numeric progress toggle', () => {
       screen.queryByRole('spinbutton', { name: /target/i }) ??
       screen.queryByLabelText(/target/i);
     expect(targetInput).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F10.9 — Stack screen loading and error polish
+// ---------------------------------------------------------------------------
+
+describe('GoalEditorScreen — F10.9 loading and error polish', () => {
+  it('shows a loading skeleton in create mode while engine.isInitialLoading is true', () => {
+    const engine = makeEngine({ activityClasses: [CLASS_RUNNING], isInitialLoading: true });
+
+    renderWithProviders(
+      <GoalEditorScreen
+        engine={engine}
+        onBack={vi.fn()}
+        onComplete={vi.fn()}
+      />,
+    );
+
+    const loading = screen.getByTestId('stack-screen-loading');
+    expect(loading).toHaveAttribute('aria-busy', 'true');
+    expect(loading.querySelector('.skeleton')).not.toBeNull();
+  });
+
+  it('hides the goal form in create mode while engine.isInitialLoading is true', () => {
+    const engine = makeEngine({ activityClasses: [CLASS_RUNNING], isInitialLoading: true });
+
+    renderWithProviders(
+      <GoalEditorScreen
+        engine={engine}
+        onBack={vi.fn()}
+        onComplete={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole('textbox', { name: /title|goal/i })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/target date/i)).not.toBeInTheDocument();
+  });
+
+  it('does not show a loading skeleton in edit mode when a goal param is provided', () => {
+    const engine = makeEngine({
+      activityClasses: [CLASS_RUNNING],
+      isInitialLoading: true,
+    });
+
+    renderWithProviders(
+      <GoalEditorScreen
+        goal={GOAL_WITH_PROGRESS}
+        engine={engine}
+        onBack={vi.fn()}
+        onComplete={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByTestId('stack-screen-loading')).not.toBeInTheDocument();
+    expect(screen.getByDisplayValue('Walk 50km this month')).toBeInTheDocument();
+  });
+
+  it('shows an actionable error with Retry when engine.isFatalError is true', () => {
+    const engine = makeEngine({ activityClasses: [CLASS_RUNNING], isFatalError: true });
+
+    renderWithProviders(
+      <GoalEditorScreen
+        engine={engine}
+        onBack={vi.fn()}
+        onComplete={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId('stack-screen-error')).toHaveAttribute('role', 'alert');
+    expect(
+      within(screen.getByTestId('stack-screen-error')).getByRole('button', { name: /retry/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('calls engine.refetchAll when Retry is pressed on a fatal error', async () => {
+    const user = userEvent.setup();
+    const refetchAll = vi.fn();
+    const engine = makeEngine({
+      activityClasses: [CLASS_RUNNING],
+      isFatalError: true,
+      refetchAll,
+    });
+
+    renderWithProviders(
+      <GoalEditorScreen
+        engine={engine}
+        onBack={vi.fn()}
+        onComplete={vi.fn()}
+      />,
+    );
+
+    await user.click(
+      within(screen.getByTestId('stack-screen-error')).getByRole('button', { name: /retry/i }),
+    );
+
+    expect(refetchAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not use viewport-height layout on the screen root', () => {
+    const engine = makeEngine({ activityClasses: [CLASS_RUNNING] });
+
+    renderWithProviders(
+      <GoalEditorScreen
+        engine={engine}
+        onBack={vi.fn()}
+        onComplete={vi.fn()}
+      />,
+    );
+
+    let node: HTMLElement | null = screen.getByRole('heading', { name: /new goal/i });
+    let screenRoot: HTMLElement | null = null;
+    while (node != null) {
+      if (node.classList.contains('bg-bg') && node.classList.contains('flex-col')) {
+        screenRoot = node;
+      }
+      node = node.parentElement;
+    }
+
+    expect(screenRoot).not.toBeNull();
+    expect(screenRoot).not.toHaveClass('h-screen', 'min-h-screen');
+    expect(screenRoot?.getAttribute('style') ?? '').not.toMatch(/100vh/i);
   });
 });

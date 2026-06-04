@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, screen } from '@testing-library/react';
+import { cleanup, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { ActivityManagerScreen } from './ActivityManagerScreen';
@@ -188,5 +188,56 @@ describe('ActivityManagerScreen', () => {
     await user.click(screen.getByRole('button', { name: /back/i }));
 
     expect(onBack).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F10.9 — Stack screen loading and error polish
+// ---------------------------------------------------------------------------
+
+describe('ActivityManagerScreen — F10.9 loading and error polish', () => {
+  it('shows a loading skeleton while engine.isInitialLoading is true', () => {
+    renderScreen({ engine: { isInitialLoading: true } });
+
+    const loading = screen.getByTestId('stack-screen-loading');
+    expect(loading).toHaveAttribute('aria-busy', 'true');
+    expect(loading.querySelector('.skeleton')).not.toBeNull();
+  });
+
+  it('hides the activity form while engine.isInitialLoading is true', () => {
+    renderScreen({ engine: { isInitialLoading: true } });
+
+    expect(screen.queryByLabelText('Activity name')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /save/i })).not.toBeInTheDocument();
+  });
+
+  it('shows an actionable error with Retry when engine.isFatalError is true', () => {
+    renderScreen({ engine: { isFatalError: true } });
+
+    expect(screen.getByTestId('stack-screen-error')).toHaveAttribute('role', 'alert');
+    expect(
+      within(screen.getByTestId('stack-screen-error')).getByRole('button', { name: /retry/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('calls engine.refetchAll when Retry is pressed on a fatal error', async () => {
+    const user = userEvent.setup();
+    const refetchAll = vi.fn();
+    renderScreen({ engine: { isFatalError: true, refetchAll } });
+
+    await user.click(
+      within(screen.getByTestId('stack-screen-error')).getByRole('button', { name: /retry/i }),
+    );
+
+    expect(refetchAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not use viewport-height layout on the screen root', () => {
+    renderScreen();
+
+    const root = screen.getByRole('heading', { name: /edit activity/i }).closest('section');
+    expect(root).not.toBeNull();
+    expect(root).not.toHaveClass('h-screen', 'min-h-screen');
+    expect(root?.getAttribute('style') ?? '').not.toMatch(/100vh/i);
   });
 });
