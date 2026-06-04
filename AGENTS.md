@@ -59,17 +59,18 @@ from `backend/` so `backend/pyproject.toml` is loaded.
 
 `make lint` and `make test` should wrap the canonical commands once the repo bootstrap is in place.
 ---
-## Current Sprint — Phase 10: MVP Polish
-**Goal:** Close remaining PRD MVP gaps and Phase 8 deferred polish — recovery streaks UI, delayed-tax panel + incident attribution, load-graph title, review milestone, loading/error UX, MCP stub; plus hook consolidation, inline-form cleanup, `/scores`→`/review` merge, and `check_violations` refactor.
-**Status (2026-06-04):** Phase 10 implementation complete on `feat/phase-10-polish`. Owner manual verification and `make lint` / `make test` pending before merge.
-**Branch:** `feat/phase-10-polish`
-**Ticket source:** `plans/tickets-phase-10-polish-2026-06-04.md`
-**Primary references:** `plans/PRD.md` F4/F5, `plans/TRD.md` §Phase 8 F3.x, `plans/feature-brief-v02-screen-completion-2026-06-02.md` §Phase 10, `MOCKUPS.md` §Screen 1, `DESIGN.md` §Delayed tax / Training Block Milestones
-**Owner decisions (2026-06-04):** Separate clean-streak + recovery-streaks sections; delayed tax on Dashboard + incident/check-in flare; review milestone = DESIGN strict (no flare + no violations for 2 days); comprehensive loading/error polish; test DB in CI deferred to production project.
-**Out of scope (Phase 10):** WEEKLY_TARGETS / ACTIVITY_CLASSES editing, notification/unit toggles, auth, multi-user, Strava/Health, deployment, dedicated test DB in CI
+## Current Sprint — Phase 11: Production deploy
+**Goal:** Ship MVP on the internet for daily phone use — Netlify (frontend, GitHub deploy) + Render (backend) + Supabase (Postgres); empty prod DB; shared-password session via Netlify `/api` proxy + app auth.
+**Status (2026-06-04):** Planning approved. Phase 10 merged to `main`. Implementation tickets pending (`plans/tickets-phase-11-production-*.md` — Planner).
+**Branch:** `feat/phase-11-production` (from `main`)
+**Planning source:** `plans/feature-brief-production-deploy-2026-06-04.md`, `plans/technical-design-production-deploy-2026-06-04.md`
+**Primary references:** `plans/PRD.md` §9, `plans/TRD.md` §12, `README.md` deploy runbook (when added)
+**Owner decisions (2026-06-04):** Option B hosting; proxy + session auth; SQLite local / Postgres prod only; empty prod; cold start OK; Android Chrome primary; backup runbook; PWA deferred to Stage 2.
+**Out of scope (Phase 11):** Strava/Health, MCP tools, multi-user OAuth, Capacitor, PWA, local SQLite→prod data migration script
 
-**Upcoming:**
-- Production project: deployment, auth/multi-user, integrations, test DB automation, doc reconciliation
+**Roadmap after Phase 11:** Stage 2 polish (PWA + UX), Stage 3 integrations, Stage 4 MCP — see `plans/PRD.md` §10–12.
+
+**Archive:** Phase 0–10 tickets in `plans/archive/phase-0-10/`
 
 ---
 ## Definition of Done

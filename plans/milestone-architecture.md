@@ -4,8 +4,8 @@
 
 Post-op rehab user (bunion surgery) building a solo app to bridge clinical rehab and athletic performance. The core problem: "creeping cumulative load" — activities that feel fine individually but trigger inflammation on Day 4 due to accumulated volume without adequate rest. MVP must close the feedback loop: **log activity → log next-morning pain → see rolling load warnings and delayed correlation flags**.
 
-**Stack:** Python FastAPI + SQLModel · SQLite · React + Vite (TypeScript) · Tailwind CSS · TanStack Query · Docker Compose  
-**Constraints:** Single user (Phase 1), Capacitor-native target (so SPA only, no SSR, relative API paths), MCP-ready endpoint from day one.
+**Stack:** Python FastAPI + SQLModel · SQLite (local) / Postgres (prod) · React + Vite · TanStack Query · Docker Compose (dev) · Netlify + Render + Supabase (prod, Phase 11)  
+**Constraints:** Single logical user (`local`) with session gate in prod; SPA only, relative `/api` paths; MCP context endpoint stub.
 
 ---
 
@@ -203,7 +203,7 @@ class RecoveryRule(SQLModel, table=True):
 - `max_rpe`: check today's entries vs cap
 
 **Delayed tax (`detect_delayed_tax`):** See `plans/TRD.md` §6 and
-`plans/tickets-phase-4-load-engine-2026-05-27.md`. Proactive 7-day scan (elevated
+`plans/archive/phase-0-10/tickets-phase-4-load-engine-2026-05-27.md`. Proactive 7-day scan (elevated
 load vs 14-day median baseline, rest debt) plus symptom-linked attribution when
 `pain_level > 3`, flare on check-in, or flare-up incidents are recorded.
 
@@ -308,9 +308,19 @@ volumes:
 
 ---
 
+## Production deployment (Phase 11)
+
+See `plans/technical-design-production-deploy-2026-06-04.md`. Summary: Netlify
+static + `/api` proxy → Render FastAPI → Supabase Postgres; session cookie auth;
+local dev unchanged on SQLite.
+
+**Historical implementation tickets:** `plans/archive/phase-0-10/`
+
+---
+
 ## Future-Proofing Notes
 
-- **Multi-user/auth:** Replace `USER_ID = "local"` with `Depends(get_current_user_id)` in each router. Schema already has `user_id` on all tables. Zero data migration.
-- **Strava/Google Health:** Add `external_integrations` table with `provider`, `access_token`, `refresh_token`, `last_sync`. Add webhook receiver routes. Activity types gain an `external_id` field.
-- **MCP server:** `load_engine.py` has no FastAPI deps — call it directly from MCP tool handlers. Add `fastapi-mcp` or implement the protocol's `list_tools`/`call_tool` manifest on top of the existing `/api/mcp/context` foundation.
-- **Postgres migration:** Change `DATABASE_URL` to `postgresql://...`, run `alembic upgrade head`. SQLModel handles both dialects. The `JSON` column type on `tags` becomes native JSONB automatically.
+- **Multi-user/auth:** Phase 11 adds session gate; later replace `LOCAL_USER_ID` with real user ids from auth. Schema already has `user_id` on user-owned tables.
+- **Strava/Google Health (Stage 3):** `external_integrations` table; `external_id` on logs; OAuth in services layer.
+- **MCP server (Stage 4):** `load_engine.py` has no FastAPI deps — callable from MCP tool handlers; extend `/api/mcp/context` foundation.
+- **Postgres:** Production uses `postgresql+psycopg` via `DATABASE_URL`; Alembic on deploy. Local stays SQLite unless owner standardizes on Postgres dev DB.

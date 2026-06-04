@@ -1,6 +1,14 @@
 # Backlog
 
-Follow-up items that are intentionally out of scope for the current task but should be handled before or during backend and frontend scaffolding.
+Follow-up items outside the current sprint (`AGENTS.md`). Phase 0–10 tickets
+are archived in `plans/archive/phase-0-10/`.
+
+## Phase 11 / production follow-ups
+
+- Render keep-alive or paid tier if cold starts become painful on daily use.
+- Custom domain + HTTPS on Netlify; update `netlify.toml` proxy if Render host changes.
+- Automated Supabase backup export (cron / GitHub Action) if manual runbook is insufficient.
+- Migrate local dev to Postgres (optional) — only if SQLite/Postgres drift causes bugs.
 
 ## Repo Alignment Follow-Ups
 
@@ -21,7 +29,7 @@ Follow-up items that are intentionally out of scope for the current task but sho
 ## Phase 6 / 7 follow-ups
 
 - ~~Phase 6 F1.3: full Log History via `GET /api/activity-logs`~~ — ticketed in
-  `plans/tickets-phase-6-frontend-2026-05-28.md`.
+  `plans/archive/phase-0-10/tickets-phase-6-frontend-2026-05-28.md`.
 - Phase 8: wire `recovery_streaks` compliance UI (hook maps field in Phase 6 F1.3). *(re-routed from Phase 7, owner 2026-05-30 — dashboard surface, outside screen-port scope)*
 - Phase 8: delayed-tax / load-risk dashboard panel (`GET /api/load/delayed-tax`). *(re-routed from Phase 7, owner 2026-05-30)*
 - Phase 7.5: `CalendarHeatmap` on Settings / block-review using hook `dailyScores`. *(home screen Settings is built in Phase 7; worth doing right after — owner 2026-05-30)*

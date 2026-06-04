@@ -1,28 +1,50 @@
 # Milestone — Technical Requirements Document
-*Draft: May 2026 | Owner: Sam*
+*Updated: June 2026 | Owner: Sam*
+
+**Phase 0–10 ticket index:** archived under `plans/archive/phase-0-10/`
 
 ## 1. Architecture
 
+### Local development
+
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│ Docker Compose                                                   │
+│ Docker Compose + Vite dev server                                   │
 │                                                                  │
 │  ┌──────────────────────┐       ┌──────────────────────────────┐│
-│  │  Frontend             │       │  Backend                     ││
-│  │  React 18 + Vite 5    │──────▶│  FastAPI + SQLModel          ││
-│  │  :5173                │  /api │  :8000                       ││
-│  └──────────────────────┘       └──────────────┬───────────────┘│
+│  │  Frontend (Vite)      │       │  Backend (Docker)            ││
+│  │  :5151 (typical)      │──────▶│  FastAPI :8084               ││
+│  └──────────────────────┘  /api └──────────────┬───────────────┘│
 │                                                │                 │
 │                                   ┌────────────▼────────────┐   │
-│                                   │  SQLite                  │   │
-│                                   │  data/milestone.db       │   │
+│                                   │  SQLite                    │   │
+│                                   │  data/milestone.db         │   │
 │                                   └─────────────────────────┘   │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-**Vite proxy:** `"/api" → "http://backend:8000"` — all frontend API calls use
-relative `/api/...` paths. No CORS config needed in dev. Capacitor-ready: the
-same relative paths work when the built `dist/` is wrapped natively.
+**Vite proxy:** `"/api" → backend host:port` — relative `/api/...` paths. No CORS
+in dev when using the proxy.
+
+### Production (Phase 11)
+
+```
+Phone (Android Chrome) ──HTTPS──▶ Netlify (static dist)
+                                      │
+                                      │ /api/* proxy (netlify.toml)
+                                      ▼
+                                 Render (Docker, FastAPI)
+                                      │
+                                      ▼
+                                 Supabase Postgres
+```
+
+**Auth:** `POST /api/auth/login` sets HTTP-only session cookie; all `/api/*`
+except health and login require session. Protects direct `*.onrender.com` access.
+
+**Frontend deploy:** GitHub → Netlify (`frontend/` base, `npm run build`).
+
+See §12 for env matrix and runbook.
 
 ## 2. Stack
 
@@ -31,7 +53,7 @@ same relative paths work when the built `dist/` is wrapped natively.
 | Backend framework | FastAPI 0.115+ |
 | ORM + models | SQLModel 0.0.21+ |
 | Migrations | Alembic |
-| Database | SQLite (local-first; env-swap to Postgres when needed) |
+| Database | SQLite (local dev); Postgres on Supabase (production) |
 | Validation | Pydantic v2 (bundled with SQLModel) |
 | Backend tests | pytest + httpx AsyncClient |
 | Backend lint | ruff + mypy --strict |
@@ -191,7 +213,7 @@ Full contract: `docs/api-map.md`.
 
 When no active training block exists, load routes return **HTTP 200** with neutral
 or empty computed payloads (not `404`). Full behaviour:
-`plans/tickets-phase-4-load-engine-2026-05-27.md`.
+`plans/archive/phase-0-10/tickets-phase-4-load-engine-2026-05-27.md`.
 
 ## 6. Load Engine
 
@@ -219,7 +241,7 @@ noted below.
 
 ### Delayed tax (`detect_delayed_tax`)
 
-Two layers (canonical spec: `plans/tickets-phase-4-load-engine-2026-05-27.md` §Delayed-tax methodology):
+Two layers (canonical spec: `plans/archive/phase-0-10/tickets-phase-4-load-engine-2026-05-27.md` §Delayed-tax methodology):
 
 **Layer A — Proactive (always):** Scan the last **7** days through `as_of`. Compare
 each performance class’s daily load to a **14-day median baseline** immediately
@@ -314,7 +336,7 @@ extended dry-run rule checks, proactive + symptom-linked delayed tax, and load
 API routes. Ported functions verified with Python unit tests and `mockData.ts`
 fixtures at `as_of=2026-05-25`.
 
-**Ticket detail:** `plans/tickets-phase-4-load-engine-2026-05-27.md`
+**Ticket detail:** `plans/archive/phase-0-10/tickets-phase-4-load-engine-2026-05-27.md`
 
 | Ticket | Scope |
 | --- | --- |
@@ -349,7 +371,7 @@ rewired to real API. All five existing Tier-3 screens work against seed data
 with minimal screen diffs (label lookups only).
 
 **Status:** Phase 5 merged to `main` (2026-05-28). Ticket detail:
-`plans/tickets-phase-6-frontend-2026-05-28.md`.
+`plans/archive/phase-0-10/tickets-phase-6-frontend-2026-05-28.md`.
 
 **Owner decisions locked (2026-05-28):**
 **Load route conventions (Phase 4):** Request and response JSON use **snake&#95;case**.
@@ -540,8 +562,83 @@ exists (Phase 0, ticket B0.1).
 
 - **~~Before Phase 6:~~** ~~Ensure `export/src/` is fully committed and stable~~
   (done — copy wholesale into `frontend/src/` on F1.1)
-- **Before Phase 7:** Add `SettingsScreen.jsx`, `GoalsScreen.jsx`,
-  `NewActivitySheet.jsx` to `export/preview/` so the implementer can port
-  them to TypeScript
-- **BACKLOG item:** Decide if `plans/BACKLOG.md` item about multi-class flare-up
-  cause attribution is needed before or after MVP ships
+- **~~Before Phase 7:~~** Settings/Goals screens ported (done Phases 7–9)
+- **Phase 11 (production):** Create Supabase, Render, and Netlify accounts; set
+  env secrets; connect GitHub to Netlify; complete smoke checklist in §12.4
+
+---
+
+## 12. Production deployment (Phase 11)
+
+**Approved design:** `plans/technical-design-production-deploy-2026-06-04.md`
+
+### 12.1 Services
+
+| Service | Role | Tier |
+| --- | --- | --- |
+| Netlify | Host `frontend/dist`; proxy `/api/*` to Render | Free |
+| Render | Docker Web Service, FastAPI + Alembic on start | Free (cold sleep OK) |
+| Supabase | Postgres `DATABASE_URL` | Free |
+
+Default hostnames (`*.netlify.app`, `*.onrender.com`) until custom domain.
+
+### 12.2 Environment matrix
+
+| Variable | Local | Production |
+| --- | --- | --- |
+| `DATABASE_URL` | `sqlite:///./data/milestone.db` | Supabase `postgresql+psycopg://...` |
+| `APP_DEV_MODE` | optional `true` | `false` |
+| `VITE_DEV_MODE` | optional `true` | `false` |
+| `VITE_API_BASE_URL` | empty | empty (Netlify proxy) |
+| `SESSION_SECRET` | dev value in `.env.example` | Render secret (long random) |
+| `AUTH_PASSWORD` | optional | Render secret (shared password) |
+| `SESSION_MAX_AGE_DAYS` | optional | default `30` |
+| `CORS_ORIGINS` | unset | unset unless split-origin testing |
+
+Do **not** run `scripts/seed.py` in production.
+
+### 12.3 Backend start (Render)
+
+```bash
+alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+```
+
+Health check: `GET /api/health`. Add `psycopg` for Postgres driver.
+
+### 12.4 Netlify
+
+- Base: `frontend`
+- Build: `npm ci && npm run build`
+- Publish: `dist`
+- `netlify.toml`: force proxy `/api/*` → Render service URL; SPA fallback `/*` → `index.html`
+- GitHub integration: deploy on push to `main` (or owner-chosen branch)
+
+### 12.5 Auth API (summary)
+
+| Endpoint | Access |
+| --- | --- |
+| `GET /api/health` | Public |
+| `POST /api/auth/login` | Public |
+| `POST /api/auth/logout` | Session |
+| All other `/api/*` | Session required |
+
+Frontend: `fetch` with `credentials: 'include'`; login UI on 401.
+
+### 12.6 Data backup
+
+Owner requirement: avoid losing production data. Runbook must document Supabase
+backup/export options (dashboard backup tier, manual `pg_dump` or export).
+Optional implementation ticket for automated export — see Phase 11 planner.
+
+### 12.7 Acceptance smoke (owner, on phone)
+
+1. Netlify URL loads login → session → empty dashboard.
+2. Full MVP flows: log, check-in, incident, goals, settings/block tools.
+3. `POST /api/dev/reset` unavailable in prod.
+4. Data survives Render restart.
+5. Chrome on Android (Pixel 9 Pro).
+
+### 12.8 CI note
+
+Postgres migration verification in pytest or CI before first prod deploy.
+Dedicated test DB in CI remains backlog unless added in Phase 11 ticket set.
