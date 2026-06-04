@@ -949,6 +949,161 @@ All other Phase 9 tickets.
 
 ---
 
+## Q9.11A — `EditBlockRulesScreen` UX parity cleanup
+
+**Type:** frontend polish
+**Branch:** `feat/phase-9-settings-flow`
+**Depends on:** F9.6
+
+### Goal
+
+Bring `EditBlockRulesScreen` into close visual and interaction parity with the approved prototype so
+the screen is compact, aligned, and easier to use on mobile.
+
+### Problem statement
+
+The current implementation is functionally correct but diverges from the prototype in three
+important ways:
+
+1. The toggle control renders incorrectly, with the knob offset outside the track.
+2. Disabled rules do not collapse; their threshold/value/unit controls remain visible when the rule
+   is off.
+3. The whole screen is oversized versus the prototype: cards, typography, spacing, and threshold
+   controls all feel too large and loose.
+
+### Acceptance criteria
+
+1. Toggle controls render correctly in both states:
+   - the knob remains fully inside the track
+   - the knob is vertically centered
+   - the on/off positions match the intended prototype alignment
+   - there is no visible overflow outside the green track
+2. Disabled rules collapse to a compact summary state:
+   - when a rule is toggled off, hide the threshold/value/unit editor row
+   - keep the rule title, description, and toggle visible
+   - re-enabling the rule restores the threshold editor with the current persisted value
+3. Screen density is tightened to match the prototype more closely:
+   - reduce card padding and vertical dead space
+   - reduce spacing between heading, description, toggle, and threshold controls
+   - reduce the size/height of minus/plus buttons and the threshold value field where needed
+   - reduce oversized supporting text and section spacing where needed
+4. Rule-group layout matches the prototype more closely:
+   - prefer tighter grouping inside each activity-class section
+   - avoid the oversized standalone-card feel where the prototype is denser
+   - use subtler separators between rule rows/items where appropriate
+5. Copy and title casing match the intended design/prototype unless the owner explicitly approves a
+   deviation.
+6. The screen still renders correctly inside the existing `AppShell` stack flow:
+   - no full-browser-width layout regression
+   - no unstyled overlay regression
+   - safe-area and background behaviour remain consistent with the other stack screens
+
+### Reuse / extend
+
+- `frontend/src/components/screens/EditBlockRulesScreen.tsx`
+- `frontend/src/components/screens/EditBlockRulesScreen.test.tsx`
+- existing shared toggle / card / stepper primitives where appropriate, provided prototype parity is
+  preserved
+
+### Tests
+
+- Add/extend tests proving a disabled rule hides its threshold controls.
+- Add/extend tests proving re-enabling restores the controls.
+- Add/extend tests around toggle rendered state using stable structure/class assertions if practical.
+- Preserve existing tests covering live rule update calls; no behaviour regression to mutation
+  wiring.
+
+### Manual verification
+
+1. Open Settings → Edit Rules.
+2. Compare one enabled and one disabled rule against the prototype side by side.
+3. Toggle a rule off: only title/description/toggle remain visible.
+4. Toggle the same rule back on: threshold editor returns with the same value.
+5. Confirm the toggle knob stays inside the track in both states.
+6. Confirm the overall screen density feels tighter and closer to the prototype on mobile width.
+
+### Dependencies
+
+F9.6 complete.
+
+---
+
+## Q9.11B — Activity deactivation confirmation + inactive restore flow
+
+**Type:** frontend UX + recovery flow
+**Branch:** `feat/phase-9-settings-flow`
+**Depends on:** F9.5, F9.9, H9.0
+
+### Goal
+
+Make activity deactivation safer and reversible by requiring confirmation from every deactivation
+entry point and by exposing inactive activities in the UI with a restore path.
+
+### Problem statement
+
+The current activity flow has two UX gaps:
+
+1. In `ActivityManagerScreen`, deactivation already has a confirmation step, but the Settings list
+   deactivation action removes an activity immediately with no confirmation.
+2. Once an activity is deactivated (`isActive: false`), it disappears from the active list and
+   there is no visible inactive/archive section or restore path in the UI.
+
+### Acceptance criteria
+
+1. Every activity deactivation entry point requires explicit confirmation before calling
+   `engine.deactivateActivity(...)`, including:
+   - the dedicated `ActivityManagerScreen`
+   - the Settings screen activity list action(s)
+2. Cancelling the confirmation leaves the activity unchanged and visible in its current section.
+3. Deactivating an activity preserves existing logs and updates the UI after the mutation settles.
+4. Settings exposes inactive activities in a visible, intentional recovery section:
+   - label may be `Inactive Activities` or `Archived Activities` (pick one and use it consistently)
+   - inactive items remain browsable after reload
+5. Inactive activities can be restored from the UI:
+   - restore sets `isActive: true`
+   - restored items return to the active grouped list after refresh/invalidation
+6. Active and inactive sections are clearly separated:
+   - active lists continue to show only `isActive === true`
+   - inactive/archive section shows only `isActive === false`
+7. No logs/history regression:
+   - deactivating does not delete logs
+   - existing log/history screens still resolve labels for logs tied to inactive activities
+
+### Reuse / extend
+
+- `frontend/src/components/screens/SettingsScreen.tsx`
+- `frontend/src/components/screens/SettingsScreen.test.tsx`
+- `frontend/src/components/screens/ActivityManagerScreen.tsx`
+- `frontend/src/components/screens/ActivityManagerScreen.test.tsx`
+- `frontend/src/hooks/useMilestoneEngine.ts` existing `updateActivity` / `deactivateActivity`
+  mutations
+
+### Tests
+
+- Add/extend Settings-screen tests proving Deactivate opens a confirmation step before mutation.
+- Add/extend tests proving Cancel does not deactivate the activity.
+- Add/extend tests proving confirmed deactivation moves the activity out of the active list and into
+  the inactive/archive section.
+- Add/extend tests proving Restore reactivates the activity and returns it to the active list.
+- Preserve existing `ActivityManagerScreen` confirmation coverage.
+
+### Manual verification
+
+1. Open Settings → Activities.
+2. Trigger Deactivate from the Settings list: confirm dialog/state appears before any mutation.
+3. Cancel: the activity remains active and visible.
+4. Confirm deactivation: the activity leaves the active list and appears in the inactive/archive
+   section.
+5. Reload the app: the activity remains in the inactive/archive section.
+6. Restore the activity from that section: it returns to the active list after refresh.
+7. Open Log History / any existing logs for that activity and confirm labels/history remain intact.
+
+### Dependencies
+
+H9.0 complete; F9.5 and F9.9 complete.
+
+---
+
 ## Out of scope (explicit — Phase 10 or later)
 
 - Recovery-streaks UI, delayed-tax panel, load-graph dynamic title, review milestone, MCP stub.
