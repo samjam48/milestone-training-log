@@ -14,6 +14,7 @@ import {
   BlockReviewScreen,
   NewTrainingBlockScreen,
   ActivityManagerScreen,
+  InlineLogSheet,
 } from './components/screens';
 import type { Activity, Goal } from './types';
 import { useMilestoneEngine, type MilestoneEngineResult } from './hooks/useMilestoneEngine';
@@ -93,6 +94,7 @@ export function App(): React.ReactElement {
   const [logActivityPrefillId, setLogActivityPrefillId] = React.useState<
     string | undefined
   >(undefined);
+  const [inlineLogActivity, setInlineLogActivity] = React.useState<Activity | null>(null);
   const [screenStack, setScreenStack] = React.useState<StackEntry[]>([]);
 
   const pushScreen = (screen: string, params: Record<string, unknown> = {}): void =>
@@ -110,6 +112,8 @@ export function App(): React.ReactElement {
     setLogActivityPrefillId(activityId);
     setOverlay('log-activity');
   };
+
+  const closeInlineLog = (): void => setInlineLogActivity(null);
 
   let mainContent: React.ReactElement;
   if (overlay === 'check-in') {
@@ -146,6 +150,7 @@ export function App(): React.ReactElement {
         engine={engine}
         onOpenCheckIn={() => setOverlay('check-in')}
         onOpenLogActivity={openLogActivity}
+        onQuickLog={setInlineLogActivity}
       />
     );
   } else if (activeTab === 'log') {
@@ -194,6 +199,12 @@ export function App(): React.ReactElement {
           {resolveStackScreen(topEntry, engine, popScreen)}
         </div>
       )}
+      <InlineLogSheet
+        open={inlineLogActivity != null}
+        activity={inlineLogActivity}
+        engine={engine}
+        onClose={closeInlineLog}
+      />
       {/* Test affordance — allows exercising pushScreen with an unknown key */}
       <button
         type="button"
