@@ -1,6 +1,7 @@
 /**
  * F3.0-fix — DashboardScreen: BlockSafetyMapSection inline tests.
  * B10.4 — previous-block fetches use getTrainingBlockReview (/review), not /scores.
+ * F10.1 — Dashboard recovery streaks section (plans/tickets-phase-10-polish-2026-06-04.md).
  *
  * Mocking strategy (mirrors BlockReviewScreen.test.tsx):
  *   - CalendarHeatmap: stubbed to a simple div — tests verify screen wiring, not heatmap internals
@@ -13,7 +14,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { screen, cleanup } from '@testing-library/react';
 import { renderWithProviders } from '../../test/renderWithProviders';
 import { mockEngine, resetMockEngine } from '../../test/mockEngine';
-import type { TrainingBlock, DailySafetyScore } from '../../types';
+import type { TrainingBlock, DailySafetyScore, RecoveryStreak } from '../../types';
 import { DashboardScreen } from './DashboardScreen';
 
 vi.mock('../../components/composites/CalendarHeatmap', () => ({
@@ -83,6 +84,32 @@ const DAILY_SCORES: DailySafetyScore[] = [
   { date: '2026-05-01', state: 'safe', violations: [], hadFlareUp: false },
   { date: '2026-05-02', state: 'caution', violations: [], hadFlareUp: false },
 ];
+
+const DAILY_RECOVERY_STREAK: RecoveryStreak = {
+  recoveryTargetId: 'rt-stretch',
+  activityId: 'act-stretch',
+  activityName: 'Stretching',
+  activityClassId: 'cls-mobility',
+  targetFrequency: 1,
+  frequencyUnit: 'daily',
+  currentStreakDays: 4,
+};
+
+const WEEKLY_RECOVERY_STREAK: RecoveryStreak = {
+  recoveryTargetId: 'rt-contrast',
+  activityId: 'act-contrast',
+  activityName: 'Contrast therapy',
+  activityClassId: 'cls-recovery',
+  targetFrequency: 3,
+  frequencyUnit: 'weekly',
+  currentStreakDays: 2,
+};
+
+function assertAppearsAfter(earlier: HTMLElement, later: HTMLElement): void {
+  expect(
+    earlier.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+}
 
 function makeUseQuerySuccess(data: unknown) {
   return {
@@ -242,6 +269,59 @@ describe('DashboardScreen — BlockSafetyMapSection: no active block', () => {
     ).not.toBeInTheDocument();
 
     expect(screen.queryByTestId('calendar-heatmap')).not.toBeInTheDocument();
+  });
+});
+
+describe('DashboardScreen — F10.1 recovery streaks section', () => {
+  it('renders a Recovery streaks section below Last 7 days with daily and weekly copy', () => {
+    mockEngine.block = ACTIVE_BLOCK;
+    mockEngine.dailyScores = DAILY_SCORES;
+    mockEngine.previousBlocks = [];
+    mockEngine.recoveryStreaks = [DAILY_RECOVERY_STREAK, WEEKLY_RECOVERY_STREAK];
+
+    useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
+
+    renderDashboard();
+
+    const weeklyLabel = screen.getByText('Last 7 days');
+    const recoveryLabel = screen.getByText('Recovery streaks');
+    assertAppearsAfter(weeklyLabel, recoveryLabel);
+
+    expect(screen.getByText(/Stretching: 4 days in a row/i)).toBeInTheDocument();
+    expect(screen.getByText(/Contrast therapy: 2 weeks in a row/i)).toBeInTheDocument();
+  });
+
+  it('shows compact empty copy when recoveryStreaks is empty on an active block', () => {
+    mockEngine.block = ACTIVE_BLOCK;
+    mockEngine.dailyScores = DAILY_SCORES;
+    mockEngine.previousBlocks = [];
+    mockEngine.recoveryStreaks = [];
+
+    useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
+
+    renderDashboard();
+
+    expect(screen.getByText('Recovery streaks')).toBeInTheDocument();
+    expect(
+      screen.getByText(/No recovery targets in this block/i),
+    ).toBeInTheDocument();
+  });
+
+  it('keeps recovery streaks separate from the clean streak (Compliance) section', () => {
+    mockEngine.block = ACTIVE_BLOCK;
+    mockEngine.dailyScores = DAILY_SCORES;
+    mockEngine.previousBlocks = [];
+    mockEngine.recoveryStreaks = [DAILY_RECOVERY_STREAK];
+    mockEngine.cleanStreak = 3;
+
+    useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
+
+    renderDashboard();
+
+    expect(screen.getByText('Recovery streaks')).toBeInTheDocument();
+    expect(screen.getByText('Compliance')).toBeInTheDocument();
+    expect(screen.getByText(/Stretching: 4 days in a row/i)).toBeInTheDocument();
+    expect(screen.getByText(/3 clean sessions in a row/i)).toBeInTheDocument();
   });
 });
 
