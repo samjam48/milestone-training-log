@@ -10,6 +10,7 @@ import {
   GoalsScreen,
   GoalEditorScreen,
   SettingsScreen,
+  LoginScreen,
   EditBlockRulesScreen,
   BlockReviewScreen,
   NewTrainingBlockScreen,
@@ -126,6 +127,7 @@ function resolveStackScreen(
 
 export function App(): React.ReactElement {
   const engine = useMilestoneEngine();
+  const [sessionEnded, setSessionEnded] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState<TabKey>('dashboard');
   const [overlay, setOverlay] = React.useState<OverlayKey | null>(null);
   const [logActivityPrefillId, setLogActivityPrefillId] = React.useState<
@@ -137,6 +139,21 @@ export function App(): React.ReactElement {
   const pushScreen = (screen: string, params: Record<string, unknown> = {}): void =>
     setScreenStack((s) => [...s, { screen, params }]);
   const popScreen = (): void => setScreenStack((s) => s.slice(0, -1));
+
+  const showLogin = engine.isUnauthorized || sessionEnded;
+
+  const handleAuthenticated = (): void => {
+    setSessionEnded(false);
+    engine.refetchAll();
+  };
+
+  const handleUnauthenticated = (): void => {
+    setSessionEnded(true);
+  };
+
+  if (showLogin) {
+    return <LoginScreen onAuthenticated={handleAuthenticated} />;
+  }
 
   const shellBlocked = engine.isFatalError || engine.isInitialLoading;
   const showTabBar =
@@ -221,6 +238,7 @@ export function App(): React.ReactElement {
         onNewBlock={() => pushScreen('new-training-block')}
         onViewBlock={(blockId) => pushScreen('block-review', { blockId })}
         onEditActivity={(activity) => pushScreen('activity-manager', { activity })}
+        onUnauthenticated={handleUnauthenticated}
       />
     );
   } else {
