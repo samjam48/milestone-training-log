@@ -9,6 +9,7 @@ requires-python = ">=3.12"
 dependencies = [
   "alembic",
   "fastapi>=0.115",
+  "psycopg[binary]",
   "pydantic-settings",
   "python-dotenv",
   "sqlmodel>=0.0.21",
