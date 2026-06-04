@@ -514,6 +514,7 @@ export interface DashboardPayload {
   weeklyProgress: WeeklyProgress[];
   dailyScores: ReturnType<typeof mapDailySafetyScoreFromApi>[];
   loadSeries: LoadPoint[];
+  graphClassId: string | null;
   flareUpDates: ISODate[];
   weekLoadThreshold: number;
   cleanStreak: number;
@@ -543,6 +544,8 @@ export function mapDashboardFromApi(raw: Record<string, unknown>): DashboardPayl
     weeklyProgress: mapList(raw.weekly_progress, mapWeeklyProgressFromApi),
     dailyScores: mapList(raw.daily_scores, mapDailySafetyScoreFromApi),
     loadSeries: mapList(raw.load_series, mapLoadPointFromApi),
+    graphClassId:
+      raw.graph_class_id == null ? null : String(raw.graph_class_id),
     flareUpDates: Array.isArray(raw.flare_up_dates)
       ? raw.flare_up_dates.map((date) => String(date) as ISODate)
       : [],

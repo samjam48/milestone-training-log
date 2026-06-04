@@ -133,6 +133,7 @@ describe('mapDashboardFromApi', () => {
     expect(mapped.weeklyProgress).toEqual([]);
     expect(mapped.dailyScores).toHaveLength(1);
     expect(mapped.loadSeries).toEqual([]);
+    expect(mapped.graphClassId).toBe('cls-foot');
     expect(mapped.flareUpDates).toEqual([]);
     expect(mapped.weekLoadThreshold).toBe(120);
     expect(mapped.cleanStreak).toBe(2);
@@ -158,6 +159,7 @@ describe('mapDashboardFromApi', () => {
     const mapped = mapDashboardFromApi(dashboardReadSnakeNoBlock);
 
     expect(mapped.block).toBeNull();
+    expect(mapped.graphClassId).toBeNull();
     expect(mapped.recoveryStreaks).toEqual([]);
     expect(mapped.activityClasses).toEqual([]);
     expect(mapped.goals).toHaveLength(dashboardReadSnakeNoBlock.goals.length);

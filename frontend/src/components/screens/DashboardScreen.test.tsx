@@ -4,6 +4,7 @@
  * F10.1 — Dashboard recovery streaks section (plans/tickets-phase-10-polish-2026-06-04.md).
  * F10.2 — Dashboard clean streak relabel (plans/tickets-phase-10-polish-2026-06-04.md).
  * F10.3 — Dashboard delayed-tax / load-risk panel (plans/tickets-phase-10-polish-2026-06-04.md).
+ * F10.5 — Load graph title from engine.graphClassId (plans/tickets-phase-10-polish-2026-06-04.md).
  *
  * Mocking strategy (mirrors BlockReviewScreen.test.tsx):
  *   - CalendarHeatmap: stubbed to a simple div — tests verify screen wiring, not heatmap internals
@@ -117,6 +118,15 @@ const FOOT_PERFORMANCE_CLASS: ActivityClass = {
   createdAt: '2026-04-07T06:00:00Z',
 };
 
+const ARM_PERFORMANCE_CLASS: ActivityClass = {
+  id: 'cls-arm',
+  userId: 'user-1',
+  name: 'Upper body',
+  type: 'performance',
+  defaultRecoveryWindowDays: 2,
+  createdAt: '2026-04-07T06:00:00Z',
+};
+
 const DELAYED_TAX_BASE: Omit<DelayedTaxResponse, 'hits'> = {
   asOf: '2026-05-28',
   riskWindowDays: 7,
@@ -182,6 +192,7 @@ function setupDashboardWithDelayedTax(
   mockEngine.dailyScores = DAILY_SCORES;
   mockEngine.previousBlocks = [];
   mockEngine.activityClasses = [FOOT_PERFORMANCE_CLASS];
+  mockEngine.graphClassId = 'cls-foot';
   mockEngine.hasCheckedInToday = true;
   mockEngine.delayedTax = delayedTax;
 }
@@ -444,6 +455,53 @@ describe('DashboardScreen — F10.2 clean streak relabel', () => {
 
     expect(screen.getByText('Clean streak')).toBeInTheDocument();
     expect(screen.getByText(/0 clean sessions in a row/i)).toBeInTheDocument();
+  });
+});
+
+describe('DashboardScreen — F10.5 load graph title (engine.graphClassId / B10.2)', () => {
+  it('uses the activity class name for graphClassId, not first performance class by ID sort', () => {
+    mockEngine.block = ACTIVE_BLOCK;
+    mockEngine.dailyScores = DAILY_SCORES;
+    mockEngine.previousBlocks = [];
+    mockEngine.activityClasses = [ARM_PERFORMANCE_CLASS, FOOT_PERFORMANCE_CLASS];
+    mockEngine.graphClassId = 'cls-foot';
+    mockEngine.hasCheckedInToday = true;
+
+    useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
+
+    renderDashboard();
+
+    expect(screen.getByText('Foot load')).toBeInTheDocument();
+    expect(screen.queryByText('Upper body')).not.toBeInTheDocument();
+  });
+
+  it('shows Weekly load when graphClassId is null', () => {
+    mockEngine.block = ACTIVE_BLOCK;
+    mockEngine.dailyScores = DAILY_SCORES;
+    mockEngine.previousBlocks = [];
+    mockEngine.activityClasses = [FOOT_PERFORMANCE_CLASS];
+    mockEngine.graphClassId = null;
+
+    useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
+
+    renderDashboard();
+
+    expect(screen.getByText('Weekly load')).toBeInTheDocument();
+    expect(screen.queryByText('Foot load')).not.toBeInTheDocument();
+  });
+
+  it('shows Unknown class when graphClassId is not in activityClasses', () => {
+    mockEngine.block = ACTIVE_BLOCK;
+    mockEngine.dailyScores = DAILY_SCORES;
+    mockEngine.previousBlocks = [];
+    mockEngine.activityClasses = [ARM_PERFORMANCE_CLASS];
+    mockEngine.graphClassId = 'cls-foot';
+
+    useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
+
+    renderDashboard();
+
+    expect(screen.getByText('Unknown class')).toBeInTheDocument();
   });
 });
 

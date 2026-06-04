@@ -12,7 +12,7 @@ import { WeeklyLoadGraph } from '../composites/WeeklyLoadGraph';
 import { BlockSafetyMapSection } from '../composites/BlockSafetyMapSection';
 import { LoadRiskSection } from '../composites/LoadRiskSection';
 import type { MilestoneEngineResult } from '../../hooks/useMilestoneEngine';
-import type { Activity, ActivityClass, RecoveryStreak, SafetyState, TrainingBlock } from '../../types';
+import type { Activity, ActivityClass, RecoveryStreak, SafetyState } from '../../types';
 
 interface Props {
   engine: MilestoneEngineResult;
@@ -40,17 +40,14 @@ function progressLabel(value: number, unit: string): string {
   return `${value} ${unit}`;
 }
 
-function resolveLoadGraphTitle(
-  block: TrainingBlock,
+function loadGraphTitle(
+  graphClassId: string | null,
   activityClasses: ActivityClass[],
 ): string {
-  if (!block.id) {
+  if (graphClassId === null) {
     return 'Weekly load';
   }
-  const performanceClasses = [...activityClasses]
-    .filter((c) => c.type === 'performance')
-    .sort((a, b) => a.id.localeCompare(b.id));
-  return performanceClasses[0]?.name ?? 'Load';
+  return activityClasses.find((c) => c.id === graphClassId)?.name ?? 'Unknown class';
 }
 
 function classStatusLabel(
@@ -130,11 +127,11 @@ export const DashboardScreen: React.FC<Props> = ({
   const {
     todayDate, userName, hasCheckedInToday,
     suggestions, weeklyProgress, classStatuses,
-    loadSeries, flareUpDates, weekLoadThreshold, cleanStreak, recoveryStreaks,
+    loadSeries, graphClassId, flareUpDates, weekLoadThreshold, cleanStreak, recoveryStreaks,
     block, activityClasses, activities, delayedTax,
   } = engine;
 
-  const loadGraphTitle = resolveLoadGraphTitle(block, activityClasses);
+  const weeklyLoadGraphTitle = loadGraphTitle(graphClassId, activityClasses);
 
   return (
     <div className="flex flex-col gap-5 px-4 pt-5 pb-4">
@@ -212,7 +209,7 @@ export const DashboardScreen: React.FC<Props> = ({
         series={loadSeries}
         threshold={weekLoadThreshold}
         flareUpDates={flareUpDates}
-        title={loadGraphTitle}
+        title={weeklyLoadGraphTitle}
         subtitle="Rolling 7-day · full block"
       />
 

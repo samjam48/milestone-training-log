@@ -190,6 +190,7 @@ export const dashboardReadSnake = {
     },
   ],
   load_series: [] as unknown[],
+  graph_class_id: 'cls-foot' as string | null,
   flare_up_dates: [] as string[],
   week_load_threshold: 120,
   clean_streak: 2,
@@ -205,6 +206,7 @@ export const dashboardReadSnakeNoBlock = {
   activities: [],
   logs: [],
   recovery_streaks: [],
+  graph_class_id: null,
 };
 
 export const fastApiDetailErrorBody = JSON.stringify({
