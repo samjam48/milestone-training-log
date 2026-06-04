@@ -12,6 +12,7 @@ from httpx import AsyncClient
 from app.services.load_engine import compute_weekly_progress
 from app.tests.helpers.load_api_seed import (
     seed_delayed_tax_acute_scenario,
+    seed_delayed_tax_elevated_load_without_active_block,
     seed_delayed_tax_stacked_flare_scenario,
     seed_flare_up_incident,
     seed_load_mock_graph,
@@ -420,6 +421,31 @@ async def test_get_delayed_tax_elevated_load_from_foot_baseline(
     elevated = _hits_of_type(payload, "elevated_load")
     foot_elevated = [h for h in elevated if h["activity_class_id"] == "cls-foot"]
     assert foot_elevated, "Expected elevated_load for foot class with 14-day baseline"
+    assert any(h["contributing_date"] == "2026-05-22" for h in foot_elevated)
+
+
+async def test_get_delayed_tax_elevated_load_without_active_block(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    seed_delayed_tax_elevated_load_without_active_block(app_with_test_database)
+
+    active_block = await client.get("/api/training-blocks/active")
+    assert active_block.status_code == 404
+
+    response = await client.get(DELAYED_TAX_URL, params={"as_of": AS_OF})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["as_of"] == AS_OF
+    assert payload["risk_window_days"] == 7
+    assert payload["baseline_days"] == 14
+    assert payload["pain_threshold"] == 3
+    elevated = _hits_of_type(payload, "elevated_load")
+    foot_elevated = [h for h in elevated if h["activity_class_id"] == "cls-foot"]
+    assert foot_elevated, (
+        "Expected elevated_load for foot class without active block (proactive layer)"
+    )
     assert any(h["contributing_date"] == "2026-05-22" for h in foot_elevated)
 
 

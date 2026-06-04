@@ -184,6 +184,46 @@ def seed_flare_up_incident(
         session.commit()
 
 
+def seed_delayed_tax_elevated_load_without_active_block(
+    app_with_test_database: FastAPI,
+) -> None:
+    """Foot-load logs for proactive elevated_load scan; no active training block."""
+    for cls in ACTIVITY_CLASSES:
+        seed_activity_class(
+            app_with_test_database,
+            class_id=cls["id"],
+            name=cls["name"],
+            description=f"{cls['name']} (mock)",
+            class_type=cls["type"],
+            default_recovery_window_days=cls["default_recovery_window_days"],
+        )
+
+    for activity in ACTIVITIES:
+        seed_activity(
+            app_with_test_database,
+            activity_id=activity["id"],
+            activity_class_id=activity["activity_class_id"],
+            name=activity["name"],
+            activity_type=activity["type"],
+            default_volume_unit=activity["default_volume_unit"],
+            is_active=activity["is_active"],
+        )
+
+    for log in LOGS:
+        seed_activity_log(
+            app_with_test_database,
+            log_id=log["id"],
+            activity_id=log["activity_id"],
+            logged_date=date.fromisoformat(log["logged_date"]),
+            duration_minutes=log["duration_minutes"],
+            volume_value=log["volume_value"],
+            volume_unit=log.get("volume_unit"),
+            rpe=log.get("rpe"),
+            post_activity_feel=log.get("post_activity_feel"),
+            rule_violations_at_log=log.get("rule_violations_at_log"),
+        )
+
+
 def seed_delayed_tax_foot_graph(app_with_test_database: FastAPI) -> None:
     """Foot performance class, active block, and rest rule (no mock logs)."""
     foot_class = next(c for c in ACTIVITY_CLASSES if c["id"] == "cls-foot")
