@@ -49,9 +49,19 @@ export function parseApiError(status: number, bodyText: string): ApiError {
   }
 }
 
-function apiPath(path: string): string {
+function resolveApiUrl(path: string): string {
   const normalized = path.startsWith('/') ? path : `/${path}`;
-  return `/api${normalized}`;
+  const apiPath = `/api${normalized}`;
+  const baseUrl = import.meta.env.VITE_API_BASE_URL ?? '';
+  if (!baseUrl) {
+    return apiPath;
+  }
+  const trimmedBase = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+  return `${trimmedBase}${apiPath}`;
+}
+
+export function isUnauthorizedError(err: unknown): err is ApiError {
+  return err instanceof ApiError && err.status === 401;
 }
 
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -60,9 +70,10 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
     headers.set('Content-Type', 'application/json');
   }
 
-  const response = await fetch(apiPath(path), {
+  const response = await fetch(resolveApiUrl(path), {
     ...options,
     headers,
+    credentials: 'include',
   });
 
   if (!response.ok) {

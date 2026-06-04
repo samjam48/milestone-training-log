@@ -1,11 +1,21 @@
 /**
- * F1.2 — apiFetch / ApiError client tests (written before implementation).
+ * F1.2 — apiFetch / ApiError client tests.
+ * F11.1 — session credentials, VITE_API_BASE_URL, 401 / isUnauthorizedError.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { apiFetch, apiFetchOrNullOn404, ApiError } from './client';
+import {
+  apiFetch,
+  apiFetchOrNullOn404,
+  ApiError,
+  isUnauthorizedError,
+} from './client';
 import { fastApiDetailErrorBody } from './testFixtures';
 
 const originalFetch = globalThis.fetch;
+
+const unauthorizedErrorBody = JSON.stringify({
+  detail: 'Not authenticated',
+});
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -21,9 +31,10 @@ describe('apiFetch', () => {
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    vi.unstubAllEnvs();
   });
 
-  it('requests relative /api paths', async () => {
+  it('requests relative /api paths with credentials include', async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ status: 'ok' }));
     globalThis.fetch = fetchMock;
 
@@ -31,8 +42,51 @@ describe('apiFetch', () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/health',
-      expect.objectContaining({ headers: expect.any(Object) }),
+      expect.objectContaining({
+        credentials: 'include',
+        headers: expect.any(Headers),
+      }),
     );
+  });
+
+  it('prefixes fetch URL with VITE_API_BASE_URL when set', async () => {
+    vi.stubEnv('VITE_API_BASE_URL', 'https://api.example.com');
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ status: 'ok' }));
+    globalThis.fetch = fetchMock;
+
+    await apiFetch<{ status: string }>('/health');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.example.com/api/health',
+      expect.objectContaining({ credentials: 'include' }),
+    );
+  });
+
+  it('uses relative /api path when VITE_API_BASE_URL is empty', async () => {
+    vi.stubEnv('VITE_API_BASE_URL', '');
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ status: 'ok' }));
+    globalThis.fetch = fetchMock;
+
+    await apiFetch<{ status: string }>('/dashboard');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/dashboard',
+      expect.objectContaining({ credentials: 'include' }),
+    );
+  });
+
+  it('throws ApiError with status 401 on unauthorized response', async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValue(new Response(unauthorizedErrorBody, { status: 401 }));
+
+    await expect(apiFetch('/dashboard')).rejects.toSatisfy((err: unknown) => {
+      expect(err).toBeInstanceOf(ApiError);
+      const apiError = err as ApiError;
+      expect(apiError.status).toBe(401);
+      expect(apiError.message).toBe('Not authenticated');
+      return true;
+    });
   });
 
   it('returns parsed JSON for 2xx responses', async () => {
@@ -87,6 +141,19 @@ describe('apiFetchOrNullOn404', () => {
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    vi.unstubAllEnvs();
+  });
+
+  it('passes credentials include to fetch', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ id: 'ci-1' }));
+    globalThis.fetch = fetchMock;
+
+    await apiFetchOrNullOn404<{ id: string }>('/daily-check-ins/today');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/daily-check-ins/today',
+      expect.objectContaining({ credentials: 'include' }),
+    );
   });
 
   it('returns null on 404 without throwing', async () => {
@@ -113,6 +180,37 @@ describe('apiFetchOrNullOn404', () => {
       .mockResolvedValue(new Response(fastApiDetailErrorBody, { status: 422 }));
 
     await expect(apiFetchOrNullOn404('/daily-check-ins/today')).rejects.toBeInstanceOf(ApiError);
+  });
+
+  it('rethrows 401 ApiError instead of returning null', async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValue(new Response(unauthorizedErrorBody, { status: 401 }));
+
+    await expect(apiFetchOrNullOn404('/daily-check-ins/today')).rejects.toSatisfy(
+      (err: unknown) => {
+        expect(err).toBeInstanceOf(ApiError);
+        expect((err as ApiError).status).toBe(401);
+        return true;
+      },
+    );
+  });
+});
+
+describe('isUnauthorizedError', () => {
+  it('returns true for ApiError with status 401', () => {
+    expect(isUnauthorizedError(new ApiError(401, 'Not authenticated'))).toBe(true);
+  });
+
+  it('returns false for other ApiError statuses', () => {
+    expect(isUnauthorizedError(new ApiError(404, 'Not found'))).toBe(false);
+    expect(isUnauthorizedError(new ApiError(422, 'Validation failed'))).toBe(false);
+  });
+
+  it('returns false for non-ApiError values', () => {
+    expect(isUnauthorizedError(new Error('generic'))).toBe(false);
+    expect(isUnauthorizedError(null)).toBe(false);
+    expect(isUnauthorizedError('401')).toBe(false);
   });
 });
 
