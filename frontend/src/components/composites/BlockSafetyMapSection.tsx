@@ -5,7 +5,7 @@
 import * as React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { CalendarHeatmap } from './CalendarHeatmap';
-import { getTrainingBlockScores } from '../../lib/api/trainingBlocks';
+import { getTrainingBlockReview } from '../../lib/api/trainingBlocks';
 import type { MilestoneEngineResult } from '../../hooks/useMilestoneEngine';
 import type { DailySafetyScore, TrainingBlock, ISODate } from '../../types';
 
@@ -33,7 +33,7 @@ function formatDateRange(startDate: string, endDate: string | undefined): string
 }
 
 // ---------------------------------------------------------------------------
-// PreviousBlockPage — one page per previous block, fetches its own scores
+// PreviousBlockPage — one page per previous block, fetches review daily scores
 // ---------------------------------------------------------------------------
 
 interface PreviousBlockPageProps {
@@ -42,8 +42,8 @@ interface PreviousBlockPageProps {
 
 const PreviousBlockPage: React.FC<PreviousBlockPageProps> = ({ block }) => {
   const { data, isPending, isError, refetch } = useQuery({
-    queryKey: ['block-scores', block.id],
-    queryFn: () => getTrainingBlockScores(block.id),
+    queryKey: ['block-review', block.id],
+    queryFn: () => getTrainingBlockReview(block.id),
   });
 
   return (
@@ -60,7 +60,7 @@ const PreviousBlockPage: React.FC<PreviousBlockPageProps> = ({ block }) => {
 
       {isPending && (
         <div
-          data-testid="block-scores-loading"
+          data-testid="block-review-loading"
           aria-busy="true"
           className="skeleton h-40 w-full rounded-lg bg-bg-sunken animate-pulse"
         />
@@ -68,7 +68,7 @@ const PreviousBlockPage: React.FC<PreviousBlockPageProps> = ({ block }) => {
 
       {isError && (
         <div role="alert" className="flex flex-col items-center gap-3 py-8">
-          <p className="text-caption text-danger-fg">Could not load scores</p>
+          <p className="text-caption text-danger-fg">Could not load block review</p>
           <button
             type="button"
             onClick={() => { void refetch(); }}
@@ -83,7 +83,7 @@ const PreviousBlockPage: React.FC<PreviousBlockPageProps> = ({ block }) => {
         <CalendarHeatmap
           startDate={block.startDate as ISODate}
           endDate={(block.endDate ?? block.startDate) as ISODate}
-          scores={(data ?? []) as DailySafetyScore[]}
+          scores={(data?.dailyScores ?? []) as DailySafetyScore[]}
         />
       )}
     </div>

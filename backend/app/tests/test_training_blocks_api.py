@@ -757,6 +757,29 @@ async def test_get_training_block_review_empty_load_series_without_graph_class(
     payload = response.json()
     assert payload["block"]["id"] == "blk-review-empty"
     assert payload["load_series"] == []
+    assert payload["daily_scores"] == []
+
+
+async def test_get_training_block_review_completed_block_with_no_data_returns_empty_daily_scores(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    """B10.4 edge case — previous block with no scores in range → empty daily_scores."""
+    seed_training_block(
+        app_with_test_database,
+        block_id="blk-review-no-scores",
+        name="Empty Completed Block",
+        start_date=date(2026, 4, 1),
+        end_date=date(2026, 4, 3),
+        status="completed",
+    )
+
+    response = await client.get("/api/training-blocks/blk-review-no-scores/review")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["block"]["id"] == "blk-review-no-scores"
+    assert payload["daily_scores"] == []
 
 
 async def test_create_active_training_block_copies_previous_active_rules_and_closes_outgoing_block(
