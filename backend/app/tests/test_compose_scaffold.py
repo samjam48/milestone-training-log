@@ -4,7 +4,6 @@ from app.tests.compose_support import (
     BACKEND_DOCKERFILE,
     COMPOSE_FILE,
     GITIGNORE_FILE,
-    REPO_ROOT,
     get_list,
     get_mapping,
     load_compose_config,
