@@ -12,7 +12,7 @@ export function formatDisplayDate(iso: string): string {
   if (match === null) {
     return iso;
   }
-  const day = Number.parseInt(match[3], 10);
+  const day = Number.parseInt(match[3] ?? '0', 10);
   const month = new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-GB', {
     month: 'long',
     timeZone: 'UTC',
@@ -150,4 +150,127 @@ export function summarizeDelayedTaxHits(
   activityClasses: ActivityClass[],
 ): DelayedTaxHitDisplay[] {
   return hits.map((hit, index) => summarizeDelayedTaxHit(hit, index, activityClasses));
+}
+
+const PROACTIVE_LOAD_RISK_TYPES = new Set(['elevated_load', 'rest_debt']);
+
+export function proactiveLoadRiskHits(
+  hits: DelayedTaxResponse['hits'],
+): DelayedTaxResponse['hits'] {
+  return hits.filter((hit) => PROACTIVE_LOAD_RISK_TYPES.has(String(hit.hitType)));
+}
+
+function addDaysIso(iso: string, delta: number): string {
+  const dt = new Date(`${iso}T12:00:00Z`);
+  dt.setUTCDate(dt.getUTCDate() + delta);
+  return dt.toISOString().slice(0, 10);
+}
+
+/** Inclusive calendar days ending on `asOf`, oldest first. */
+export function riskWindowDayIsos(asOf: string, windowDays: number): string[] {
+  const span = Math.max(1, windowDays);
+  return Array.from({ length: span }, (_, index) => addDaysIso(asOf, index - (span - 1)));
+}
+
+export function contributingDateIso(
+  hit: DelayedTaxResponse['hits'][number],
+): string | undefined {
+  if (typeof hit.contributingDate === 'string') {
+    return hit.contributingDate;
+  }
+  if (typeof hit.symptomDate === 'string') {
+    return hit.symptomDate;
+  }
+  return undefined;
+}
+
+function readNumber(hit: Record<string, unknown>, key: string): number | undefined {
+  const value = hit[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+export type LoadRiskBarModel = {
+  key: string;
+  hitType: string;
+  className: string;
+  dateIso: string;
+  dateLabel: string;
+  eventLabel: string;
+  value: number;
+  target: number;
+  state: 'caution' | 'danger';
+};
+
+export function buildLoadRiskBarModel(
+  hit: DelayedTaxResponse['hits'][number],
+  index: number,
+  activityClasses: ActivityClass[],
+): LoadRiskBarModel | null {
+  const hitType = String(hit.hitType);
+  const raw = hit as Record<string, unknown>;
+  const className = classLabel(
+    typeof hit.activityClassId === 'string' ? hit.activityClassId : undefined,
+    activityClasses,
+  );
+  const dateIso = contributingDateIso(hit);
+  const dateLabel = dateIso != null ? formatDisplayDate(dateIso) : '';
+
+  if (hitType === 'elevated_load') {
+    const dailyLoad = readNumber(raw, 'dailyLoad');
+    const baseline = readNumber(raw, 'baselineMedianDailyLoad');
+    const loadMatch = /:\s*([\d.]+)\s*\(baseline median\s*([\d.]+)\)/i.exec(
+      typeof hit.message === 'string' ? hit.message : '',
+    );
+    const value =
+      dailyLoad ?? (loadMatch?.[1] != null ? Number.parseFloat(loadMatch[1]) : 1);
+    const target =
+      baseline ?? (loadMatch?.[2] != null ? Number.parseFloat(loadMatch[2]) : 1);
+    const safeTarget = target > 0 ? target : 1;
+    return {
+      key: `elevated-${dateIso ?? index}`,
+      hitType,
+      className,
+      dateIso: dateIso ?? '',
+      dateLabel,
+      eventLabel: 'Elevated load',
+      value,
+      target: safeTarget,
+      state: value >= safeTarget * 1.2 ? 'danger' : 'caution',
+    };
+  }
+
+  if (hitType === 'rest_debt') {
+    const gap = readNumber(raw, 'daysSinceLastSession');
+    const required = readNumber(raw, 'requiredRestDays');
+    const gapMatch = /only\s+(\d+)\s+day/i.exec(
+      typeof hit.message === 'string' ? hit.message : '',
+    );
+    const needMatch = /need\s+(\d+)/i.exec(typeof hit.message === 'string' ? hit.message : '');
+    const gapDays = gap ?? (gapMatch?.[1] != null ? Number.parseInt(gapMatch[1], 10) : 1);
+    const needDays =
+      required ?? (needMatch?.[1] != null ? Number.parseInt(needMatch[1], 10) : 3);
+    return {
+      key: `rest-${dateIso ?? index}`,
+      hitType,
+      className,
+      dateIso: dateIso ?? '',
+      dateLabel,
+      eventLabel: 'Rest debt',
+      value: gapDays,
+      target: needDays,
+      state: 'danger',
+    };
+  }
+
+  return null;
+}
+
+export function buildLoadRiskBarModels(
+  hits: DelayedTaxResponse['hits'],
+  activityClasses: ActivityClass[],
+): LoadRiskBarModel[] {
+  return proactiveLoadRiskHits(hits)
+    .map((hit, index) => buildLoadRiskBarModel(hit, index, activityClasses))
+    .filter((row): row is LoadRiskBarModel => row !== null)
+    .sort((a, b) => a.dateIso.localeCompare(b.dateIso));
 }

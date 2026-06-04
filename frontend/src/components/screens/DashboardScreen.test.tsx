@@ -498,15 +498,73 @@ describe('DashboardScreen — F10.5 load graph title (engine.graphClassId / B10.
   });
 });
 
-describe('DashboardScreen — delayed tax not on dashboard', () => {
-  it('does not render Load risk even when engine.delayedTax has hits', () => {
+describe('DashboardScreen — Load risk visual panel (engine.delayedTax)', () => {
+  it('renders Load risk after the load graph with week strip and event bars', () => {
     setupDashboardWithDelayedTax(PROACTIVE_ONLY_DELAYED_TAX);
     useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
 
     renderDashboard();
 
-    expect(screen.getByText('Block Safety Map')).toBeInTheDocument();
-    expect(screen.queryByText('Load risk')).not.toBeInTheDocument();
+    const section = screen.getByTestId('load-risk-section');
+    const blockSafetyLabel = screen.getByText('Block Safety Map');
+
+    expect(section).toBeInTheDocument();
+    assertAppearsAfter(section, blockSafetyLabel);
+
+    expect(screen.getByTestId('load-risk-week-strip')).toBeInTheDocument();
+    expect(screen.getByTestId('load-risk-event-bars')).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId('load-risk-event-bars')).getAllByRole('progressbar'),
+    ).toHaveLength(2);
+    expect(screen.getByText(/22nd May/i)).toBeInTheDocument();
+    expect(screen.getByText(/24th May/i)).toBeInTheDocument();
+    expect(screen.getByText(/Elevated load/i)).toBeInTheDocument();
+    expect(screen.getByText(/Rest debt/i)).toBeInTheDocument();
+  });
+
+  it('highlights flagged days on the week strip', () => {
+    setupDashboardWithDelayedTax(PROACTIVE_ONLY_DELAYED_TAX);
+    useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
+
+    renderDashboard();
+
+    const strip = screen.getByTestId('load-risk-week-strip');
+    const flagged = strip.querySelectorAll('[data-flagged="true"]');
+    expect(flagged.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('shows safe copy when delayedTax has no proactive hits', () => {
+    setupDashboardWithDelayedTax(EMPTY_DELAYED_TAX);
+    useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
+
+    renderDashboard();
+
+    expect(
+      screen.getByText(/No elevated load or rest-debt flags in the last 7 days/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId('load-risk-event-bars')).not.toBeInTheDocument();
+  });
+
+  it('omits load risk section while delayedTax is undefined', () => {
+    setupDashboardWithDelayedTax(undefined);
+    useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
+
+    renderDashboard();
+
+    expect(screen.queryByTestId('load-risk-section')).not.toBeInTheDocument();
+  });
+
+  it('does not show symptom-only hits as event bars', () => {
+    setupDashboardWithDelayedTax(SYMPTOM_LINKED_DELAYED_TAX);
+    useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
+
+    renderDashboard();
+
+    expect(screen.getByTestId('load-risk-section')).toBeInTheDocument();
+    expect(screen.queryByTestId('load-risk-event-bars')).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/No elevated load or rest-debt flags in the last 7 days/i),
+    ).toBeInTheDocument();
   });
 });
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import date
-from typing import Any, TypeVar
+from typing import Any
 
 import pytest
 from fastapi import FastAPI
@@ -19,8 +19,6 @@ from app.tests.helpers.seed import (
     seed_weekly_target,
 )
 
-T = TypeVar("T")
-
 AS_OF = FROZEN_TODAY
 DAY_BEFORE_AS_OF = date(2026, 5, 24)
 BLOCK_START = date(2026, 4, 1)
@@ -30,8 +28,8 @@ ACTIVE_BLOCK_ID = "blk-ms-active"
 FOOT_TARGET_ID = "wt-foot-ms"
 
 
-def _missing_feature(name: str) -> Callable[..., T]:
-    def _raise(*_args: object, **_kwargs: object) -> T:
+def _missing_feature(name: str) -> Callable[..., Any]:
+    def _raise(*_args: object, **_kwargs: object) -> Any:
         raise AssertionError(f"B10.1: implement {name}")
 
     return _raise

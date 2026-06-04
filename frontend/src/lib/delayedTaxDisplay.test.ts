@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { formatDisplayDate, summarizeDelayedTaxHit } from './delayedTaxDisplay';
+import {
+  buildLoadRiskBarModels,
+  formatDisplayDate,
+  proactiveLoadRiskHits,
+  summarizeDelayedTaxHit,
+} from './delayedTaxDisplay';
+import type { DelayedTaxResponse } from '../hooks/useMilestoneEngine';
 import type { ActivityClass } from '../types';
 
 const CLASSES: ActivityClass[] = [
@@ -52,5 +58,35 @@ describe('delayedTaxDisplay', () => {
     expect(row.dateLabel).toBe('4th June');
     expect(row.summary).toBe('Earlier load this week may have contributed');
     expect(row.summary).not.toMatch(/2026-/);
+  });
+});
+
+describe('load risk bar models', () => {
+  const hits: DelayedTaxResponse['hits'] = [
+    {
+      hitType: 'elevated_load',
+      activityClassId: 'cls-foot',
+      contributingDate: '2026-05-22',
+      dailyLoad: 18,
+      baselineMedianDailyLoad: 10,
+      message: 'Elevated load on 2026-05-22: 18.0 (baseline median 10.0)',
+    },
+    {
+      hitType: 'symptom_marker',
+      symptomDate: '2026-05-28',
+      message: 'Symptom recorded on 2026-05-28',
+    },
+  ];
+
+  it('filters proactive hits only', () => {
+    expect(proactiveLoadRiskHits(hits)).toHaveLength(1);
+  });
+
+  it('builds progress bar metrics for elevated load', () => {
+    const models = buildLoadRiskBarModels(hits, CLASSES);
+    expect(models).toHaveLength(1);
+    expect(models[0]?.value).toBe(18);
+    expect(models[0]?.target).toBe(10);
+    expect(models[0]?.dateLabel).toBe('22nd May');
   });
 });

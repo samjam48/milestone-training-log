@@ -10,6 +10,7 @@ import { StatusDot } from '../ui/StatusDot';
 import { SuggestedActivityCard } from '../composites/SuggestedActivityCard';
 import { WeeklyLoadGraph } from '../composites/WeeklyLoadGraph';
 import { BlockSafetyMapSection } from '../composites/BlockSafetyMapSection';
+import { LoadRiskSection } from '../composites/LoadRiskSection';
 import type { MilestoneEngineResult } from '../../hooks/useMilestoneEngine';
 import type { Activity, ActivityClass, RecoveryStreak, SafetyState } from '../../types';
 
@@ -127,7 +128,7 @@ export const DashboardScreen: React.FC<Props> = ({
     todayDate, userName, hasCheckedInToday,
     suggestions, weeklyProgress, classStatuses,
     loadSeries, graphClassId, flareUpDates, weekLoadThreshold, cleanStreak, recoveryStreaks,
-    block, activityClasses, activities,
+    block, activityClasses, activities, delayedTax,
   } = engine;
 
   const weeklyLoadGraphTitle = loadGraphTitle(graphClassId, activityClasses);
@@ -211,6 +212,8 @@ export const DashboardScreen: React.FC<Props> = ({
         title={weeklyLoadGraphTitle}
         subtitle="Rolling 7-day · full block"
       />
+
+      <LoadRiskSection delayedTax={delayedTax} activityClasses={activityClasses} />
 
       {/* ── Block safety map ── */}
       <BlockSafetyMapSection engine={engine} />

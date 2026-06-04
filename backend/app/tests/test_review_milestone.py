@@ -5,8 +5,6 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-import pytest
-
 from app.tests.helpers.review_milestone_test_utils import (
     AS_OF,
     DAY_BEFORE_AS_OF,

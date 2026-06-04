@@ -13,7 +13,6 @@ from app.schemas.activity_logs import ActivityLogCreate
 from app.services.activity_logs import create_activity_log
 from app.tests.helpers.review_milestone_test_utils import (
     ACTIVE_BLOCK_ID,
-    AS_OF,
     freeze_review_milestone_today,
     get_maybe_update_review_milestone_after_log,
     milestone_trigger_log_payload,

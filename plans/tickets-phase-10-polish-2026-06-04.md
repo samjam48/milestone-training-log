@@ -458,7 +458,7 @@ existing `TrainingBlock` update path in `services/training_blocks.py`.
 ## Manual verification checklist (phase handoff)
 
 1. Dashboard shows **Clean streak** and **Recovery streaks** as separate sections.
-2. ~~Dashboard **Load risk** panel~~ **Removed** (owner feedback 2026-06-04): delayed-tax context remains on incident/check-in success only.
+2. Dashboard **Load risk** panel: 7-day strip + per-event progress bars (proactive hits only); symptom detail stays on incident/check-in flows.
 3. Log incident with cause class → post-submit attribution subsection visible.
 4. Check-in with flare-up → attribution on success screen.
 5. Load graph title matches weekly-cap class name from rules.
@@ -484,7 +484,7 @@ existing `TrainingBlock` update path in `services/training_blocks.py`.
 
 ## Unresolved assumptions / risks
 
-- **Incident attribution timing:** F10.4 shows attribution on post-submit success step with ~800ms delay before close — may need slightly longer dismiss timer if attribution fetch is async; implementer may add `invalidateQueries` + short fetch before showing success UI.
+- **Incident attribution timing:** F10.4 success screen stays open until **Done**; cached `delayedTax` may update after refetch — optional follow-up to await refetch before showing rows.
 - **Review milestone on log delete:** B10.1 minimum is log **create**; if delete can invalidate streak, document as follow-up in BACKLOG rather than scope creep unless cheap to add in same service.
 - **MCP payload shape:** TRD minimal set chosen over older `milestone-architecture.md` bullet list; extend in production project when MCP server is built.
 - **`EditBlockRulesScreen` scope creep:** F10.10 is the largest frontend ticket because remove-inline **requires** porting add/delete — budget extra review time.
@@ -497,4 +497,4 @@ After owner signs off this ticket set, update `AGENTS.md` **CURRENT SPRINT** to 
 
 ---
 
-**Status:** `IMPLEMENTED` (2026-06-04) — all tickets B10.1–F10.10 committed on `feat/phase-10-polish`. Post-handoff UX: dashboard Load risk panel removed (owner feedback); incident/check-in attribution uses dismissible success + friendly dates. Owner verification: `make lint`, `make test`, manual checklist below.
+**Status:** `IMPLEMENTED` (2026-06-04) — all tickets B10.1–F10.10 on `feat/phase-10-polish`. Post-handoff UX: visual Load risk panel (7-day strip + per-event bars); incident/check-in attribution with Done dismiss + friendly dates. Owner verification: `make lint`, `make test`, manual checklist below.
