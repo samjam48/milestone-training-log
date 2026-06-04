@@ -33,6 +33,7 @@ from sqlmodel import Session, SQLModel, create_engine
 
 import app.models  # noqa: F401 — registers all SQLModel metadata
 from app.database import get_session
+from app.tests.conftest import TEST_AUTH_PASSWORD, TEST_SESSION_SECRET
 
 # ---------------------------------------------------------------------------
 # Helper: build an in-memory test database and return a FastAPI app.
@@ -80,6 +81,7 @@ def _build_app_with_db(engine: object) -> FastAPI:
 def dev_mode_app(monkeypatch: pytest.MonkeyPatch) -> Iterator[FastAPI]:
     """Build an app with APP_DEV_MODE=True set in the environment."""
     monkeypatch.setenv("APP_DEV_MODE", "true")
+    monkeypatch.setenv("AUTH_PASSWORD", "")
 
     engine = _make_engine()
     SQLModel.metadata.create_all(engine)  # type: ignore[arg-type]
@@ -107,6 +109,8 @@ async def dev_client(dev_mode_app: FastAPI) -> AsyncIterator[AsyncClient]:
 def prod_mode_app(monkeypatch: pytest.MonkeyPatch) -> Iterator[FastAPI]:
     """Build an app with APP_DEV_MODE=false (production default)."""
     monkeypatch.setenv("APP_DEV_MODE", "false")
+    monkeypatch.setenv("AUTH_PASSWORD", TEST_AUTH_PASSWORD)
+    monkeypatch.setenv("SESSION_SECRET", TEST_SESSION_SECRET)
 
     engine = _make_engine()
     SQLModel.metadata.create_all(engine)  # type: ignore[arg-type]
