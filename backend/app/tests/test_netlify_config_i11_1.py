@@ -11,7 +11,7 @@ import re
 
 import pytest
 
-from app.tests.test_compose_scaffold import REPO_ROOT
+from app.tests.compose_support import REPO_ROOT
 
 NETLIFY_TOML = REPO_ROOT / "frontend" / "netlify.toml"
 DEPLOY_DOC = REPO_ROOT / "docs" / "deploy.md"

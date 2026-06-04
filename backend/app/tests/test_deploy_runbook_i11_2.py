@@ -12,7 +12,7 @@ import re
 
 import pytest
 
-from app.tests.test_compose_scaffold import REPO_ROOT
+from app.tests.compose_support import REPO_ROOT
 
 DEPLOY_DOC = REPO_ROOT / "docs" / "deploy.md"
 README = REPO_ROOT / "README.md"

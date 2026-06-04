@@ -7,15 +7,13 @@ import subprocess
 
 import pytest
 
-pytest_plugins = ("app.tests.test_compose_scaffold",)
-
-from app.tests.test_compose_scaffold import (  # noqa: E402
+from app.tests.compose_support import (
     COMPOSE_FILE,
     REPO_ROOT,
-    _get_list,
-    _get_mapping,
-    _load_compose_config,
-    _read_required_text,
+    get_list,
+    get_mapping,
+    load_compose_config,
+    read_required_text,
 )
 
 BACKEND_DIR = REPO_ROOT / "backend"
@@ -174,10 +172,10 @@ def test_docker_compose_dev_backend_command_still_uses_reload(
     root_env_file: None,
 ) -> None:
     """B11.3: local compose dev start must stay reload-based; production CMD is image-only."""
-    compose_config = _load_compose_config()
-    services = _get_mapping(compose_config["services"])
-    backend_service = _get_mapping(services["backend"])
-    command = _get_list(backend_service["command"])
+    compose_config = load_compose_config()
+    services = get_mapping(compose_config["services"])
+    backend_service = get_mapping(services["backend"])
+    command = get_list(backend_service["command"])
     command_text = " ".join(str(part) for part in command).lower()
 
     assert "--reload" in command_text, (
@@ -189,7 +187,7 @@ def test_docker_compose_dev_backend_command_still_uses_reload(
 
 
 def test_docker_compose_file_unchanged_for_b11_3_dev_contract() -> None:
-    compose_text = _read_required_text(COMPOSE_FILE)
+    compose_text = read_required_text(COMPOSE_FILE)
     assert "command:" in compose_text
     assert "--reload" in compose_text
     assert "${BACKEND_PORT:-8084}" in compose_text

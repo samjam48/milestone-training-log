@@ -12,6 +12,8 @@ from sqlmodel import Session, SQLModel, create_engine
 import app.models  # noqa: F401
 from app.database import get_session
 
+pytest_plugins = ("app.tests.compose_support",)
+
 # B11.5 — auth API test overrides (see app_with_auth_settings fixture).
 TEST_AUTH_PASSWORD = "test-auth-password-b115"
 TEST_SESSION_SECRET = "test-session-secret-b115-32chars!!"
