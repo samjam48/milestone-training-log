@@ -239,9 +239,9 @@ export const DashboardScreen: React.FC<Props> = ({
         </Card>
       </div>
 
-      {/* ── Compliance streak ── */}
+      {/* ── Clean streak ── */}
       <div>
-        <SectionLabel>Compliance</SectionLabel>
+        <SectionLabel>Clean streak</SectionLabel>
         <Card pad="sm">
           <StreakRow count={cleanStreak} />
         </Card>

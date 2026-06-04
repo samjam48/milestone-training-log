@@ -2,6 +2,7 @@
  * F3.0-fix — DashboardScreen: BlockSafetyMapSection inline tests.
  * B10.4 — previous-block fetches use getTrainingBlockReview (/review), not /scores.
  * F10.1 — Dashboard recovery streaks section (plans/tickets-phase-10-polish-2026-06-04.md).
+ * F10.2 — Dashboard clean streak relabel (plans/tickets-phase-10-polish-2026-06-04.md).
  *
  * Mocking strategy (mirrors BlockReviewScreen.test.tsx):
  *   - CalendarHeatmap: stubbed to a simple div — tests verify screen wiring, not heatmap internals
@@ -307,7 +308,7 @@ describe('DashboardScreen — F10.1 recovery streaks section', () => {
     ).toBeInTheDocument();
   });
 
-  it('keeps recovery streaks separate from the clean streak (Compliance) section', () => {
+  it('keeps recovery streaks separate from the clean streak section', () => {
     mockEngine.block = ACTIVE_BLOCK;
     mockEngine.dailyScores = DAILY_SCORES;
     mockEngine.previousBlocks = [];
@@ -319,9 +320,43 @@ describe('DashboardScreen — F10.1 recovery streaks section', () => {
     renderDashboard();
 
     expect(screen.getByText('Recovery streaks')).toBeInTheDocument();
-    expect(screen.getByText('Compliance')).toBeInTheDocument();
+    expect(screen.getByText('Clean streak')).toBeInTheDocument();
     expect(screen.getByText(/Stretching: 4 days in a row/i)).toBeInTheDocument();
     expect(screen.getByText(/3 clean sessions in a row/i)).toBeInTheDocument();
+  });
+});
+
+describe('DashboardScreen — F10.2 clean streak relabel', () => {
+  it('renders the clean streak section with Clean streak heading and StreakRow copy', () => {
+    mockEngine.block = ACTIVE_BLOCK;
+    mockEngine.dailyScores = DAILY_SCORES;
+    mockEngine.previousBlocks = [];
+    mockEngine.cleanStreak = 5;
+
+    useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
+
+    renderDashboard();
+
+    expect(screen.getByText('Clean streak')).toBeInTheDocument();
+    expect(screen.getByText(/5 clean sessions in a row/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/No rule violations or reported bad sessions/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Compliance')).not.toBeInTheDocument();
+  });
+
+  it('shows zero clean sessions copy when cleanStreak is 0', () => {
+    mockEngine.block = ACTIVE_BLOCK;
+    mockEngine.dailyScores = DAILY_SCORES;
+    mockEngine.previousBlocks = [];
+    mockEngine.cleanStreak = 0;
+
+    useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
+
+    renderDashboard();
+
+    expect(screen.getByText('Clean streak')).toBeInTheDocument();
+    expect(screen.getByText(/0 clean sessions in a row/i)).toBeInTheDocument();
   });
 });
 
