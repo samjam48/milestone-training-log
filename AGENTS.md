@@ -61,7 +61,8 @@ from `backend/` so `backend/pyproject.toml` is loaded.
 ---
 ## Current Sprint — Phase 11: Production deploy
 **Goal:** Ship MVP on the internet for daily phone use — Netlify (frontend, GitHub deploy) + Render (backend) + Supabase (Postgres); empty prod DB; shared-password session via Netlify `/api` proxy + app auth.
-**Status (2026-06-04):** Planning approved. Phase 10 merged to `main`. Implementation tickets pending (`plans/tickets-phase-11-production-*.md` — Planner).
+**Status (2026-06-04):** Planning + tickets ready. Complete owner **O11.0** before B11.1; **O11.1** once after B11.3, B11.4, I11.1.
+**Ticket source:** `plans/tickets-phase-11-production-2026-06-04.md`
 **Branch:** `feat/phase-11-production` (from `main`)
 **Planning source:** `plans/feature-brief-production-deploy-2026-06-04.md`, `plans/technical-design-production-deploy-2026-06-04.md`
 **Primary references:** `plans/PRD.md` §9, `plans/TRD.md` §12, `README.md` deploy runbook (when added)
