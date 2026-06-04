@@ -9,7 +9,7 @@ import pytest
 
 pytest_plugins = ("app.tests.test_compose_scaffold",)
 
-from app.tests.test_compose_scaffold import (
+from app.tests.test_compose_scaffold import (  # noqa: E402
     COMPOSE_FILE,
     REPO_ROOT,
     _get_list,
