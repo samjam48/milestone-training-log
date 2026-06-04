@@ -38,6 +38,43 @@ function ComingSoonPlaceholder(): React.ReactElement {
   );
 }
 
+function AppDashboardSkeleton(): React.ReactElement {
+  return (
+    <div
+      data-testid="app-dashboard-skeleton"
+      aria-busy="true"
+      className="flex flex-col gap-5 px-4 pt-5 pb-4"
+    >
+      <div className="flex flex-col gap-2">
+        <div className="skeleton h-8 w-3/4 max-w-xs rounded-md bg-bg-sunken animate-pulse" />
+        <div className="skeleton h-4 w-1/2 max-w-[12rem] rounded-md bg-bg-sunken animate-pulse" />
+      </div>
+      <div className="skeleton h-24 w-full rounded-lg bg-bg-sunken animate-pulse" />
+      <div className="skeleton h-32 w-full rounded-lg bg-bg-sunken animate-pulse" />
+      <div className="skeleton h-40 w-full rounded-lg bg-bg-sunken animate-pulse" />
+    </div>
+  );
+}
+
+function AppFatalError({ onRetry }: { onRetry: () => void }): React.ReactElement {
+  return (
+    <div
+      data-testid="app-fatal-error"
+      role="alert"
+      className="flex min-h-[50vh] flex-1 flex-col items-center justify-center gap-4 px-4"
+    >
+      <p className="text-body-lg text-ink-muted text-center">Could not reach server</p>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="px-4 py-2 rounded-md bg-bg-sunken text-body font-medium text-ink"
+      >
+        Retry
+      </button>
+    </div>
+  );
+}
+
 function resolveStackScreen(
   entry: StackEntry,
   engine: MilestoneEngineResult,
@@ -101,7 +138,9 @@ export function App(): React.ReactElement {
     setScreenStack((s) => [...s, { screen, params }]);
   const popScreen = (): void => setScreenStack((s) => s.slice(0, -1));
 
-  const showTabBar = overlay === null && screenStack.length === 0;
+  const shellBlocked = engine.isFatalError || engine.isInitialLoading;
+  const showTabBar =
+    !engine.isFatalError && overlay === null && screenStack.length === 0;
 
   const closeOverlay = (): void => {
     setOverlay(null);
@@ -116,7 +155,11 @@ export function App(): React.ReactElement {
   const closeInlineLog = (): void => setInlineLogActivity(null);
 
   let mainContent: React.ReactElement;
-  if (overlay === 'check-in') {
+  if (engine.isFatalError) {
+    mainContent = <AppFatalError onRetry={() => { engine.refetchAll(); }} />;
+  } else if (engine.isInitialLoading) {
+    mainContent = <AppDashboardSkeleton />;
+  } else if (overlay === 'check-in') {
     mainContent = (
       <MorningCheckInScreen
         engine={engine}
@@ -184,7 +227,10 @@ export function App(): React.ReactElement {
     mainContent = <ComingSoonPlaceholder />;
   }
 
-  const topEntry = screenStack.length > 0 ? screenStack[screenStack.length - 1] : null;
+  const topEntry =
+    !shellBlocked && screenStack.length > 0
+      ? screenStack[screenStack.length - 1]
+      : null;
   return (
     <AppShell withTabBar={showTabBar}>
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">{mainContent}</div>
@@ -199,12 +245,14 @@ export function App(): React.ReactElement {
           {resolveStackScreen(topEntry, engine, popScreen)}
         </div>
       )}
-      <InlineLogSheet
-        open={inlineLogActivity != null}
-        activity={inlineLogActivity}
-        engine={engine}
-        onClose={closeInlineLog}
-      />
+      {!shellBlocked && (
+        <InlineLogSheet
+          open={inlineLogActivity != null}
+          activity={inlineLogActivity}
+          engine={engine}
+          onClose={closeInlineLog}
+        />
+      )}
       {/* Test affordance — allows exercising pushScreen with an unknown key */}
       <button
         type="button"
