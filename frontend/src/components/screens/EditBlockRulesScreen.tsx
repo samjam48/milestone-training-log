@@ -11,7 +11,6 @@ export interface EditBlockRulesScreenProps {
 
 interface RuleDefinition {
   label: string;
-  helper: string;
   unit: string;
   min: number;
   step: number;
@@ -25,38 +24,33 @@ interface RuleGroup {
 
 const RULE_DEFINITIONS: Record<RuleType, RuleDefinition> = {
   rest_between_class: {
-    label: 'Rest between class',
-    helper: 'Minimum recovery time before this class repeats.',
+    label: 'Min rest between sessions',
     unit: 'days',
-    min: 0,
+    min: 1,
     step: 1,
   },
   frequency_limit: {
-    label: 'Frequency limit',
-    helper: 'Maximum sessions in the rule window.',
-    unit: 'sessions',
-    min: 0,
+    label: 'Max sessions per week',
+    unit: '×/wk',
+    min: 1,
     step: 1,
   },
   weekly_load_cap: {
     label: 'Weekly load cap',
-    helper: 'Maximum rolling weekly load for this class.',
     unit: 'load',
-    min: 0,
+    min: 10,
     step: 1,
   },
   consecutive_day_limit: {
-    label: 'Consecutive day limit',
-    helper: 'Maximum days in a row with activity.',
+    label: 'Max consecutive days',
     unit: 'days',
-    min: 0,
+    min: 1,
     step: 1,
   },
   weekly_activity_count: {
-    label: 'Weekly activity count',
-    helper: 'Maximum total sessions in the rule window.',
+    label: 'Max sessions per week',
     unit: 'sessions',
-    min: 0,
+    min: 1,
     step: 1,
   },
 };
@@ -185,7 +179,7 @@ export function EditBlockRulesScreen({
           </svg>
         </button>
         <div className="min-w-0 flex-1">
-          <h1 className="text-title font-bold text-ink">Edit rules</h1>
+          <h1 className="text-title font-bold text-ink">Edit Rules</h1>
           <p className="truncate text-body-sm text-ink-muted">{engine.block.name}</p>
         </div>
       </header>
@@ -199,30 +193,30 @@ export function EditBlockRulesScreen({
           </div>
         ) : (
           ruleGroups.map((group) => (
-            <section key={group.id} className="flex flex-col gap-3">
-              <div>
-                <h2 className="text-title-sm font-semibold text-ink">{group.label}</h2>
-                <p className="text-body-sm text-ink-muted">
-                  Tune thresholds live for this rule group.
-                </p>
-              </div>
-
-              <div className="flex flex-col gap-3">
+            <section key={group.id} className="flex flex-col gap-2">
+              <h2 className="text-title-sm font-semibold text-ink">{group.label}</h2>
+              <Card pad="none">
+                <div className="divide-y divide-border-subtle">
                 {group.rules.map((rule) => {
                   const definition = RULE_DEFINITIONS[rule.ruleType];
                   const inputId = `rule-threshold-${rule.id}`;
                   const thresholdValue = draftThresholds[rule.id] ?? formatThreshold(rule.thresholdValue);
 
                   return (
-                    <Card key={rule.id} pad="md">
-                      <div className="flex items-start justify-between gap-4">
+                    <div key={rule.id} className="px-4 py-3.5">
+                      <div className="mb-3 flex items-start justify-between gap-3">
                         <div className="min-w-0 flex-1">
-                          <p className="text-body font-semibold text-ink">
+                          <label
+                            htmlFor={inputId}
+                            className="text-body font-medium text-ink"
+                          >
                             {definition.label}
-                          </p>
-                          <p className="mt-1 text-body-sm text-ink-muted">
-                            {definition.helper}
-                          </p>
+                          </label>
+                          {group.rules.length > 1 ? (
+                            <p className="mt-0.5 text-caption text-ink-muted">
+                              {group.label}
+                            </p>
+                          ) : null}
                         </div>
                         <button
                           type="button"
@@ -231,79 +225,76 @@ export function EditBlockRulesScreen({
                           aria-label={`${definition.label} enabled`}
                           onClick={() => engine.updateRule(rule.id, { enabled: !rule.enabled })}
                           className={cn(
-                            'relative h-7 w-12 shrink-0 rounded-full transition-colors duration-snap',
+                            'relative mt-0.5 inline-flex h-6 w-10 shrink-0 items-center overflow-hidden rounded-full transition-colors duration-snap',
                             rule.enabled ? 'bg-safe-fg' : 'bg-border-strong',
                           )}
                         >
                           <span
                             className={cn(
-                              'absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-snap',
-                              rule.enabled ? 'translate-x-6' : 'translate-x-1',
+                              'absolute top-1/2 h-4 w-4 -translate-y-1/2 rounded-full bg-white shadow-sm transition-transform duration-snap',
+                              rule.enabled ? 'translate-x-5' : 'translate-x-1',
                             )}
                             aria-hidden="true"
                           />
                         </button>
                       </div>
 
-                      <div className="mt-4 flex items-end gap-3">
-                        <button
-                          type="button"
-                          aria-label={`Decrease ${definition.label}`}
-                          onClick={() =>
-                            commitThreshold(
-                              rule,
-                              parseDisplayedThreshold(thresholdValue, rule.thresholdValue) -
-                                definition.step,
-                            )
-                          }
-                          className="flex h-10 w-10 items-center justify-center rounded-md border border-border bg-bg-sunken text-title font-semibold text-ink transition-colors hover:bg-bg-overlay"
-                        >
-                          -
-                        </button>
-                        <div className="min-w-0 flex-1">
-                          <label
-                            htmlFor={inputId}
-                            className="mb-1 block text-caption text-ink-muted"
+                      {rule.enabled ? (
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            aria-label={`Decrease ${definition.label}`}
+                            onClick={() =>
+                              commitThreshold(
+                                rule,
+                                parseDisplayedThreshold(thresholdValue, rule.thresholdValue) -
+                                  definition.step,
+                              )
+                            }
+                            className="flex h-9 w-9 items-center justify-center rounded-md border border-border bg-bg-sunken text-body-lg font-medium text-ink-muted transition-colors hover:bg-bg-overlay hover:text-ink"
                           >
-                            Threshold
-                          </label>
-                          <div className="flex items-center gap-2 rounded-md border border-border bg-bg-sunken px-3 py-2">
-                            <input
-                              id={inputId}
-                              type="number"
-                              min={definition.min}
-                              step={definition.step}
-                              value={thresholdValue}
-                              onChange={(event) =>
-                                updateDraftThreshold(rule.id, event.target.value)
-                              }
-                              onBlur={() => commitDraftThreshold(rule)}
-                              className="min-w-0 flex-1 bg-transparent text-center text-body-lg font-semibold tabular-nums text-ink outline-none"
-                            />
-                            <span className="shrink-0 text-caption text-ink-faint">
-                              {definition.unit}
-                            </span>
+                            -
+                          </button>
+                          <div className="flex flex-1 items-center justify-center gap-2">
+                            <div className="flex items-center gap-2">
+                              <input
+                                id={inputId}
+                                type="number"
+                                min={definition.min}
+                                step={definition.step}
+                                value={thresholdValue}
+                                onChange={(event) =>
+                                  updateDraftThreshold(rule.id, event.target.value)
+                                }
+                                onBlur={() => commitDraftThreshold(rule)}
+                                className="w-16 rounded-md border border-border bg-bg-sunken px-2 py-1.5 text-center text-body-lg font-semibold tabular-nums text-ink outline-none"
+                              />
+                              <span className="shrink-0 text-caption text-ink-faint">
+                                {definition.unit}
+                              </span>
+                            </div>
                           </div>
+                          <button
+                            type="button"
+                            aria-label={`Increase ${definition.label}`}
+                            onClick={() =>
+                              commitThreshold(
+                                rule,
+                                parseDisplayedThreshold(thresholdValue, rule.thresholdValue) +
+                                  definition.step,
+                              )
+                            }
+                            className="flex h-9 w-9 items-center justify-center rounded-md border border-border bg-bg-sunken text-body-lg font-medium text-ink-muted transition-colors hover:bg-bg-overlay hover:text-ink"
+                          >
+                            +
+                          </button>
                         </div>
-                        <button
-                          type="button"
-                          aria-label={`Increase ${definition.label}`}
-                          onClick={() =>
-                            commitThreshold(
-                              rule,
-                              parseDisplayedThreshold(thresholdValue, rule.thresholdValue) +
-                                definition.step,
-                            )
-                          }
-                          className="flex h-10 w-10 items-center justify-center rounded-md border border-border bg-bg-sunken text-title font-semibold text-ink transition-colors hover:bg-bg-overlay"
-                        >
-                          +
-                        </button>
-                      </div>
-                    </Card>
+                      ) : null}
+                    </div>
                   );
                 })}
-              </div>
+                </div>
+              </Card>
             </section>
           ))
         )}
