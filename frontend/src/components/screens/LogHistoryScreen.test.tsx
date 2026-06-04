@@ -1,8 +1,9 @@
 /**
  * C6.2 — Log History sticky CTA acceptance tests.
+ * F10.8 — Illustrated empty state (plans/tickets-phase-10-polish-2026-06-04.md).
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { screen, cleanup } from '@testing-library/react';
+import { screen, cleanup, within } from '@testing-library/react';
 import { renderWithProviders } from '../../test/renderWithProviders';
 import { createLogHistoryEngine, logActivityWalk } from '../../test/fixtures/c62Fixtures';
 import { LogHistoryScreen } from './LogHistoryScreen';
@@ -106,5 +107,56 @@ describe('LogHistoryScreen sticky CTAs (C6.2)', () => {
 
     expect(screen.getByText(logActivityWalk.name)).toBeInTheDocument();
     expect(screen.queryByText('Unknown')).not.toBeInTheDocument();
+  });
+});
+
+describe('LogHistoryScreen — F10.8 illustrated empty state', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  function renderLogHistory(logCount: number): void {
+    const engine = createLogHistoryEngine(logCount);
+    renderWithProviders(
+      <LogHistoryScreen
+        engine={engine}
+        onOpenLogActivity={vi.fn()}
+        onOpenLogIncident={vi.fn()}
+      />,
+    );
+  }
+
+  it('renders log-history-empty-state when there are no sessions', () => {
+    renderLogHistory(0);
+
+    expect(screen.getByTestId('log-history-empty-state')).toBeInTheDocument();
+  });
+
+  it('shows an illustration inside the empty state region', () => {
+    renderLogHistory(0);
+
+    const emptyState = screen.getByTestId('log-history-empty-state');
+    expect(within(emptyState).getByTestId('log-history-empty-illustration')).toBeInTheDocument();
+  });
+
+  it('keeps existing "No sessions logged yet" copy inside the empty state', () => {
+    renderLogHistory(0);
+
+    const emptyState = screen.getByTestId('log-history-empty-state');
+    expect(within(emptyState).getByText(/no sessions logged yet/i)).toBeInTheDocument();
+  });
+
+  it('keeps + Log Activity and + Log Incident CTAs visible when history is empty', () => {
+    renderLogHistory(0);
+
+    expect(screen.getByRole('button', { name: '+ Log Activity' })).toBeVisible();
+    expect(screen.getByRole('button', { name: '+ Log Incident' })).toBeVisible();
+  });
+
+  it('does not render log-history-empty-state when sessions exist', () => {
+    renderLogHistory(1);
+
+    expect(screen.queryByTestId('log-history-empty-state')).not.toBeInTheDocument();
+    expect(screen.getByText(/1 sessions logged/i)).toBeInTheDocument();
   });
 });

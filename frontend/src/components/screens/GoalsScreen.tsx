@@ -523,7 +523,21 @@ export function GoalsScreen({ engine, onNewGoal, onEditGoal }: GoalsScreenProps)
       {/* Scrollable body — pb-24 clears the sticky CTA */}
       <div className="flex-1 overflow-y-auto px-4 pb-24 min-h-0">
         {!hasActive ? (
-          <div className="flex flex-col items-center justify-center gap-3 text-center mt-16 px-4">
+          <div
+            data-testid="goals-empty-state"
+            className="flex flex-col items-center justify-center gap-3 text-center mt-16 px-4"
+          >
+            <div
+              data-testid="goals-empty-illustration"
+              className="flex h-20 w-20 items-center justify-center rounded-full bg-bg-sunken text-ink-faint"
+              aria-hidden="true"
+            >
+              <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="20" cy="20" r="12" stroke="currentColor" strokeWidth="1.75" />
+                <circle cx="20" cy="20" r="5" stroke="currentColor" strokeWidth="1.75" />
+                <path d="M20 4v4M20 32v4M4 20h4M32 20h4" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+              </svg>
+            </div>
             <p className="text-title font-semibold text-ink">No goals yet</p>
             <p className="text-body text-ink-muted">
               Set a monthly or quarterly target to track your progress here.

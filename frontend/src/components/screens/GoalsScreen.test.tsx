@@ -561,6 +561,86 @@ describe('GoalsScreen — empty state', () => {
 });
 
 // ---------------------------------------------------------------------------
+// F10.8 — Illustrated empty state
+// ---------------------------------------------------------------------------
+
+describe('GoalsScreen — F10.8 illustrated empty state', () => {
+  it('renders goals-empty-state when there are no active goals', () => {
+    const engine = makeEngine({
+      goals: [],
+      activityClasses: [],
+    });
+
+    renderWithProviders(<GoalsScreen engine={engine} />);
+
+    expect(screen.getByTestId('goals-empty-state')).toBeInTheDocument();
+  });
+
+  it('shows an illustration inside the goals empty state region', () => {
+    const engine = makeEngine({
+      goals: [],
+      activityClasses: [],
+    });
+
+    renderWithProviders(<GoalsScreen engine={engine} />);
+
+    const emptyState = screen.getByTestId('goals-empty-state');
+    expect(within(emptyState).getByTestId('goals-empty-illustration')).toBeInTheDocument();
+  });
+
+  it('keeps existing "No goals yet" copy inside the empty state region', () => {
+    const engine = makeEngine({
+      goals: [],
+      activityClasses: [],
+    });
+
+    renderWithProviders(<GoalsScreen engine={engine} />);
+
+    const emptyState = screen.getByTestId('goals-empty-state');
+    expect(within(emptyState).getByText(/no goals yet/i)).toBeInTheDocument();
+    expect(
+      within(emptyState).getByText(/set a monthly or quarterly target/i),
+    ).toBeInTheDocument();
+  });
+
+  it('keeps "+ New Goal" CTA visible in the illustrated empty state', () => {
+    const engine = makeEngine({
+      goals: [],
+      activityClasses: [],
+    });
+
+    renderWithProviders(<GoalsScreen engine={engine} />);
+
+    expect(screen.getByTestId('goals-empty-state')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /\+ new goal/i })).toBeVisible();
+  });
+
+  it('renders illustrated empty state when only achieved goals exist (no active)', () => {
+    const engine = makeEngine({
+      goals: [GOAL_ACHIEVED],
+      activityClasses: [],
+    });
+
+    renderWithProviders(<GoalsScreen engine={engine} />);
+
+    const emptyState = screen.getByTestId('goals-empty-state');
+    expect(within(emptyState).getByTestId('goals-empty-illustration')).toBeInTheDocument();
+    expect(within(emptyState).getByText(/no goals yet/i)).toBeInTheDocument();
+  });
+
+  it('does not render goals-empty-state when active goals exist', () => {
+    const engine = makeEngine({
+      goals: [GOAL_MONTHLY_NUMERIC],
+      activityClasses: [CLASS_RUNNING],
+    });
+
+    renderWithProviders(<GoalsScreen engine={engine} />);
+
+    expect(screen.queryByTestId('goals-empty-state')).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 18. "+ New Goal" CTA opens form
 // ---------------------------------------------------------------------------
 
