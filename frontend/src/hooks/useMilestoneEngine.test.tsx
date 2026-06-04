@@ -288,6 +288,7 @@ describe('useMilestoneEngine API rewire (F1.3)', () => {
     expect(result.current.weeklyProgress).toEqual(dashboardPayload.weeklyProgress);
     expect(result.current.dailyScores).toEqual(dashboardPayload.dailyScores);
     expect(result.current.loadSeries).toEqual(dashboardPayload.loadSeries);
+    expect(result.current.graphClassId).toBe(dashboardPayload.graphClassId);
     expect(result.current.flareUpDates).toEqual(dashboardPayload.flareUpDates);
     expect(result.current.weekLoadThreshold).toBe(dashboardPayload.weekLoadThreshold);
     expect(result.current.cleanStreak).toBe(dashboardPayload.cleanStreak);
@@ -1051,6 +1052,7 @@ describe('useMilestoneEngine delayed tax (H10.1)', () => {
 
     await waitFor(() => {
       expect(getDelayedTax).toHaveBeenCalledWith({ asOf: dashboardPayload.todayDate });
+      expect(result.current.delayedTaxError).toBe(true);
     });
 
     expect(readDelayedTax(result.current)).toBeUndefined();

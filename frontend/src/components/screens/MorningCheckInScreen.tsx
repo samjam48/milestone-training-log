@@ -7,6 +7,7 @@ import { cn } from '../../lib/cn';
 import { Card } from '../ui/Card';
 import { Slider } from '../ui/Slider';
 import { SegmentedControl } from '../ui/SegmentedControl';
+import { DelayedTaxAttributionSection } from '../composites/DelayedTaxAttributionSection';
 import type { MilestoneEngineResult, CheckInDraft } from '../../hooks/useMilestoneEngine';
 import type { Score0to10, SafetyState } from '../../types';
 
@@ -62,7 +63,7 @@ const FieldGroup: React.FC<{ children: React.ReactNode }> = ({ children }) => (
 // ---------------------------------------------------------------------------
 
 export const MorningCheckInScreen: React.FC<Props> = ({ engine, onBack, onComplete }) => {
-  const { todayDate, submitCheckIn } = engine;
+  const { todayDate, delayedTax, delayedTaxError, submitCheckIn } = engine;
 
   const [pain,       setPain]       = React.useState<number>(0);
   const [stiffness,  setStiffness]  = React.useState<number>(0);
@@ -103,6 +104,9 @@ export const MorningCheckInScreen: React.FC<Props> = ({ engine, onBack, onComple
         </span>
         <p className="text-title font-semibold text-safe-fg">Check-in logged.</p>
         <p className="text-body text-ink-muted">Your status lights will update now.</p>
+        {flareUp === 'yes' ? (
+          <DelayedTaxAttributionSection delayedTax={delayedTax} delayedTaxError={delayedTaxError} />
+        ) : null}
       </div>
     );
   }

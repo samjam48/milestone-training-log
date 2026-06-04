@@ -162,11 +162,14 @@ export interface MilestoneEngineResult {
   weeklyProgress: WeeklyProgress[];
   dailyScores: DailySafetyScore[];
   loadSeries: LoadPoint[];
+  graphClassId: string | null;
   flareUpDates: ISODate[];
   weekLoadThreshold: number;
   cleanStreak: number;
   recoveryStreaks: RecoveryStreak[];
   delayedTax?: DelayedTaxResponse;
+  /** True when the delayed-tax fetch failed (distinct from still loading). */
+  delayedTaxError: boolean;
   // F2.0 read fields
   goals: Omit<Goal, 'userId'>[];
   rules: Rule[];
@@ -512,11 +515,13 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     weeklyProgress: dashboard?.weeklyProgress ?? [],
     dailyScores: dashboard?.dailyScores ?? [],
     loadSeries: dashboard?.loadSeries ?? [],
+    graphClassId: dashboard?.graphClassId ?? null,
     flareUpDates: dashboard?.flareUpDates ?? [],
     weekLoadThreshold: dashboard?.weekLoadThreshold ?? 0,
     cleanStreak: dashboard?.cleanStreak ?? 0,
     recoveryStreaks: dashboard?.recoveryStreaks ?? [],
     delayedTax: delayedTaxQuery.data,
+    delayedTaxError: delayedTaxQuery.isError,
     // F2.0 read fields
     goals: (dashboard?.goals ?? []) as Omit<Goal, 'userId'>[],
     rules: (rulesQuery.data ?? []) as Rule[],

@@ -11,6 +11,7 @@ import * as React from 'react';
 import { cn } from '../../lib/cn';
 import { Card } from '../ui/Card';
 import { Slider } from '../ui/Slider';
+import { DelayedTaxAttributionSection } from '../composites/DelayedTaxAttributionSection';
 import type { MilestoneEngineResult, IncidentDraft } from '../../hooks/useMilestoneEngine';
 import type { Score0to10 } from '../../types';
 
@@ -45,7 +46,7 @@ const BackButton: React.FC<{ onPress: () => void }> = ({ onPress }) => (
 // ---------------------------------------------------------------------------
 
 export const LogIncidentScreen: React.FC<Props> = ({ engine, onBack, onComplete }) => {
-  const { todayDate, activityClasses, submitIncident } = engine;
+  const { todayDate, delayedTax, delayedTaxError, activityClasses, submitIncident } = engine;
 
   const [bodyPart,      setBodyPart]      = React.useState('');
   const [customPart,    setCustomPart]    = React.useState('');
@@ -82,6 +83,7 @@ export const LogIncidentScreen: React.FC<Props> = ({ engine, onBack, onComplete 
       </span>
       <p className="text-title font-semibold text-danger-fg">Incident recorded.</p>
       <p className="text-body text-ink-muted">Rest up. The heatmap and dashboard reflect today's status.</p>
+      <DelayedTaxAttributionSection delayedTax={delayedTax} delayedTaxError={delayedTaxError} />
     </div>
   );
 

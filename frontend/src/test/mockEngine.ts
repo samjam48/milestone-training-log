@@ -29,10 +29,12 @@ function createBaseline(): MilestoneEngineResult {
     weeklyProgress: [],
     dailyScores: [],
     loadSeries: [],
+    graphClassId: null,
     flareUpDates: [],
     weekLoadThreshold: 0,
     cleanStreak: 0,
     recoveryStreaks: [],
+    delayedTaxError: false,
     // F2.0 read fields
     goals: [],
     rules: [],
