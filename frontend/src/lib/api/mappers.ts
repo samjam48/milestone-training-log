@@ -518,6 +518,8 @@ export interface DashboardPayload {
   weekLoadThreshold: number;
   cleanStreak: number;
   recoveryStreaks: RecoveryStreak[];
+  goals: WithoutUserId<Goal>[];
+  previousBlocks: WithoutUserId<TrainingBlock>[];
 }
 
 export function mapDashboardFromApi(raw: Record<string, unknown>): DashboardPayload {
@@ -547,6 +549,8 @@ export function mapDashboardFromApi(raw: Record<string, unknown>): DashboardPayl
     weekLoadThreshold: Number(raw.week_load_threshold),
     cleanStreak: Number(raw.clean_streak),
     recoveryStreaks: mapList(raw.recovery_streaks, mapRecoveryStreakFromApi),
+    goals: mapList(raw.goals, mapGoalFromApi),
+    previousBlocks: mapList(raw.previous_blocks, mapTrainingBlockFromApi),
   };
 }
 

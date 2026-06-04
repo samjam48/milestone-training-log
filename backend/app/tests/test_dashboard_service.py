@@ -357,11 +357,11 @@ def test_get_dashboard_excludes_records_after_as_of(
 # ---------------------------------------------------------------------------
 
 
-def test_get_dashboard_goals_contains_only_active_goals(
+def test_get_dashboard_goals_includes_all_statuses_for_goals_tab(
     app_with_test_database: FastAPI,
     session: Session,
 ) -> None:
-    """goals list includes active goals and excludes paused ones."""
+    """goals list includes active, achieved, and paused (Goals tab sections)."""
     seed_goal(
         app_with_test_database,
         goal_id="goal-active-1",
@@ -384,6 +384,14 @@ def test_get_dashboard_goals_contains_only_active_goals(
     )
     seed_goal(
         app_with_test_database,
+        goal_id="goal-achieved",
+        title="First 5k",
+        target_date=date(2026, 5, 1),
+        timeframe="monthly",
+        status="achieved",
+    )
+    seed_goal(
+        app_with_test_database,
         goal_id="goal-paused",
         title="Cycle 100k",
         target_date=date(2026, 8, 1),
@@ -393,11 +401,14 @@ def test_get_dashboard_goals_contains_only_active_goals(
 
     dashboard = get_dashboard(session, as_of=FROZEN_AS_OF)
 
-    assert len(dashboard.goals) == 2
+    assert len(dashboard.goals) == 4
     goal_ids = {g.id for g in dashboard.goals}
-    assert "goal-active-1" in goal_ids
-    assert "goal-active-2" in goal_ids
-    assert "goal-paused" not in goal_ids
+    assert goal_ids == {
+        "goal-active-1",
+        "goal-active-2",
+        "goal-achieved",
+        "goal-paused",
+    }
 
 
 def test_get_dashboard_goals_fields_round_trip_correctly(
@@ -423,11 +434,11 @@ def test_get_dashboard_goals_fields_round_trip_correctly(
     assert matched.status == "active"
 
 
-def test_get_dashboard_goals_empty_when_no_active_goals(
+def test_get_dashboard_goals_includes_paused_when_no_active_goals(
     app_with_test_database: FastAPI,
     session: Session,
 ) -> None:
-    """goals is an empty list when no active goals exist."""
+    """paused-only goals still appear on dashboard for Goals tab archived section."""
     seed_goal(
         app_with_test_database,
         goal_id="goal-paused-only",
@@ -437,6 +448,18 @@ def test_get_dashboard_goals_empty_when_no_active_goals(
         status="paused",
     )
 
+    dashboard = get_dashboard(session, as_of=FROZEN_AS_OF)
+
+    assert len(dashboard.goals) == 1
+    assert dashboard.goals[0].id == "goal-paused-only"
+    assert dashboard.goals[0].status == "paused"
+
+
+def test_get_dashboard_goals_empty_when_no_goals_exist(
+    app_with_test_database: FastAPI,
+    session: Session,
+) -> None:
+    """goals is an empty list when the user has no goals."""
     dashboard = get_dashboard(session, as_of=FROZEN_AS_OF)
 
     assert dashboard.goals == []

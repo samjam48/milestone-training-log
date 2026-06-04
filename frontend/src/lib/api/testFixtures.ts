@@ -109,6 +109,36 @@ export const recoveryStreakReadSnake = {
   current_streak_days: 3,
 };
 
+/** Active goal on GET /api/dashboard (B8.1). */
+export const dashboardGoalReadSnake = {
+  id: 'goal-1',
+  title: 'Walk 20km without flare-up',
+  description: null as string | null,
+  target_date: '2026-05-31',
+  timeframe: 'monthly',
+  activity_class_id: null as string | null,
+  progress_value: null as number | null,
+  progress_target: null as number | null,
+  progress_unit: null as string | null,
+  status: 'active',
+  created_at: '2026-04-07T06:00:00Z',
+  updated_at: '2026-04-07T06:00:00Z',
+};
+
+/** Completed block in dashboard previous_blocks (B9.1) — active block omitted server-side. */
+export const dashboardPreviousBlockReadSnake = {
+  id: 'blk-0',
+  name: 'Phase 1 Foundation',
+  start_date: '2026-03-01',
+  end_date: '2026-04-06',
+  status: 'completed',
+  related_goal_id: null as string | null,
+  notes: null as string | null,
+  is_review_milestone_hit: true,
+  created_at: '2026-03-01T06:00:00Z',
+  updated_at: '2026-03-01T06:00:00Z',
+};
+
 /** Minimal dashboard payload exercising top-level keys and edge cases. */
 export const dashboardReadSnake = {
   as_of: TODAY,
@@ -164,6 +194,8 @@ export const dashboardReadSnake = {
   week_load_threshold: 120,
   clean_streak: 2,
   recovery_streaks: [recoveryStreakReadSnake],
+  goals: [dashboardGoalReadSnake],
+  previous_blocks: [dashboardPreviousBlockReadSnake],
 };
 
 export const dashboardReadSnakeNoBlock = {

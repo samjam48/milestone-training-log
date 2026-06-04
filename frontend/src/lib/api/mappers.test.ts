@@ -147,6 +147,11 @@ describe('mapDashboardFromApi', () => {
         currentStreakDays: recoveryStreakReadSnake.current_streak_days,
       },
     ]);
+    expect(mapped.goals).toHaveLength(dashboardReadSnake.goals.length);
+    expect(mapped.goals[0]?.id).toBe(dashboardReadSnake.goals[0]!.id);
+    expect(mapped.goals[0]?.title).toBe(dashboardReadSnake.goals[0]!.title);
+    expect(mapped.previousBlocks).toHaveLength(dashboardReadSnake.previous_blocks.length);
+    expect(mapped.previousBlocks[0]?.id).toBe(dashboardReadSnake.previous_blocks[0]!.id);
   });
 
   it('maps block null to null (not undefined)', () => {
@@ -155,6 +160,8 @@ describe('mapDashboardFromApi', () => {
     expect(mapped.block).toBeNull();
     expect(mapped.recoveryStreaks).toEqual([]);
     expect(mapped.activityClasses).toEqual([]);
+    expect(mapped.goals).toHaveLength(dashboardReadSnakeNoBlock.goals.length);
+    expect(mapped.previousBlocks).toHaveLength(dashboardReadSnakeNoBlock.previous_blocks.length);
   });
 
   it('maps daily_scores state neutral to SafetyState | neutral', () => {

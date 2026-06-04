@@ -61,7 +61,7 @@ class DashboardRead(BaseModel):
     week_load_threshold: int
     clean_streak: int
     recovery_streaks: list[RecoveryStreakRead]
-    goals: list[GoalRead]
+    goals: list[GoalRead]  # all local goals (Goals tab: active, achieved, paused, missed)
 
     model_config = ConfigDict(from_attributes=True)
 

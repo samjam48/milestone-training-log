@@ -43,10 +43,8 @@ import {
   createDailyCheckIn,
   createFlareUpIncident,
   checkViolations as checkViolationsApi,
-  listGoals,
   listRulesByBlock,
   listWeeklyTargetsByBlock,
-  listTrainingBlocks,
   createGoal as createGoalApi,
   patchGoal,
   createRule as createRuleApi,
@@ -222,18 +220,6 @@ export function useMilestoneEngine(): MilestoneEngineResult {
   const todayDate = dashboard?.todayDate ?? ('' as ISODate);
   const blockId = dashboard?.block?.id ?? null;
 
-  const goalsQuery = useQuery({
-    queryKey: ['goals'],
-    queryFn: () => listGoals(),
-    refetchOnWindowFocus: false,
-  });
-
-  const trainingBlocksQuery = useQuery({
-    queryKey: ['training-blocks'],
-    queryFn: () => listTrainingBlocks(),
-    refetchOnWindowFocus: false,
-  });
-
   const rulesQuery = useQuery({
     queryKey: ['rules', blockId ?? ''],
     queryFn: () => listRulesByBlock(blockId as string),
@@ -363,7 +349,7 @@ export function useMilestoneEngine(): MilestoneEngineResult {
         ...draft,
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['goals'] });
+      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
   });
 
@@ -371,7 +357,7 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     mutationFn: ({ goalId, patch }: { goalId: ID; patch: GoalPatch }) =>
       patchGoal(goalId, patch as Record<string, unknown>),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['goals'] });
+      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
   });
 
@@ -379,7 +365,7 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     mutationFn: (goalId: ID) =>
       patchGoal(goalId, { status: 'paused' }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['goals'] });
+      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
   });
 
@@ -416,7 +402,6 @@ export function useMilestoneEngine(): MilestoneEngineResult {
         ...draft,
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['training-blocks'] });
       void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
   });
@@ -504,9 +489,6 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     createTrainingBlockMutation.mutate(draft);
   }, [createTrainingBlockMutation]);
 
-  const allBlocks = trainingBlocksQuery.data ?? [];
-  const previousBlocks = allBlocks.filter((b) => b.id !== (dashboard?.block?.id ?? null));
-
   const isInitialLoading = dashboardQuery.isPending;
   const isFatalError = dashboardQuery.isError && dashboard === undefined;
 
@@ -536,10 +518,10 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     recoveryStreaks: dashboard?.recoveryStreaks ?? [],
     delayedTax: delayedTaxQuery.data,
     // F2.0 read fields
-    goals: (goalsQuery.data ?? []) as Omit<Goal, 'userId'>[],
+    goals: (dashboard?.goals ?? []) as Omit<Goal, 'userId'>[],
     rules: (rulesQuery.data ?? []) as Rule[],
     weeklyTargets: (weeklyTargetsQuery.data ?? []) as WeeklyTarget[],
-    previousBlocks: previousBlocks as TrainingBlock[],
+    previousBlocks: (dashboard?.previousBlocks ?? []) as TrainingBlock[],
     // F2.0 mutations
     submitNewActivity,
     updateActivity,
