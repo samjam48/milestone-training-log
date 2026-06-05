@@ -7,7 +7,7 @@
 
 [[redirects]]
   from = "/api/*"
-  to = "https://REPLACE_ME.onrender.com/api/:splat"
+  to = "https://milestone-training-log.onrender.com/api/:splat"
   status = 200
   force = true
 
