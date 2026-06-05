@@ -44,6 +44,19 @@ docker compose up backend
 
 Default backend port is **8084** (not 8000) to avoid clashing with other local apps. Change `BACKEND_PORT` in `.env` if needed.
 
+## Production
+
+MVP is live (Phase 11 complete, 2026-06-05):
+
+| | URL |
+| --- | --- |
+| **App** | https://milestone-activity.netlify.app |
+| **API** | https://milestone-training-log.onrender.com |
+
+Deploys auto-build from **`main`** (Netlify frontend + Render backend). Full runbook, env matrix, backup, and cold-start notes: [`docs/deploy.md`](docs/deploy.md).
+
+Local dev stays SQLite + optional Docker; production uses Supabase Postgres on Render.
+
 ## Backend setup (local, without Docker)
 
 Run these from the `backend/` directory. The app reads config from the repo-root `.env` file; do **not** override `DATABASE_URL` on the command line — relative paths are resolved against the repo root by `app/settings.py`.

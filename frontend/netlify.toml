@@ -1,5 +1,5 @@
 # Netlify site config (base directory: frontend/)
-# O11.1: replace REPLACE_ME with your Render service hostname after first backend deploy.
+# API proxy target: milestone-training-log.onrender.com (O11.1 complete).
 
 [build]
   command = "npm ci && npm run build"

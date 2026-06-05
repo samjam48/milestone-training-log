@@ -178,6 +178,8 @@ same `MilestoneEngineResult` interface.
 
 ## 9. Stage 1 — Production deploy (Phase 11)
 
+**Status:** ✅ **Complete** (2026-06-05) — https://milestone-activity.netlify.app · deploy from `main` · see `docs/deploy.md`
+
 **Goal:** Use the full MVP on a personal phone over the internet with real, empty prod data.
 
 **Hosting (owner-approved):** Netlify (frontend, GitHub deploy) + Render (backend,
