@@ -9,6 +9,7 @@
 
 import * as React from 'react';
 import { cn } from '../../lib/cn';
+import { BackButton } from '../ui/BackButton';
 import { Card } from '../ui/Card';
 import { Slider } from '../ui/Slider';
 import { DelayedTaxAttributionSection } from '../composites/DelayedTaxAttributionSection';
@@ -30,16 +31,6 @@ const BODY_PARTS = ['Left heel', 'Right heel', 'Left ankle', 'Right ankle', 'Lef
 function severityState(v: number) {
   return v >= 7 ? 'danger' : v >= 4 ? 'caution' : 'safe';
 }
-
-const BackButton: React.FC<{ onPress: () => void }> = ({ onPress }) => (
-  <button type="button" onClick={onPress}
-    className="flex items-center gap-1.5 text-body text-ink-muted hover:text-ink transition-colors duration-snap py-1">
-    <svg width={20} height={20} viewBox="0 0 20 20" fill="none" aria-hidden="true">
-      <path d="M12.5 15l-5-5 5-5" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-    Back
-  </button>
-);
 
 // ---------------------------------------------------------------------------
 // Screen
@@ -100,7 +91,7 @@ export const LogIncidentScreen: React.FC<Props> = ({ engine, onBack, onComplete 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col h-full overflow-y-auto">
       {/* Header */}
-      <div className="px-4 pt-4 pb-2 shrink-0">
+      <div className="px-4 pb-2 shrink-0">
         <BackButton onPress={onBack} />
         <div className="mt-3 flex items-start gap-2">
           <div>

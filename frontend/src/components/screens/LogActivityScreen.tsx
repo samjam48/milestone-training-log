@@ -13,6 +13,7 @@
 
 import * as React from 'react';
 import { cn } from '../../lib/cn';
+import { BackButton } from '../ui/BackButton';
 import { Card } from '../ui/Card';
 import { Slider } from '../ui/Slider';
 import { SegmentedControl } from '../ui/SegmentedControl';
@@ -46,16 +47,6 @@ const FEEL_OPTIONS = [
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
-
-const BackButton: React.FC<{ onPress: () => void }> = ({ onPress }) => (
-  <button type="button" onClick={onPress}
-    className="flex items-center gap-1.5 text-body text-ink-muted hover:text-ink transition-colors duration-snap py-1">
-    <svg width={20} height={20} viewBox="0 0 20 20" fill="none" aria-hidden="true">
-      <path d="M12.5 15l-5-5 5-5" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-    Back
-  </button>
-);
 
 const FieldLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <p className="text-body-lg font-semibold text-ink mb-3">{children}</p>
@@ -147,7 +138,7 @@ export const LogActivityScreen: React.FC<Props> = ({
   return (
     <form onSubmit={handleSubmit} className="flex flex-col h-full min-h-0">
       {/* Header */}
-      <div className="px-4 pt-4 pb-2 shrink-0">
+      <div className="px-4 pb-2 shrink-0">
         <BackButton onPress={onBack} />
         <h1 className="text-title font-bold text-ink mt-3">Log Activity</h1>
       </div>

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { CalendarHeatmap } from '../composites/CalendarHeatmap';
 import { WeeklyLoadGraph } from '../composites/WeeklyLoadGraph';
+import { BackButton } from '../ui/BackButton';
 import { Card } from '../ui/Card';
 import { ReviewMilestoneBadge } from '../ui/ReviewMilestoneBadge';
 import type { MilestoneEngineResult } from '../../hooks/useMilestoneEngine';
@@ -196,14 +197,8 @@ export function BlockReviewScreen({
 
   return (
     <section className="flex min-h-full flex-1 flex-col bg-bg">
-      <header className="flex shrink-0 items-center gap-3 border-b border-line px-4 pb-3 pt-5">
-        <button
-          type="button"
-          onClick={onBack}
-          className="rounded-full border border-line px-4 py-2 text-body-sm font-semibold text-ink transition-colors duration-snap hover:bg-bg-raised"
-        >
-          Back
-        </button>
+      <header className="flex shrink-0 items-center gap-3 border-b border-line px-4 pb-3">
+        <BackButton onPress={onBack} />
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-2">
             <h1 className="truncate text-title-lg font-semibold text-ink">Block review</h1>

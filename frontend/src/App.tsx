@@ -281,7 +281,7 @@ export function App(): React.ReactElement {
       {topEntry != null && (
         <div
           data-testid="stack-screen-overlay"
-          className="absolute inset-0 z-40 flex flex-col bg-bg"
+          className="absolute inset-0 z-40 flex flex-col bg-bg pt-safe-top"
         >
           {resolveStackScreen(topEntry, engine, navigateBack)}
         </div>

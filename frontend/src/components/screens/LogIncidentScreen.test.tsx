@@ -8,6 +8,14 @@ import { screen, cleanup, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders';
 import { mockEngine, resetMockEngine } from '../../test/mockEngine';
+import {
+  PHONE_VIEWPORT_HEIGHT,
+  PHONE_VIEWPORT_WIDTH,
+  SCREEN_BACK_HEADER_TEST_ID,
+  expectBackControlVisibleWithoutScroll,
+  expectScreenBackHeaderHasSafeTop,
+  withSafeTopAncestor,
+} from '../../test/screenBackLayout';
 import type { DelayedTaxResponse } from '../../hooks/useMilestoneEngine';
 import type { ActivityClass } from '../../types';
 import { LogIncidentScreen } from './LogIncidentScreen';
@@ -104,6 +112,61 @@ async function submitIncident(): Promise<void> {
   await user.click(screen.getByRole('button', { name: /record incident/i }));
   expect(screen.getByText('Incident recorded.')).toBeInTheDocument();
 }
+
+describe('LogIncidentScreen — S2.4 back affordance', () => {
+  beforeEach(() => {
+    resetMockEngine();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('renders shared back header with top safe-area padding from ancestor', () => {
+    renderWithProviders(
+      withSafeTopAncestor(
+        <LogIncidentScreen engine={mockEngine} onBack={vi.fn()} onComplete={vi.fn()} />,
+      ),
+    );
+    expectScreenBackHeaderHasSafeTop(screen.getByTestId(SCREEN_BACK_HEADER_TEST_ID));
+  });
+
+  it('shows Back control without scrolling on a 390×844 viewport', () => {
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      value: PHONE_VIEWPORT_WIDTH,
+    });
+    Object.defineProperty(window, 'innerHeight', {
+      configurable: true,
+      value: PHONE_VIEWPORT_HEIGHT,
+    });
+
+    const { container } = renderWithProviders(
+      <div
+        data-testid="phone-frame"
+        style={{
+          width: PHONE_VIEWPORT_WIDTH,
+          height: PHONE_VIEWPORT_HEIGHT,
+          overflow: 'hidden',
+        }}
+      >
+        {withSafeTopAncestor(
+          <LogIncidentScreen engine={mockEngine} onBack={vi.fn()} onComplete={vi.fn()} />,
+        )}
+      </div>,
+    );
+
+    const scrollRoot = container.querySelector('[data-testid="phone-frame"]');
+    expect(scrollRoot).not.toBeNull();
+    expect(scrollRoot).toHaveProperty('scrollTop', 0);
+
+    const backControl = within(screen.getByTestId(SCREEN_BACK_HEADER_TEST_ID)).getByRole(
+      'button',
+      { name: /back/i },
+    );
+    expectBackControlVisibleWithoutScroll(backControl, PHONE_VIEWPORT_HEIGHT);
+  });
+});
 
 describe('LogIncidentScreen — F10.4 delayed-tax attribution', () => {
   beforeEach(() => {
