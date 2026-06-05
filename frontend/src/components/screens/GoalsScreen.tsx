@@ -218,7 +218,7 @@ export function GoalsScreen({ engine, onNewGoal, onEditGoal }: GoalsScreenProps)
   }
 
   return (
-    <div className="flex flex-col h-full relative">
+    <div className="flex flex-col h-full min-h-0">
       {/* Header */}
       <div className="px-4 pt-5 pb-3 shrink-0">
         <h1 className="text-title font-bold text-ink">Goals</h1>
@@ -228,8 +228,8 @@ export function GoalsScreen({ engine, onNewGoal, onEditGoal }: GoalsScreenProps)
         </p>
       </div>
 
-      {/* Scrollable body — pb-24 clears the sticky CTA */}
-      <div className="flex-1 overflow-y-auto px-4 pb-24 min-h-0">
+      {/* Scrollable body */}
+      <div className="flex-1 overflow-y-auto px-4 pb-4 min-h-0">
         {!hasActive ? (
           <div
             data-testid="goals-empty-state"
@@ -373,15 +373,15 @@ export function GoalsScreen({ engine, onNewGoal, onEditGoal }: GoalsScreenProps)
         )}
       </div>
 
-      {/* Sticky + New Goal CTA */}
+      {/* Bottom action bar */}
       <div
-        className="absolute bottom-0 inset-x-0 px-4 pb-4 pt-8 pointer-events-none"
-        style={{ background: 'linear-gradient(to top, #0A0C0F 55%, transparent)' }}
+        data-testid="bottom-action-bar"
+        className="shrink-0 border-t border-border bg-bg-raised px-4 py-3"
       >
         <button
           type="button"
           onClick={() => onNewGoal?.()}
-          className="pointer-events-auto w-full h-12 rounded-md bg-ink text-ink-inverse text-body-lg font-semibold transition-colors duration-snap active:opacity-80"
+          className="w-full h-12 rounded-md bg-ink text-ink-inverse text-body-lg font-semibold transition-colors duration-snap active:opacity-80"
         >
           + New Goal
         </button>

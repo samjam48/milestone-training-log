@@ -145,14 +145,14 @@ export const LogActivityScreen: React.FC<Props> = ({
   );
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col h-full overflow-y-auto">
+    <form onSubmit={handleSubmit} className="flex flex-col h-full min-h-0">
       {/* Header */}
       <div className="px-4 pt-4 pb-2 shrink-0">
         <BackButton onPress={onBack} />
         <h1 className="text-title font-bold text-ink mt-3">Log Activity</h1>
       </div>
 
-      <div className="flex flex-col gap-4 px-4 pb-6 mt-2">
+      <div className="flex flex-1 min-h-0 flex-col gap-4 overflow-y-auto px-4 pb-4 mt-2">
         {/* Activity picker */}
         <Card pad="md">
           <FieldLabel>What did you do?</FieldLabel>
@@ -221,17 +221,19 @@ export const LogActivityScreen: React.FC<Props> = ({
                 className={cn('w-full rounded-md bg-bg-sunken border border-border px-3 py-2.5 resize-none',
                   'text-body text-ink placeholder:text-ink-faint focus:outline-none focus:border-border-strong')} />
             </Card>
-
-            <button type="submit" disabled={!canSubmit}
-              className={cn('h-12 w-full rounded-md text-body-lg font-semibold transition-colors duration-snap',
-                violations.length > 0
-                  ? 'bg-caution text-ink-inverse active:brightness-90'
-                  : 'bg-ink text-ink-inverse active:opacity-80',
-                !canSubmit && 'opacity-40 cursor-not-allowed')}>
-              {violations.length > 0 ? 'Log anyway' : 'Log session'}
-            </button>
           </>
         )}
+      </div>
+
+      <div className="shrink-0 border-t border-border bg-bg px-4 py-3 pb-safe-bottom">
+        <button type="submit" disabled={!canSubmit}
+          className={cn('h-12 w-full rounded-md text-body-lg font-semibold transition-colors duration-snap',
+            violations.length > 0
+              ? 'bg-caution text-ink-inverse active:brightness-90'
+              : 'bg-ink text-ink-inverse active:opacity-80',
+            !canSubmit && 'opacity-40 cursor-not-allowed')}>
+          {violations.length > 0 ? 'Log anyway' : 'Log session'}
+        </button>
       </div>
     </form>
   );

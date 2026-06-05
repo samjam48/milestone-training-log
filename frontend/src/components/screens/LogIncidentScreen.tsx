@@ -110,7 +110,7 @@ export const LogIncidentScreen: React.FC<Props> = ({ engine, onBack, onComplete 
         </div>
       </div>
 
-      <div className="flex flex-col gap-4 px-4 pb-6 mt-2">
+      <div className="flex flex-col gap-4 px-4 pb-safe-bottom mt-2">
         {/* Body part */}
         <Card intent="danger" pad="md">
           <p className="text-body-lg font-semibold text-ink mb-3">What's flared up?</p>

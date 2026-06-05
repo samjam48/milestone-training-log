@@ -14,6 +14,12 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { screen, cleanup, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders';
+import {
+  BOTTOM_ACTION_BAR_TEST_ID,
+  expectTabBarInsetAboveTabScreenFooter,
+  expectTabScreenBottomActionBar,
+} from '../../test/bottomInsetLayout';
+import { AppShell } from '../ui/AppShell';
 import { mockEngine, resetMockEngine } from '../../test/mockEngine';
 import type { Goal, ActivityClass } from '../../types';
 import { GoalsScreen } from './GoalsScreen';
@@ -1066,5 +1072,51 @@ describe('GoalsScreen — F8.3: archive/restore regression', () => {
     await user.click(screen.getByRole('button', { name: /confirm/i }));
     expect(archiveGoal).toHaveBeenCalledTimes(1);
     expect(archiveGoal).toHaveBeenCalledWith(GOAL_MONTHLY_NUMERIC.id);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// S2.1 — Sticky + New Goal CTA uses tab-bar bottom inset
+// plans/tickets-stage-2-polish-2026-06-05.md
+// ---------------------------------------------------------------------------
+
+describe('GoalsScreen — S2.1 bottom inset on + New Goal CTA', () => {
+  function getNewGoalCtaRegion(): HTMLElement {
+    const button = screen.getByRole('button', { name: /\+ new goal/i });
+    const byTestId = screen.queryByTestId(BOTTOM_ACTION_BAR_TEST_ID);
+    if (byTestId !== null && byTestId.contains(button)) {
+      return byTestId;
+    }
+    const wrapper = button.parentElement;
+    expect(wrapper).not.toBeNull();
+    return wrapper as HTMLElement;
+  }
+
+  it('uses bottom-action-bar footer with AppShell inset (not duplicate footer padding)', () => {
+    const engine = makeEngine({
+      goals: [GOAL_MONTHLY_NUMERIC],
+      activityClasses: [CLASS_RUNNING],
+    });
+
+    renderWithProviders(
+      <AppShell withTabBar>
+        <GoalsScreen engine={engine} onNewGoal={vi.fn()} />
+      </AppShell>,
+    );
+
+    const region = getNewGoalCtaRegion();
+    expectTabBarInsetAboveTabScreenFooter(region);
+    expect(region.className).not.toMatch(/\babsolute\b.*\bbottom-0\b/);
+  });
+
+  it('does not rely on absolute bottom-0 with pb-4 only for the sticky CTA wrapper', () => {
+    const engine = makeEngine({ goals: [], activityClasses: [] });
+
+    renderWithProviders(<GoalsScreen engine={engine} />);
+
+    const region = getNewGoalCtaRegion();
+    expect(region.className).not.toMatch(/\babsolute\s+bottom-0\b/);
+    expect(region.className).not.toMatch(/\bpb-4\b(?!.*tabbar)/);
+    expectTabScreenBottomActionBar(region);
   });
 });

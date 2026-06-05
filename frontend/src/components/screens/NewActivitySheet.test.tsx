@@ -12,6 +12,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { screen, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders';
+import { expectSafeBottomOnlyInset } from '../../test/bottomInsetLayout';
 import type { ActivityClass } from '../../types';
 import type { NewActivityDraft } from '../../hooks/useMilestoneEngine';
 import { NewActivitySheet } from './NewActivitySheet';
@@ -631,5 +632,18 @@ describe('NewActivitySheet — full reset on re-open', () => {
       'aria-pressed',
       'true',
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// S2.1 — Sheet panel clears device safe area (edge case)
+// ---------------------------------------------------------------------------
+
+describe('NewActivitySheet — S2.1 safe-bottom on sheet panel', () => {
+  it('applies safe-bottom inset on the fixed bottom sheet panel', () => {
+    renderWithProviders(<NewActivitySheet {...baseProps({ open: true })} />);
+
+    const panel = screen.getByRole('dialog', { name: /create new activity/i });
+    expectSafeBottomOnlyInset(panel);
   });
 });

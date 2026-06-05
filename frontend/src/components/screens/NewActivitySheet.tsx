@@ -90,7 +90,7 @@ export function NewActivitySheet({
 
       {/* Panel */}
       <div
-        className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-[440px] rounded-t-2xl bg-bg-raised border-t border-border"
+        className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-[440px] rounded-t-2xl bg-bg-raised border-t border-border pb-safe-bottom"
         role="dialog"
         aria-modal="true"
         aria-label="Create new activity"

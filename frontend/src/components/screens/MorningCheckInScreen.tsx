@@ -130,7 +130,7 @@ export const MorningCheckInScreen: React.FC<Props> = ({ engine, onBack, onComple
         <p className="text-caption text-ink-muted mt-0.5">{formattedDate}</p>
       </div>
 
-      <div className="flex flex-col gap-4 px-4 pb-4 mt-2">
+      <div className="flex flex-col gap-4 px-4 pb-safe-bottom mt-2">
         {/* Pain level */}
         <FieldGroup>
           <FieldLabel>Pain level</FieldLabel>

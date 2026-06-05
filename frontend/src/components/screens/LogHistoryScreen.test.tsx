@@ -5,12 +5,22 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { screen, cleanup, within } from '@testing-library/react';
 import { renderWithProviders } from '../../test/renderWithProviders';
+import {
+  BOTTOM_ACTION_BAR_TEST_ID,
+  expectTabBarInsetAboveTabScreenFooter,
+  expectTabScreenBottomActionBar,
+} from '../../test/bottomInsetLayout';
+import { AppShell } from '../ui/AppShell';
 import { createLogHistoryEngine, logActivityWalk } from '../../test/fixtures/c62Fixtures';
 import { LogHistoryScreen } from './LogHistoryScreen';
 
 const VIEWPORT_HEIGHT = 520;
 
 function getActionBar(): HTMLElement {
+  const byTestId = screen.queryByTestId(BOTTOM_ACTION_BAR_TEST_ID);
+  if (byTestId !== null) {
+    return byTestId;
+  }
   const logActivityButton = screen.getByRole('button', { name: '+ Log Activity' });
   const actionBar = logActivityButton.closest('.border-t.border-border');
   expect(actionBar).not.toBeNull();
@@ -158,5 +168,57 @@ describe('LogHistoryScreen — F10.8 illustrated empty state', () => {
 
     expect(screen.queryByTestId('log-history-empty-state')).not.toBeInTheDocument();
     expect(screen.getByText(/1 sessions logged/i)).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// S2.1 — Bottom inset above tab bar (plans/tickets-stage-2-polish-2026-06-05.md)
+// ---------------------------------------------------------------------------
+
+describe('LogHistoryScreen — S2.1 bottom action bar inset', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  function renderLogHistory(logCount: number): void {
+    const engine = createLogHistoryEngine(logCount);
+    renderWithProviders(
+      <AppShell withTabBar>
+        <div
+          style={{
+            height: '520px',
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
+          <LogHistoryScreen
+            engine={engine}
+            onOpenLogActivity={vi.fn()}
+            onOpenLogIncident={vi.fn()}
+          />
+        </div>
+      </AppShell>,
+    );
+  }
+
+  it('exposes bottom-action-bar above tab bar via AppShell inset (not footer padding)', () => {
+    renderLogHistory(0);
+
+    const actionBar = screen.getByTestId(BOTTOM_ACTION_BAR_TEST_ID);
+    expectTabBarInsetAboveTabScreenFooter(actionBar);
+    expect(within(actionBar).getByRole('button', { name: '+ Log Activity' })).toBeInTheDocument();
+    expect(within(actionBar).getByRole('button', { name: '+ Log Incident' })).toBeInTheDocument();
+  });
+
+  it('keeps the bottom action bar pinned (shrink-0) above the tab bar with long history', () => {
+    renderLogHistory(40);
+
+    const actionBar = getActionBar();
+    const scrollRegion = getScrollRegion();
+
+    expectTabScreenBottomActionBar(actionBar);
+    expect(scrollRegion.contains(actionBar)).toBe(false);
+    expectTabBarInsetAboveTabScreenFooter(actionBar);
   });
 });

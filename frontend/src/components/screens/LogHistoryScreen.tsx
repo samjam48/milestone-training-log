@@ -180,7 +180,10 @@ export const LogHistoryScreen: React.FC<Props> = ({ engine, onOpenLogActivity, o
       </div>
 
       {/* Bottom action bar */}
-      <div className="shrink-0 border-t border-border bg-bg-raised px-4 py-3 flex gap-3">
+      <div
+        data-testid="bottom-action-bar"
+        className="shrink-0 border-t border-border bg-bg-raised px-4 py-3 flex gap-3"
+      >
         <button
           type="button"
           onClick={onOpenLogActivity}
