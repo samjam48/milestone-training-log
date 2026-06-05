@@ -109,3 +109,137 @@ describe('LoginScreen (F11.2)', () => {
     });
   });
 });
+
+/**
+ * S2.2 — Login password show / hide toggle (plans/tickets-stage-2-polish-2026-06-05.md).
+ *
+ * Contract (implementer):
+ *   - Accessible button toggles password input `type` between `password` and `text`.
+ *   - `aria-label` is "Show password" when hidden, "Hide password" when visible.
+ *   - Toggle is keyboard operable; does not clear input or submit the form.
+ *   - `disabled={isSubmitting}` on toggle and password input.
+ */
+describe('LoginScreen (S2.2)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    apiFetchMock.mockResolvedValue({ ok: true });
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  function getPasswordInput(): HTMLElement {
+    return screen.getByLabelText(/password/i);
+  }
+
+  it('renders a Show password toggle when the field is masked', () => {
+    renderWithProviders(<LoginScreen />);
+
+    expect(getPasswordInput()).toHaveAttribute('type', 'password');
+    expect(screen.getByRole('button', { name: 'Show password' })).toBeInTheDocument();
+  });
+
+  it('toggles the password field type between password and text', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<LoginScreen />);
+
+    const passwordInput = getPasswordInput();
+    const showToggle = screen.getByRole('button', { name: 'Show password' });
+
+    await user.click(showToggle);
+    expect(passwordInput).toHaveAttribute('type', 'text');
+    expect(screen.getByRole('button', { name: 'Hide password' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Hide password' }));
+    expect(passwordInput).toHaveAttribute('type', 'password');
+    expect(screen.getByRole('button', { name: 'Show password' })).toBeInTheDocument();
+  });
+
+  it('activates the visibility toggle with the keyboard', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<LoginScreen />);
+
+    const passwordInput = getPasswordInput();
+    const showToggle = screen.getByRole('button', { name: 'Show password' });
+    showToggle.focus();
+
+    await user.keyboard('{Enter}');
+    expect(passwordInput).toHaveAttribute('type', 'text');
+
+    const hideToggle = screen.getByRole('button', { name: 'Hide password' });
+    hideToggle.focus();
+    await user.keyboard(' ');
+    expect(passwordInput).toHaveAttribute('type', 'password');
+  });
+
+  it('does not clear the password or submit when toggling visibility', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<LoginScreen />);
+
+    await user.type(getPasswordInput(), 'keep-me');
+    await user.click(screen.getByRole('button', { name: 'Show password' }));
+
+    expect(getPasswordInput()).toHaveValue('keep-me');
+    expect(apiFetchMock).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Hide password' }));
+    expect(getPasswordInput()).toHaveValue('keep-me');
+    expect(apiFetchMock).not.toHaveBeenCalled();
+  });
+
+  it('POSTs /auth/login with the entered password after toggling visibility', async () => {
+    const user = userEvent.setup();
+    const onAuthenticated = vi.fn();
+    renderWithProviders(<LoginScreen onAuthenticated={onAuthenticated} />);
+
+    await user.type(getPasswordInput(), 'correct-horse');
+    await user.click(screen.getByRole('button', { name: 'Show password' }));
+    await user.click(screen.getByRole('button', { name: 'Hide password' }));
+    await user.click(screen.getByRole('button', { name: /sign in/i }));
+
+    await waitFor(() => {
+      expect(apiFetchMock).toHaveBeenCalledWith(
+        '/auth/login',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ password: 'correct-horse' }),
+        }),
+      );
+    });
+    expect(onAuthenticated).toHaveBeenCalledTimes(1);
+  });
+
+  it('disables the password input and visibility toggle while submitting', async () => {
+    const user = userEvent.setup();
+    let resolveLogin: (value: { ok: boolean }) => void = () => undefined;
+    apiFetchMock.mockImplementation(
+      () =>
+        new Promise<{ ok: boolean }>((resolve) => {
+          resolveLogin = resolve;
+        }),
+    );
+
+    renderWithProviders(<LoginScreen />);
+
+    await user.type(getPasswordInput(), 'slow-start');
+    await user.click(screen.getByRole('button', { name: 'Show password' }));
+
+    const signIn = screen.getByRole('button', { name: /sign in/i });
+    const hideToggle = screen.getByRole('button', { name: 'Hide password' });
+    await user.click(signIn);
+
+    await waitFor(() => {
+      expect(getPasswordInput()).toBeDisabled();
+      expect(hideToggle).toBeDisabled();
+      expect(signIn).toBeDisabled();
+    });
+
+    resolveLogin({ ok: true });
+    await waitFor(() => {
+      expect(getPasswordInput()).not.toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Hide password' })).not.toBeDisabled();
+      expect(signIn).not.toBeDisabled();
+    });
+  });
+});
