@@ -59,16 +59,15 @@ from `backend/` so `backend/pyproject.toml` is loaded.
 
 `make lint` and `make test` should wrap the canonical commands once the repo bootstrap is in place.
 ---
-## Current Sprint — Stage 2: Polish (next)
-**Goal:** PWA + UX polish for daily phone use on the live production stack.
-**Status (2026-06-05):** **Phase 11 complete** — merged to `main`; owner sign-off O11.0–O11.2. Start Stage 2 when planned; see `plans/PRD.md` §10.
+## Current Sprint — Stage 2: Polish (active)
+**Goal:** Production UX polish for daily phone use (layout, onboarding, navigation) on the live stack; PWA in optional batch.
+**Status (2026-06-05):** **Phase 11 complete** on `main`. **Stage 2 tickets approved for implementation** — start with **S2.1** on `feat/stage-2-polish` (or per-ticket branch per owner).
 **Production (live):** App `https://milestone-activity.netlify.app` · API `https://milestone-training-log.onrender.com` · DB Supabase Postgres (session pooler). Runbook: `docs/deploy.md`.
 **Deploy branch:** `main` (Render + Netlify auto-deploy from GitHub).
-**Phase 11 ticket source:** `plans/tickets-phase-11-production-2026-06-04.md` (complete)
-**Planning source:** `plans/feature-brief-production-deploy-2026-06-04.md`, `plans/technical-design-production-deploy-2026-06-04.md`
-**Primary references:** `plans/PRD.md` §9–10, `plans/TRD.md` §12, `docs/deploy.md`
+**Ticket source:** `plans/tickets-stage-2-polish-2026-06-05.md` (S2.1–S2.9 required; S2.10 PWA optional; **O2.1** owner smoke)
+**Primary references:** `plans/PRD.md` §10, `DESIGN.md`, `docs/patterns.md`, `docs/deploy.md`
 
-**Archive:** Phase 0–10 tickets in `plans/archive/phase-0-10/` · Phase 11 tickets remain in `plans/` until archived to `plans/archive/phase-11/`
+**Archive:** Phase 0–10 in `plans/archive/phase-0-10/` · Phase 11 in `plans/tickets-phase-11-production-2026-06-04.md` (archive to `plans/archive/phase-11/` when convenient)
 
 ---
 ## Definition of Done
