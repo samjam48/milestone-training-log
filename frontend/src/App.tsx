@@ -19,6 +19,7 @@ import {
 } from './components/screens';
 import type { Activity, Goal } from './types';
 import { useMilestoneEngine, type MilestoneEngineResult } from './hooks/useMilestoneEngine';
+import { useMilestoneNavigationHistory } from './hooks/useMilestoneNavigationHistory';
 
 type OverlayKey = 'check-in' | 'log-activity' | 'log-incident';
 type StackEntry = { screen: string; params: Record<string, unknown> };
@@ -138,9 +139,28 @@ export function App(): React.ReactElement {
 
   const pushScreen = (screen: string, params: Record<string, unknown> = {}): void =>
     setScreenStack((s) => [...s, { screen, params }]);
-  const popScreen = (): void => setScreenStack((s) => s.slice(0, -1));
+  const popScreen = React.useCallback(
+    (): void => setScreenStack((s) => s.slice(0, -1)),
+    [],
+  );
 
   const showLogin = engine.isUnauthorized || sessionEnded;
+
+  const historyEnabled =
+    !showLogin && !engine.isInitialLoading && !engine.isFatalError;
+
+  const closeOverlay = React.useCallback((): void => {
+    setOverlay(null);
+    setLogActivityPrefillId(undefined);
+  }, []);
+
+  const { navigateBack } = useMilestoneNavigationHistory({
+    enabled: historyEnabled,
+    overlayOpen: overlay !== null,
+    stackDepth: screenStack.length,
+    onCloseOverlay: closeOverlay,
+    onPopScreen: popScreen,
+  });
 
   const handleAuthenticated = (): void => {
     setSessionEnded(false);
@@ -169,11 +189,6 @@ export function App(): React.ReactElement {
   const showTabBar =
     !engine.isFatalError && overlay === null && screenStack.length === 0;
 
-  const closeOverlay = (): void => {
-    setOverlay(null);
-    setLogActivityPrefillId(undefined);
-  };
-
   const openLogActivity = (activityId?: string): void => {
     setLogActivityPrefillId(activityId);
     setOverlay('log-activity');
@@ -188,8 +203,8 @@ export function App(): React.ReactElement {
     mainContent = (
       <MorningCheckInScreen
         engine={engine}
-        onBack={closeOverlay}
-        onComplete={closeOverlay}
+        onBack={navigateBack}
+        onComplete={navigateBack}
       />
     );
   } else if (overlay === 'log-activity') {
@@ -200,16 +215,16 @@ export function App(): React.ReactElement {
           logActivityPrefillId,
           engine.activities,
         )}
-        onBack={closeOverlay}
-        onComplete={closeOverlay}
+        onBack={navigateBack}
+        onComplete={navigateBack}
       />
     );
   } else if (overlay === 'log-incident') {
     mainContent = (
       <LogIncidentScreen
         engine={engine}
-        onBack={closeOverlay}
-        onComplete={closeOverlay}
+        onBack={navigateBack}
+        onComplete={navigateBack}
       />
     );
   } else if (activeTab === 'dashboard') {
@@ -268,7 +283,7 @@ export function App(): React.ReactElement {
           data-testid="stack-screen-overlay"
           className="absolute inset-0 z-40 flex flex-col bg-bg"
         >
-          {resolveStackScreen(topEntry, engine, popScreen)}
+          {resolveStackScreen(topEntry, engine, navigateBack)}
         </div>
       )}
       {!shellBlocked && (

@@ -9,6 +9,11 @@ import { screen, within, cleanup, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from './test/renderWithProviders';
 import {
+  spyOnBrowserHistory,
+  dispatchPopState,
+  bridgeHistoryBackToPopstate,
+} from './test/navigationHistory';
+import {
   mockEngine,
   resetMockEngine,
   applyC63DashboardFixtures,
@@ -697,5 +702,308 @@ describe('App — Settings dev reset hidden in prod (F11.2)', () => {
     expect(
       screen.queryByRole('button', { name: /reset mock data/i }),
     ).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * S2.3 — Browser history integration (Android system Back).
+ * Implementer: sync overlay / screenStack with history.pushState, popstate,
+ * history.back, and optional replaceState on authenticated shell entry.
+ */
+describe('S2.3 — Browser history integration (Android system Back)', () => {
+  let historySpies: ReturnType<typeof spyOnBrowserHistory>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetMockEngine();
+    historySpies = spyOnBrowserHistory();
+  });
+
+  afterEach(() => {
+    historySpies.pushState.mockRestore();
+    historySpies.replaceState.mockRestore();
+    historySpies.back.mockRestore();
+    cleanup();
+  });
+
+  it('pushes a history entry when opening the morning check-in overlay', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    await user.click(screen.getByRole('button', { name: 'Complete morning check-in' }));
+
+    expect(screen.getByRole('heading', { name: 'Morning Check-In' })).toBeInTheDocument();
+    expect(historySpies.pushState).toHaveBeenCalled();
+  });
+
+  it('pushes a history entry when opening log-activity overlay from Log tab', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
+    await user.click(screen.getByRole('button', { name: '+ Log Activity' }));
+
+    expect(screen.getByRole('heading', { name: 'Log Activity' })).toBeInTheDocument();
+    expect(historySpies.pushState).toHaveBeenCalled();
+  });
+
+  it('pushes a history entry when opening log-incident overlay from Log tab', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
+    await user.click(screen.getByRole('button', { name: '+ Log Incident' }));
+
+    expect(screen.getByRole('heading', { name: 'Log Incident' })).toBeInTheDocument();
+    expect(historySpies.pushState).toHaveBeenCalled();
+  });
+
+  it('closes an open overlay on popstate and leaves the active tab unchanged', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
+    await user.click(screen.getByRole('button', { name: '+ Log Activity' }));
+
+    expect(screen.getByRole('heading', { name: 'Log Activity' })).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
+
+    dispatchPopState();
+
+    expect(screen.queryByRole('heading', { name: 'Log Activity' })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Log History' })).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
+    expect(within(getPrimaryNav()).getByRole('button', { name: 'Log' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+  });
+
+  it('pushes a history entry when pushing a stack screen onto the navigation stack', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Goals' }));
+    await user.click(screen.getByRole('button', { name: /\+ new goal/i }));
+
+    expect(screen.getByTestId('stack-screen-overlay')).toBeInTheDocument();
+    expect(historySpies.pushState).toHaveBeenCalled();
+  });
+
+  it('pops one stack level on popstate when the stack is two screens deep', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    await user.click(screen.getByTestId('test-push-unknown-screen'));
+    await user.click(screen.getByTestId('test-push-unknown-screen'));
+
+    expect(screen.getByTestId('stack-screen-overlay')).toBeInTheDocument();
+
+    dispatchPopState();
+    expect(screen.getByTestId('stack-screen-overlay')).toBeInTheDocument();
+
+    dispatchPopState();
+    expect(screen.queryByTestId('stack-screen-overlay')).not.toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
+  });
+
+  it('uses history.back when in-app Back closes a tab overlay', async () => {
+    const restoreBack = bridgeHistoryBackToPopstate(historySpies.back);
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    try {
+      await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
+      await user.click(screen.getByRole('button', { name: '+ Log Incident' }));
+      expect(screen.getByRole('heading', { name: 'Log Incident' })).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Back' }));
+
+      expect(historySpies.back).toHaveBeenCalled();
+      expect(screen.queryByRole('heading', { name: 'Log Incident' })).not.toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Log History' })).toBeInTheDocument();
+    } finally {
+      restoreBack();
+    }
+  });
+
+  it('uses history.back when Done closes check-in overlay after successful submit', async () => {
+    const restoreBack = bridgeHistoryBackToPopstate(historySpies.back);
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    try {
+      await user.click(screen.getByRole('button', { name: 'Complete morning check-in' }));
+      expect(screen.getByRole('heading', { name: 'Morning Check-In' })).toBeInTheDocument();
+      historySpies.back.mockClear();
+
+      await user.click(screen.getByRole('button', { name: /save check-in/i }));
+      expect(screen.getByText('Check-in logged.')).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: /^done$/i }));
+
+      expect(historySpies.back).toHaveBeenCalled();
+      expect(screen.queryByRole('heading', { name: 'Morning Check-In' })).not.toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /Good morning, Sam\./i })).toBeInTheDocument();
+
+      dispatchPopState();
+      expect(screen.getByRole('heading', { name: /Good morning, Sam\./i })).toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: 'Morning Check-In' })).not.toBeInTheDocument();
+    } finally {
+      restoreBack();
+    }
+  });
+
+  it('uses history.back when Done closes log-incident overlay after successful submit', async () => {
+    const restoreBack = bridgeHistoryBackToPopstate(historySpies.back);
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    try {
+      await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
+      await user.click(screen.getByRole('button', { name: '+ Log Incident' }));
+      expect(screen.getByRole('heading', { name: 'Log Incident' })).toBeInTheDocument();
+      historySpies.back.mockClear();
+
+      await user.click(screen.getByRole('button', { name: 'Left heel' }));
+      await user.click(screen.getByRole('button', { name: /record incident/i }));
+      expect(screen.getByText('Incident recorded.')).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: /^done$/i }));
+
+      expect(historySpies.back).toHaveBeenCalled();
+      expect(screen.queryByRole('heading', { name: 'Log Incident' })).not.toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Log History' })).toBeInTheDocument();
+
+      dispatchPopState();
+      expect(screen.getByRole('heading', { name: 'Log History' })).toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: 'Log Incident' })).not.toBeInTheDocument();
+    } finally {
+      restoreBack();
+    }
+  });
+
+  it('uses history.back when log-activity overlay auto-closes after successful submit', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const restoreBack = bridgeHistoryBackToPopstate(historySpies.back);
+    applyC63DashboardFixtures();
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    try {
+      await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
+      await user.click(screen.getByRole('button', { name: '+ Log Activity' }));
+      expect(screen.getByRole('heading', { name: 'Log Activity' })).toBeInTheDocument();
+      historySpies.back.mockClear();
+
+      await user.click(screen.getByRole('button', { name: 'Stretching' }));
+      const durationLabel = screen.getByText('Duration');
+      const durationField = durationLabel.parentElement;
+      expect(durationField).not.toBeNull();
+      await user.type(within(durationField!).getByRole('spinbutton'), '20');
+      await user.click(screen.getByRole('button', { name: /log session/i }));
+
+      expect(screen.getByText('Session logged.')).toBeInTheDocument();
+      await vi.advanceTimersByTimeAsync(800);
+
+      expect(historySpies.back).toHaveBeenCalled();
+      expect(screen.queryByRole('heading', { name: 'Log Activity' })).not.toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Log History' })).toBeInTheDocument();
+
+      dispatchPopState();
+      expect(screen.getByRole('heading', { name: 'Log History' })).toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: 'Log Activity' })).not.toBeInTheDocument();
+    } finally {
+      restoreBack();
+      vi.useRealTimers();
+    }
+  });
+
+  it('uses history.back when in-app Back pops a stack screen', async () => {
+    const restoreBack = bridgeHistoryBackToPopstate(historySpies.back);
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    try {
+      await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Settings' }));
+      await user.click(screen.getByRole('button', { name: /edit rules/i }));
+      expect(screen.getByRole('heading', { name: /edit rules/i })).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Back' }));
+
+      expect(historySpies.back).toHaveBeenCalled();
+      expect(screen.queryByTestId('stack-screen-overlay')).not.toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /settings/i })).toBeInTheDocument();
+    } finally {
+      restoreBack();
+    }
+  });
+
+  it('does not double-pop overlay state when popstate fires once', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    await user.click(screen.getByRole('button', { name: 'Complete morning check-in' }));
+    expect(screen.getByRole('heading', { name: 'Morning Check-In' })).toBeInTheDocument();
+
+    dispatchPopState();
+    expect(screen.queryByRole('heading', { name: 'Morning Check-In' })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Good morning, Sam\./i })).toBeInTheDocument();
+
+    dispatchPopState();
+    expect(screen.getByRole('heading', { name: /Good morning, Sam\./i })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Morning Check-In' })).not.toBeInTheDocument();
+  });
+
+  it('seeds history with replaceState when the authenticated shell first renders', () => {
+    renderWithProviders(<App />);
+
+    expect(screen.getByRole('heading', { name: /Good morning, Sam\./i })).toBeInTheDocument();
+    expect(historySpies.replaceState).toHaveBeenCalled();
+  });
+
+  it('seeds history with replaceState after transitioning from LoginScreen to the tab shell', async () => {
+    type EngineWithAuth = typeof mockEngine & { isUnauthorized?: boolean };
+    const user = userEvent.setup();
+    (mockEngine as EngineWithAuth).isUnauthorized = true;
+    mockEngine.refetchAll = vi.fn(() => {
+      (mockEngine as EngineWithAuth).isUnauthorized = false;
+    });
+    apiFetchMock.mockResolvedValueOnce({ ok: true });
+
+    const { rerender } = renderWithProviders(<App />);
+    expect(screen.getByTestId('login-screen')).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(/password/i), 'session-secret');
+    await user.click(screen.getByRole('button', { name: /sign in/i }));
+
+    await waitFor(() => {
+      expect(mockEngine.refetchAll).toHaveBeenCalled();
+    });
+    rerender(<App />);
+
+    expect(screen.getByRole('heading', { name: /Good morning, Sam\./i })).toBeInTheDocument();
+    expect(historySpies.replaceState).toHaveBeenCalled();
+  });
+
+  it('does not push history entries on the login screen', () => {
+    type EngineWithAuth = typeof mockEngine & { isUnauthorized?: boolean };
+    (mockEngine as EngineWithAuth).isUnauthorized = true;
+    renderWithProviders(<App />);
+
+    expect(screen.getByTestId('login-screen')).toBeInTheDocument();
+    expect(historySpies.pushState).not.toHaveBeenCalled();
+    expect(historySpies.replaceState).not.toHaveBeenCalled();
+  });
+
+  it('does not push history entries while the fatal error shell is shown', async () => {
+    const user = userEvent.setup();
+    mockEngine.isFatalError = true;
+    renderWithProviders(<App />);
+
+    expect(screen.getByTestId('app-fatal-error')).toBeInTheDocument();
+    expect(historySpies.pushState).not.toHaveBeenCalled();
+
+    const retry = screen.getByRole('button', { name: 'Retry' });
+    await user.click(retry);
+    expect(historySpies.pushState).not.toHaveBeenCalled();
   });
 });
