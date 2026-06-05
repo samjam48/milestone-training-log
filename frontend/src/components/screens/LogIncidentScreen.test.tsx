@@ -17,7 +17,7 @@ import {
   withSafeTopAncestor,
 } from '../../test/screenBackLayout';
 import type { DelayedTaxResponse } from '../../hooks/useMilestoneEngine';
-import type { ActivityClass } from '../../types';
+import type { ActivityClass, FlareUpIncident } from '../../types';
 import { LogIncidentScreen } from './LogIncidentScreen';
 
 const FOOT_PERFORMANCE_CLASS: ActivityClass = {
@@ -103,12 +103,12 @@ function getAttributionSection(): HTMLElement {
   return section!;
 }
 
-async function submitIncident(): Promise<void> {
+async function submitIncident(bodyPart = 'Left heel'): Promise<void> {
   const user = userEvent.setup();
   renderWithProviders(
     <LogIncidentScreen engine={mockEngine} onBack={vi.fn()} onComplete={vi.fn()} />,
   );
-  await user.click(screen.getByRole('button', { name: 'Left heel' }));
+  await user.type(screen.getByPlaceholderText('e.g. Right toe'), bodyPart);
   await user.click(screen.getByRole('button', { name: /record incident/i }));
   expect(screen.getByText('Incident recorded.')).toBeInTheDocument();
 }
@@ -162,7 +162,7 @@ describe('LogIncidentScreen — S2.4 back affordance', () => {
 
     const backControl = within(screen.getByTestId(SCREEN_BACK_HEADER_TEST_ID)).getByRole(
       'button',
-      { name: /back/i },
+      { name: /go back/i },
     );
     expectBackControlVisibleWithoutScroll(backControl, PHONE_VIEWPORT_HEIGHT);
   });
@@ -243,11 +243,119 @@ describe('LogIncidentScreen — F10.4 delayed-tax attribution', () => {
     renderWithProviders(
       <LogIncidentScreen engine={mockEngine} onBack={vi.fn()} onComplete={onComplete} />,
     );
-    await user.click(screen.getByRole('button', { name: 'Left heel' }));
+    await user.type(screen.getByPlaceholderText('e.g. Right toe'), 'Left heel');
     await user.click(screen.getByRole('button', { name: /record incident/i }));
     expect(screen.getByText('Incident recorded.')).toBeInTheDocument();
     expect(onComplete).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: /^done$/i }));
     expect(onComplete).toHaveBeenCalledOnce();
+  });
+});
+
+const LEGACY_HARDCODED_BODY_PARTS = [
+  'Left heel',
+  'Right heel',
+  'Left ankle',
+  'Right ankle',
+  'Left knee',
+  'Right knee',
+  'Lower back',
+  'Other',
+] as const;
+
+function makeIncident(
+  overrides: Partial<FlareUpIncident> & Pick<FlareUpIncident, 'bodyPart'>,
+): FlareUpIncident {
+  return {
+    id: overrides.id ?? 'inc-test',
+    userId: overrides.userId ?? 'user-1',
+    incidentDate: overrides.incidentDate ?? '2026-05-01',
+    severity: overrides.severity ?? 5,
+    createdAt: overrides.createdAt ?? '2026-05-01T12:00:00Z',
+    ...overrides,
+  };
+}
+
+function getBodyPartCard(): HTMLElement {
+  const heading = screen.getByText("What's flared up?");
+  const card = heading.parentElement;
+  expect(card).not.toBeNull();
+  return card!;
+}
+
+function renderLogIncident(incidents: FlareUpIncident[] = []): void {
+  resetMockEngine();
+  mockEngine.incidents = incidents;
+  renderWithProviders(
+    <LogIncidentScreen engine={mockEngine} onBack={vi.fn()} onComplete={vi.fn()} />,
+  );
+}
+
+describe('LogIncidentScreen — S2.5 incident body part UX', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('does not render legacy hardcoded BODY_PARTS chips when incident history is empty', () => {
+    renderLogIncident([]);
+
+    const card = getBodyPartCard();
+    for (const part of LEGACY_HARDCODED_BODY_PARTS) {
+      expect(within(card).queryByRole('button', { name: part })).not.toBeInTheDocument();
+    }
+  });
+
+  it('uses a primary text field with a Right toe-style placeholder', () => {
+    renderLogIncident([]);
+
+    const card = getBodyPartCard();
+    const input = within(card).getByRole('textbox');
+    expect(input).toBeInTheDocument();
+    expect(input).toHaveAttribute('placeholder', 'e.g. Right toe');
+  });
+
+  it('shows no suggestion chips when engine.incidents is empty', () => {
+    renderLogIncident([]);
+
+    const card = getBodyPartCard();
+    const buttons = within(card).queryAllByRole('button');
+    expect(buttons).toHaveLength(0);
+  });
+
+  it('renders a suggestion chip from incident bodyPart history', () => {
+    renderLogIncident([makeIncident({ id: 'inc-toe', bodyPart: 'Right toe' })]);
+
+    const card = getBodyPartCard();
+    expect(within(card).getByRole('button', { name: 'Right toe' })).toBeInTheDocument();
+  });
+
+
+  it('fills the text field when a suggestion chip is tapped', async () => {
+    const user = userEvent.setup();
+    renderLogIncident([makeIncident({ id: 'inc-toe', bodyPart: 'Right toe' })]);
+
+    const card = getBodyPartCard();
+    await user.click(within(card).getByRole('button', { name: 'Right toe' }));
+    expect(within(card).getByRole('textbox')).toHaveValue('Right toe');
+  });
+
+  it('dedupes suggestion chips case-insensitively from incident history', () => {
+    renderLogIncident([
+      makeIncident({
+        id: 'inc-a',
+        bodyPart: 'Right toe',
+        incidentDate: '2026-05-20',
+        createdAt: '2026-05-20T10:00:00Z',
+      }),
+      makeIncident({
+        id: 'inc-b',
+        bodyPart: 'right toe',
+        incidentDate: '2026-05-10',
+        createdAt: '2026-05-10T10:00:00Z',
+      }),
+    ]);
+
+    const card = getBodyPartCard();
+    expect(within(card).getAllByRole('button', { name: /right toe/i })).toHaveLength(1);
   });
 });

@@ -118,7 +118,7 @@ describe('App shell (F1.1)', () => {
     await user.click(screen.getByRole('button', { name: 'Complete morning check-in' }));
     expect(screen.getByRole('heading', { name: 'Morning Check-In' })).toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Go back' }));
+    await user.click(screen.getByRole('button', { name: /go back/i }));
     expect(screen.getByRole('heading', { name: /Good morning, Sam\./i })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
   });
@@ -130,7 +130,7 @@ describe('App shell (F1.1)', () => {
     await user.click(screen.getByRole('button', { name: '+ Log Activity' }));
     expect(screen.getByRole('heading', { name: 'Log Activity' })).toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Back' }));
+    await user.click(screen.getByRole('button', { name: /go back/i }));
     expect(screen.getByRole('heading', { name: 'Log History' })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
   });
@@ -142,7 +142,7 @@ describe('App shell (F1.1)', () => {
     await user.click(screen.getByRole('button', { name: '+ Log Incident' }));
     expect(screen.getByRole('heading', { name: 'Log Incident' })).toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Back' }));
+    await user.click(screen.getByRole('button', { name: /go back/i }));
     expect(screen.getByRole('heading', { name: 'Log History' })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
   });
@@ -303,7 +303,7 @@ describe('Screen stack — push/pop navigation (F8.2)', () => {
     expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
 
     // Pop the stack via the back button inside the overlay
-    await user.click(screen.getByRole('button', { name: 'Back' }));
+    await user.click(screen.getByRole('button', { name: /go back/i }));
 
     // Overlay must be gone, tab bar restored
     expect(screen.queryByTestId('stack-screen-overlay')).not.toBeInTheDocument();
@@ -317,7 +317,7 @@ describe('Screen stack — push/pop navigation (F8.2)', () => {
     await user.click(screen.getByRole('button', { name: 'Complete morning check-in' }));
     expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Go back' }));
+    await user.click(screen.getByRole('button', { name: /go back/i }));
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
   });
 
@@ -329,7 +329,7 @@ describe('Screen stack — push/pop navigation (F8.2)', () => {
     await user.click(screen.getByRole('button', { name: '+ Log Activity' }));
     expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Back' }));
+    await user.click(screen.getByRole('button', { name: /go back/i }));
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
   });
 
@@ -341,7 +341,7 @@ describe('Screen stack — push/pop navigation (F8.2)', () => {
     await user.click(screen.getByRole('button', { name: '+ Log Incident' }));
     expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Back' }));
+    await user.click(screen.getByRole('button', { name: /go back/i }));
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
   });
 
@@ -385,10 +385,10 @@ describe('Settings stack navigation (F9.4)', () => {
 
     expect(screen.getByTestId('stack-screen-overlay')).toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /go back/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /edit rules/i })).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Back' }));
+    await user.click(screen.getByRole('button', { name: /go back/i }));
 
     expect(screen.queryByTestId('stack-screen-overlay')).not.toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
@@ -403,10 +403,10 @@ describe('Settings stack navigation (F9.4)', () => {
 
     expect(screen.getByTestId('stack-screen-overlay')).toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /go back/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /block review/i })).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Back' }));
+    await user.click(screen.getByRole('button', { name: /go back/i }));
 
     expect(screen.queryByTestId('stack-screen-overlay')).not.toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
@@ -421,10 +421,10 @@ describe('Settings stack navigation (F9.4)', () => {
 
     expect(screen.getByTestId('stack-screen-overlay')).toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /go back/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /new training block/i })).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Back' }));
+    await user.click(screen.getByRole('button', { name: /go back/i }));
 
     expect(screen.queryByTestId('stack-screen-overlay')).not.toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
@@ -459,10 +459,10 @@ describe('Settings stack navigation (F9.4)', () => {
 
     expect(screen.getByTestId('stack-screen-overlay')).toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /go back/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /edit activity/i })).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Back' }));
+    await user.click(screen.getByRole('button', { name: /go back/i }));
 
     expect(screen.queryByTestId('stack-screen-overlay')).not.toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
@@ -477,7 +477,7 @@ describe('Settings stack navigation (F9.4)', () => {
     const overlay = screen.getByTestId('stack-screen-overlay');
     expect(overlay).toBeInTheDocument();
     expect(overlay.textContent).toBe('');
-    expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /go back/i })).not.toBeInTheDocument();
   });
 });
 
@@ -817,7 +817,7 @@ describe('S2.3 — Browser history integration (Android system Back)', () => {
       await user.click(screen.getByRole('button', { name: '+ Log Incident' }));
       expect(screen.getByRole('heading', { name: 'Log Incident' })).toBeInTheDocument();
 
-      await user.click(screen.getByRole('button', { name: 'Back' }));
+      await user.click(screen.getByRole('button', { name: /go back/i }));
 
       expect(historySpies.back).toHaveBeenCalled();
       expect(screen.queryByRole('heading', { name: 'Log Incident' })).not.toBeInTheDocument();
@@ -864,7 +864,7 @@ describe('S2.3 — Browser history integration (Android system Back)', () => {
       expect(screen.getByRole('heading', { name: 'Log Incident' })).toBeInTheDocument();
       historySpies.back.mockClear();
 
-      await user.click(screen.getByRole('button', { name: 'Left heel' }));
+      await user.type(screen.getByPlaceholderText('e.g. Right toe'), 'Left heel');
       await user.click(screen.getByRole('button', { name: /record incident/i }));
       expect(screen.getByText('Incident recorded.')).toBeInTheDocument();
       await user.click(screen.getByRole('button', { name: /^done$/i }));
@@ -927,7 +927,7 @@ describe('S2.3 — Browser history integration (Android system Back)', () => {
       await user.click(screen.getByRole('button', { name: /edit rules/i }));
       expect(screen.getByRole('heading', { name: /edit rules/i })).toBeInTheDocument();
 
-      await user.click(screen.getByRole('button', { name: 'Back' }));
+      await user.click(screen.getByRole('button', { name: /go back/i }));
 
       expect(historySpies.back).toHaveBeenCalled();
       expect(screen.queryByTestId('stack-screen-overlay')).not.toBeInTheDocument();
