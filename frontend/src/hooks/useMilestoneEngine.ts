@@ -53,6 +53,7 @@ import {
   deleteRule as deleteRuleApi,
   createTrainingBlock as createTrainingBlockApi,
   createActivity,
+  createActivityClass,
   patchActivity,
   getDelayedTax,
 } from '../lib/api';
@@ -111,6 +112,13 @@ export interface NewActivityDraft {
   activityClassId: ID;
   type: ActivityType;
   defaultVolumeUnit?: VolumeUnit;
+}
+
+export interface NewActivityClassDraft {
+  name: string;
+  type: ActivityType;
+  description?: string;
+  defaultRecoveryWindowDays?: number;
 }
 
 export interface GoalDraft {
@@ -178,6 +186,7 @@ export interface MilestoneEngineResult {
   previousBlocks: TrainingBlock[];
   // F2.0 mutations
   submitNewActivity: (draft: NewActivityDraft) => void;
+  submitNewActivityClass: (draft: NewActivityClassDraft) => Promise<void>;
   updateActivity: (activityId: ID, patch: Partial<NewActivityDraft>) => void;
   deactivateActivity: (activityId: ID) => void;
   createGoal: (draft: GoalDraft) => void;
@@ -330,6 +339,21 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     },
   });
 
+  const submitNewActivityClassMutation = useMutation({
+    mutationFn: (draft: NewActivityClassDraft) =>
+      createActivityClass({
+        id: crypto.randomUUID(),
+        name: draft.name,
+        type: draft.type,
+        description: draft.description ?? '',
+        defaultRecoveryWindowDays: draft.defaultRecoveryWindowDays ?? 3,
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['activity-classes'] });
+    },
+  });
+
   const updateActivityMutation = useMutation({
     mutationFn: ({ activityId, patch }: { activityId: ID; patch: Partial<NewActivityDraft> }) =>
       patchActivity(activityId, patch as Record<string, unknown>),
@@ -459,6 +483,10 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     submitNewActivityMutation.mutate(draft);
   }, [submitNewActivityMutation]);
 
+  const submitNewActivityClass = React.useCallback(async (draft: NewActivityClassDraft) => {
+    await submitNewActivityClassMutation.mutateAsync(draft);
+  }, [submitNewActivityClassMutation]);
+
   const updateActivity = React.useCallback((activityId: ID, patch: Partial<NewActivityDraft>) => {
     updateActivityMutation.mutate({ activityId, patch });
   }, [updateActivityMutation]);
@@ -535,6 +563,7 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     previousBlocks: (dashboard?.previousBlocks ?? []) as TrainingBlock[],
     // F2.0 mutations
     submitNewActivity,
+    submitNewActivityClass,
     updateActivity,
     deactivateActivity,
     createGoal,

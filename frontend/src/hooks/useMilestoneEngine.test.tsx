@@ -59,6 +59,7 @@ vi.mock('../lib/api', () => ({
   deleteRule: vi.fn(),
   createTrainingBlock: vi.fn(),
   createActivity: vi.fn(),
+  createActivityClass: vi.fn(),
   patchActivity: vi.fn(),
   listActivities: vi.fn(),
   getDelayedTax: vi.fn(),
@@ -81,6 +82,7 @@ import {
   deleteRule as deleteRuleApi,
   createTrainingBlock as createTrainingBlockApi,
   createActivity,
+  createActivityClass,
   patchActivity,
   listActivities,
   getDelayedTax,
@@ -222,6 +224,13 @@ function setupDefaultApiMocks(): void {
     type: 'performance',
     defaultVolumeUnit: 'km',
     isActive: true,
+    createdAt: '2026-05-30T06:00:00Z',
+  });
+  vi.mocked(createActivityClass).mockResolvedValue({
+    id: MOCK_UUID,
+    name: 'Foot Load',
+    type: 'performance',
+    defaultRecoveryWindowDays: 3,
     createdAt: '2026-05-30T06:00:00Z',
   });
   vi.mocked(patchActivity).mockResolvedValue(activityFixture);
@@ -622,6 +631,136 @@ describe('useMilestoneEngine data plane (F2.0)', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // S2.6 — submitNewActivityClass mutation
+  // ---------------------------------------------------------------------------
+
+  it('submitNewActivityClass calls createActivityClass with generated id and draft fields', async () => {
+    const { result } = renderHookWithProviders(() => useMilestoneEngine());
+
+    await waitFor(() => {
+      expect(result.current.todayDate).toBe(dashboardPayload.todayDate);
+    });
+
+    const engine = result.current as typeof result.current & {
+      submitNewActivityClass?: (draft: {
+        name: string;
+        type: 'performance' | 'recovery';
+        description?: string;
+        defaultRecoveryWindowDays?: number;
+      }) => void;
+    };
+
+    expect(typeof engine.submitNewActivityClass).toBe('function');
+
+    act(() => {
+      engine.submitNewActivityClass?.({
+        name: 'High-Intensity Foot Load',
+        type: 'performance',
+        description: 'Impact-heavy lower limb loading.',
+        defaultRecoveryWindowDays: 4,
+      });
+    });
+
+    await waitFor(() => {
+      expect(createActivityClass).toHaveBeenCalledTimes(1);
+    });
+
+    const draft = vi.mocked(createActivityClass).mock.calls[0]?.[0];
+    expect(draft).toBeDefined();
+    expect(draft?.id).toBe(MOCK_UUID);
+    expect(draft?.name).toBe('High-Intensity Foot Load');
+    expect(draft?.type).toBe('performance');
+    expect(draft?.description).toBe('Impact-heavy lower limb loading.');
+    expect(draft?.defaultRecoveryWindowDays).toBe(4);
+  });
+
+  it('submitNewActivityClass defaults description to empty string when omitted', async () => {
+    const { result } = renderHookWithProviders(() => useMilestoneEngine());
+
+    await waitFor(() => {
+      expect(result.current.todayDate).toBe(dashboardPayload.todayDate);
+    });
+
+    const engine = result.current as typeof result.current & {
+      submitNewActivityClass?: (draft: {
+        name: string;
+        type: 'performance' | 'recovery';
+      }) => void;
+    };
+
+    act(() => {
+      engine.submitNewActivityClass?.({
+        name: 'Low-Impact Recovery',
+        type: 'recovery',
+      });
+    });
+
+    await waitFor(() => {
+      expect(createActivityClass).toHaveBeenCalledTimes(1);
+    });
+
+    const draft = vi.mocked(createActivityClass).mock.calls[0]?.[0];
+    expect(draft?.description).toBe('');
+  });
+
+  it('submitNewActivityClass defaults defaultRecoveryWindowDays to 3 when omitted', async () => {
+    const { result } = renderHookWithProviders(() => useMilestoneEngine());
+
+    await waitFor(() => {
+      expect(result.current.todayDate).toBe(dashboardPayload.todayDate);
+    });
+
+    const engine = result.current as typeof result.current & {
+      submitNewActivityClass?: (draft: {
+        name: string;
+        type: 'performance' | 'recovery';
+      }) => void;
+    };
+
+    act(() => {
+      engine.submitNewActivityClass?.({
+        name: 'Low-Impact Recovery',
+        type: 'recovery',
+      });
+    });
+
+    await waitFor(() => {
+      expect(createActivityClass).toHaveBeenCalledTimes(1);
+    });
+
+    const draft = vi.mocked(createActivityClass).mock.calls[0]?.[0];
+    expect(draft?.defaultRecoveryWindowDays).toBe(3);
+  });
+
+  it('submitNewActivityClass invalidates ["dashboard"] and ["activity-classes"] on success', async () => {
+    const { result, queryClient } = renderHookWithProviders(() => useMilestoneEngine());
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    await waitFor(() => {
+      expect(result.current.todayDate).toBe(dashboardPayload.todayDate);
+    });
+
+    const engine = result.current as typeof result.current & {
+      submitNewActivityClass?: (draft: {
+        name: string;
+        type: 'performance' | 'recovery';
+      }) => void;
+    };
+
+    act(() => {
+      engine.submitNewActivityClass?.({
+        name: 'Mobility',
+        type: 'recovery',
+      });
+    });
+
+    await waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['dashboard'] });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['activity-classes'] });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // H9.0 — activity update / deactivate mutations
   // ---------------------------------------------------------------------------
 
@@ -955,6 +1094,10 @@ describe('useMilestoneEngine data plane (F2.0)', () => {
     expect(Array.isArray(result.current.weeklyTargets)).toBe(true);
     expect(Array.isArray(result.current.previousBlocks)).toBe(true);
     expect(typeof result.current.submitNewActivity).toBe('function');
+    const engineWithClassMutation = result.current as typeof result.current & {
+      submitNewActivityClass?: (draft: unknown) => void;
+    };
+    expect(typeof engineWithClassMutation.submitNewActivityClass).toBe('function');
     expect(typeof result.current.createGoal).toBe('function');
     expect(typeof result.current.updateGoal).toBe('function');
     expect(typeof result.current.archiveGoal).toBe('function');
