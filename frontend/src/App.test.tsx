@@ -498,7 +498,7 @@ describe('App shell — loading and fatal error (F10.7)', () => {
     expect(
       screen.queryByRole('heading', { name: /Good morning, Sam\./i }),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
   });
 
   it('shows full-column server error with Retry when isFatalError', () => {
@@ -593,6 +593,17 @@ describe('App — session auth gate (F11.2)', () => {
       screen.queryByRole('heading', { name: /Good morning, Sam\./i }),
     ).not.toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
+  });
+
+  it('hides tab bar while initial dashboard load is pending', () => {
+    (mockEngine as EngineWithAuth).isUnauthorized = false;
+    mockEngine.isInitialLoading = true;
+    mockEngine.isFatalError = false;
+    renderWithProviders(<App />);
+
+    expect(screen.getByTestId('app-dashboard-skeleton')).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('login-screen')).not.toBeInTheDocument();
   });
 
   it('shows dashboard shell when engine is authorized and loaded', () => {

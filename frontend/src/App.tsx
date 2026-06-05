@@ -155,7 +155,17 @@ export function App(): React.ReactElement {
     return <LoginScreen onAuthenticated={handleAuthenticated} />;
   }
 
-  const shellBlocked = engine.isFatalError || engine.isInitialLoading;
+  // Wait for first dashboard response before showing the tab shell. Otherwise
+  // isUnauthorized is false while pending and users see an empty shell + nav.
+  if (engine.isInitialLoading) {
+    return (
+      <AppShell withTabBar={false}>
+        <AppDashboardSkeleton />
+      </AppShell>
+    );
+  }
+
+  const shellBlocked = engine.isFatalError;
   const showTabBar =
     !engine.isFatalError && overlay === null && screenStack.length === 0;
 
@@ -174,8 +184,6 @@ export function App(): React.ReactElement {
   let mainContent: React.ReactElement;
   if (engine.isFatalError) {
     mainContent = <AppFatalError onRetry={() => { engine.refetchAll(); }} />;
-  } else if (engine.isInitialLoading) {
-    mainContent = <AppDashboardSkeleton />;
   } else if (overlay === 'check-in') {
     mainContent = (
       <MorningCheckInScreen
