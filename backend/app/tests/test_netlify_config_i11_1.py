@@ -72,9 +72,12 @@ def test_netlify_toml_force_proxies_api_to_render_placeholder(
         r'from\s*=\s*["\']/api/\*["\']',
         netlify_toml_text,
     ), "netlify.toml must declare a redirect from /api/*."
-    assert "https://REPLACE_ME.onrender.com/api/:splat" in netlify_toml_text, (
-        "netlify.toml /api proxy must target "
-        "https://REPLACE_ME.onrender.com/api/:splat until O11.1 updates the host."
+    assert re.search(
+        r'https://(?:REPLACE_ME|[A-Za-z0-9-]+)\.onrender\.com/api/:splat',
+        netlify_toml_text,
+    ), (
+        "netlify.toml /api proxy must target https://<host>.onrender.com/api/:splat "
+        "(REPLACE_ME placeholder or O11.1 production hostname)."
     )
     assert re.search(r"force\s*=\s*true", netlify_toml_text, flags=re.IGNORECASE), (
         "netlify.toml /api redirect must set force = true so Netlify proxies to Render."
