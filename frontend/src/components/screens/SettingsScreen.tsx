@@ -25,6 +25,7 @@ export interface SettingsScreenProps {
   onNewBlock?: () => void;
   onViewBlock?: (blockId: ID) => void;
   onEditActivity?: (activity: Activity) => void;
+  onUnauthenticated?: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -353,6 +354,7 @@ export function SettingsScreen({
   onNewBlock,
   onViewBlock,
   onEditActivity,
+  onUnauthenticated,
 }: SettingsScreenProps): React.ReactElement {
   const {
     block,
@@ -386,6 +388,16 @@ export function SettingsScreen({
         })
         .catch(() => { setResetState('idle'); });
     }
+  }
+
+  function handleLogout(): void {
+    void apiFetch('/auth/logout', { method: 'POST' })
+      .then(() => {
+        onUnauthenticated?.();
+      })
+      .catch(() => {
+        onUnauthenticated?.();
+      });
   }
 
   const hasBlock = block.id !== '';
@@ -675,6 +687,16 @@ export function SettingsScreen({
         </section>
 
       </div>
+
+      <footer className="px-4 pb-8 pt-2 shrink-0">
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="w-full rounded-md border border-border px-4 py-2.5 text-body font-medium text-ink-muted hover:bg-bg-sunken transition-colors"
+        >
+          Log out
+        </button>
+      </footer>
     </div>
   );
 }

@@ -35,6 +35,7 @@ import type {
 } from '../types';
 import type { WeeklyProgress, Suggestion } from '../lib/engine';
 import type { LoadPoint } from '../lib/load';
+import { isUnauthorizedError } from '../lib/api/client';
 import {
   getDashboard,
   listActivityLogs,
@@ -189,6 +190,8 @@ export interface MilestoneEngineResult {
   // H10.2 — app shell query status (no raw React Query objects)
   isInitialLoading: boolean;
   isFatalError: boolean;
+  /** True when the dashboard fetch returned 401 (session required). */
+  isUnauthorized: boolean;
   refetchAll: () => void;
   // F1.3 mutations
   submitCheckIn: (draft: CheckInDraft) => void;
@@ -493,7 +496,10 @@ export function useMilestoneEngine(): MilestoneEngineResult {
   }, [createTrainingBlockMutation]);
 
   const isInitialLoading = dashboardQuery.isPending;
-  const isFatalError = dashboardQuery.isError && dashboard === undefined;
+  const isUnauthorized =
+    dashboardQuery.isError && isUnauthorizedError(dashboardQuery.error);
+  const isFatalError =
+    dashboardQuery.isError && dashboard === undefined && !isUnauthorized;
 
   const refetchAll = React.useCallback(() => {
     void dashboardQuery.refetch();
@@ -541,6 +547,7 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     // H10.2 — app shell query status
     isInitialLoading,
     isFatalError,
+    isUnauthorized,
     refetchAll,
     // F1.3 mutations
     submitCheckIn,

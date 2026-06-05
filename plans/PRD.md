@@ -1,5 +1,7 @@
 # Milestone — Product Requirements Document
-*Draft: May 2026 | Owner: Sam*
+*Updated: June 2026 | Owner: Sam*
+
+**Historical phase tickets:** `plans/archive/phase-0-10/`
 
 ## 1. Product Vision
 
@@ -112,15 +114,21 @@ to see whether this week's volume is sustainable given last week's pattern.
 - Reactivate previously deactivated activities
 - Activity manager view grouped by class with last-logged date shown
 
-## 5. Out of Scope (Phase 1)
+## 5. Delivered vs deferred (Phases 0–10)
 
-- Authentication and multi-user support
-- Cloud sync or remote backup
+**Delivered (local MVP):** Features F1–F7 above on Docker + SQLite; single logical user
+(`user_id = "local"`); `GET /api/mcp/context` read stub (no AI calls).
+
+**Deferred to roadmap stages below:**
+
+- Production hosting and minimal access gate (Stage 1)
+- PWA install polish (Stage 2)
+- Strava / Google Health / Apple Health integration (Stage 3)
+- MCP assistant tools beyond context export (Stage 4)
+- Multi-user OAuth and account management
 - Push or local notifications
-- Strava / Apple Health / Google Health integration
-- Native Capacitor packaging (web app only in Phase 1)
-- Multi-class activity tagging (one primary class per activity)
-- AI or MCP assistant integration (data-shape stub only, no AI calls)
+- Native Capacitor store packaging (web-first; Android Chrome for Stage 1)
+- Multi-class flare-up cause tagging (see `plans/BACKLOG.md`)
 
 ## 6. Non-Functional Requirements
 
@@ -130,9 +138,10 @@ to see whether this week's volume is sustainable given last week's pattern.
 - **Type safety:** `mypy --strict` (backend) and `tsc --noEmit` (frontend) must
   pass clean
 - **Test coverage:** pytest ≥ 80% backend; Vitest ≥ 70% frontend
-- **Offline-capable:** SQLite local DB, no network dependency after container start
+- **Local dev:** SQLite via Docker, no network dependency after container start
+- **Production (Stage 1):** HTTPS; Postgres on Supabase; session-gated API
 - **Forward-compatible schema:** `user_id = "local"` on all user-owned rows
-  so multi-user auth migration requires only one DB column change + middleware
+  so multi-user auth migration requires middleware + real user ids, not a schema rewrite
 
 ## 7. UI Specification
 
@@ -164,3 +173,57 @@ same `MilestoneEngineResult` interface.
 - Dashboard loads in < 500ms with 90 days of seeded data
 - `make test` green on full suite before any commit
 - No regressions when mock data is replaced with real backend data
+
+---
+
+## 9. Stage 1 — Production deploy (Phase 11)
+
+**Goal:** Use the full MVP on a personal phone over the internet with real, empty prod data.
+
+**Hosting (owner-approved):** Netlify (frontend, GitHub deploy) + Render (backend,
+free tier) + Supabase (Postgres, free tier). Netlify proxies `/api` to Render;
+app-level shared-password session (weeks per device).
+
+**In scope:**
+
+- Empty production database after migrations (no seed)
+- HTTPS; login gate on API (not only static site)
+- Local dev unchanged (Docker + SQLite)
+- Deploy runbook and Supabase backup guidance
+- Render cold starts acceptable for personal use
+
+**Primary client:** Android Chrome (Pixel 9 Pro).
+
+**Stage 1 success:** Log activity, morning check-in, dashboard, goals, settings,
+and training-block flows on phone against production — same functionality as local MVP.
+
+**Out of Stage 1:** PWA manifest, Strava/Health, MCP tools, multi-user OAuth.
+
+**Planning:** `plans/feature-brief-production-deploy-2026-06-04.md`,
+`plans/technical-design-production-deploy-2026-06-04.md`
+
+---
+
+## 10. Stage 2 — Use-driven polish
+
+- Refine UX from real daily use (copy, defaults, hide unused surfaces)
+- PWA: manifest, icons, Add to Home Screen on Android Chrome
+- Optional performance tuning for Render cold starts (backlog if needed)
+
+---
+
+## 11. Stage 3 — External integrations
+
+- **Strava:** OAuth, activity import → `ActivityLog` with `external_id`, idempotent sync
+- **Google Health / Health Connect:** platform-dependent; likely requires mobile
+  bridge or Capacitor — not web-only hosting alone
+- Normalization and deduplication services; no double-count vs manual logs
+
+---
+
+## 12. Stage 4 — MCP / AI assistant layer
+
+- Expand beyond `GET /api/mcp/context` to tool surface for Claude and similar
+- Authenticated API or dedicated MCP server; reuse `services/load_engine.py` and
+  dashboard aggregations
+- Human-in-the-loop for write actions (log, check-in)

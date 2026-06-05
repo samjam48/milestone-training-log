@@ -28,12 +28,19 @@ def _normalize_database_url(database_url: str) -> str:
     return str(url.set(database=str((APP_ROOT / database_path).resolve())))
 
 
+_DEV_SESSION_SECRET = "dev-insecure-do-not-use-in-production"
+
+
 class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./data/milestone.db"
     APP_VERSION: str = "0.1.0"
     BACKEND_PORT: int = 8084
     DEFAULT_USER_NAME: str = "Sam"
     APP_DEV_MODE: bool = False
+    SESSION_SECRET: str = _DEV_SESSION_SECRET
+    AUTH_PASSWORD: str = ""
+    SESSION_MAX_AGE_DAYS: int = 30
+    CORS_ORIGINS: str = ""
 
     model_config = SettingsConfigDict(
         env_file=ENV_FILE,
@@ -47,3 +54,7 @@ settings = Settings()
 DATABASE_URL = _normalize_database_url(settings.DATABASE_URL)
 APP_VERSION = settings.APP_VERSION
 BACKEND_PORT = settings.BACKEND_PORT
+SESSION_SECRET = settings.SESSION_SECRET
+AUTH_PASSWORD = settings.AUTH_PASSWORD
+SESSION_MAX_AGE_DAYS = settings.SESSION_MAX_AGE_DAYS
+CORS_ORIGINS = settings.CORS_ORIGINS

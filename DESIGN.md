@@ -2,7 +2,7 @@
 
 **Algorithm authority:** Rolling load, class statuses, and dashboard derivations
 follow `export/src/lib/engine.ts` / `load.ts` and `plans/TRD.md` §6. **Delayed tax**
-and live log-time rule checks follow `plans/tickets-phase-4-load-engine-2026-05-27.md`
+and live log-time rule checks follow `plans/archive/phase-0-10/tickets-phase-4-load-engine-2026-05-27.md`
 (Phase 4). This doc keeps product concepts, screen flows, and UX intent.
 
 ## Core Concepts
@@ -387,7 +387,7 @@ weekly load cap only (matches current `engine.ts` prototype).
 
 ### Delayed tax (load risk + symptom attribution)
 
-Canonical behaviour: `plans/tickets-phase-4-load-engine-2026-05-27.md` §Delayed-tax methodology.
+Canonical behaviour: `plans/archive/phase-0-10/tickets-phase-4-load-engine-2026-05-27.md` §Delayed-tax methodology.
 
 **Layer A — Proactive (always, last 7 days through today/`as_of`):**
 - **`elevated_load`:** performance-class daily load ≥ **median** of the prior

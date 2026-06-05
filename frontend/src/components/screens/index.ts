@@ -1,3 +1,4 @@
+export { LoginScreen } from './LoginScreen';
 export { DashboardScreen } from './DashboardScreen';
 export { LogHistoryScreen } from './LogHistoryScreen';
 export { MorningCheckInScreen } from './MorningCheckInScreen';

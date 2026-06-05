@@ -9,6 +9,7 @@ requires-python = ">=3.12"
 dependencies = [
   "alembic",
   "fastapi>=0.115",
+  "psycopg[binary]",
   "pydantic-settings",
   "python-dotenv",
   "sqlmodel>=0.0.21",
@@ -29,6 +30,9 @@ dev = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["app/tests"]
+markers = [
+  "postgres: requires ephemeral PostgreSQL (POSTGRES_TEST_URL, RUN_POSTGRES_TESTS=1, or CI service)",
+]
 
 [tool.ruff]
 line-length = 100

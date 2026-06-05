@@ -99,7 +99,10 @@ def _normalized_default(default_value: object) -> str | None:
     if default_value is None:
         return None
 
-    return str(default_value).strip().strip("()").strip().strip("'\"").lower()
+    text = str(default_value).strip().strip("()").strip()
+    if "::" in text:
+        text = text.split("::", 1)[0].strip()
+    return text.strip("'\"").lower()
 
 
 def _sqlite_column_defaults(engine: Engine, table_name: str) -> dict[str, str | None]:

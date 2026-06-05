@@ -10,6 +10,7 @@ import {
   GoalsScreen,
   GoalEditorScreen,
   SettingsScreen,
+  LoginScreen,
   EditBlockRulesScreen,
   BlockReviewScreen,
   NewTrainingBlockScreen,
@@ -126,6 +127,7 @@ function resolveStackScreen(
 
 export function App(): React.ReactElement {
   const engine = useMilestoneEngine();
+  const [sessionEnded, setSessionEnded] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState<TabKey>('dashboard');
   const [overlay, setOverlay] = React.useState<OverlayKey | null>(null);
   const [logActivityPrefillId, setLogActivityPrefillId] = React.useState<
@@ -138,7 +140,32 @@ export function App(): React.ReactElement {
     setScreenStack((s) => [...s, { screen, params }]);
   const popScreen = (): void => setScreenStack((s) => s.slice(0, -1));
 
-  const shellBlocked = engine.isFatalError || engine.isInitialLoading;
+  const showLogin = engine.isUnauthorized || sessionEnded;
+
+  const handleAuthenticated = (): void => {
+    setSessionEnded(false);
+    engine.refetchAll();
+  };
+
+  const handleUnauthenticated = (): void => {
+    setSessionEnded(true);
+  };
+
+  if (showLogin) {
+    return <LoginScreen onAuthenticated={handleAuthenticated} />;
+  }
+
+  // Wait for first dashboard response before showing the tab shell. Otherwise
+  // isUnauthorized is false while pending and users see an empty shell + nav.
+  if (engine.isInitialLoading) {
+    return (
+      <AppShell withTabBar={false}>
+        <AppDashboardSkeleton />
+      </AppShell>
+    );
+  }
+
+  const shellBlocked = engine.isFatalError;
   const showTabBar =
     !engine.isFatalError && overlay === null && screenStack.length === 0;
 
@@ -157,8 +184,6 @@ export function App(): React.ReactElement {
   let mainContent: React.ReactElement;
   if (engine.isFatalError) {
     mainContent = <AppFatalError onRetry={() => { engine.refetchAll(); }} />;
-  } else if (engine.isInitialLoading) {
-    mainContent = <AppDashboardSkeleton />;
   } else if (overlay === 'check-in') {
     mainContent = (
       <MorningCheckInScreen
@@ -221,6 +246,7 @@ export function App(): React.ReactElement {
         onNewBlock={() => pushScreen('new-training-block')}
         onViewBlock={(blockId) => pushScreen('block-review', { blockId })}
         onEditActivity={(activity) => pushScreen('activity-manager', { activity })}
+        onUnauthenticated={handleUnauthenticated}
       />
     );
   } else {

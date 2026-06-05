@@ -5,7 +5,7 @@
  * Vitest harness (package.json, vitest.config.ts) is created by Implementer in F1.1.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { screen, within, cleanup } from '@testing-library/react';
+import { screen, within, cleanup, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from './test/renderWithProviders';
 import {
@@ -20,6 +20,24 @@ import {
 } from './test/mockEngine';
 import type { Activity, ActivityClass } from './types';
 import { App } from './App';
+
+const { apiFetchMock } = vi.hoisted(() => ({
+  apiFetchMock: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('./lib/api/client', () => ({
+  apiFetch: apiFetchMock,
+  apiFetchOrNullOn404: vi.fn().mockResolvedValue(null),
+  ApiError: class ApiError extends Error {
+    readonly status: number;
+    constructor(status: number, message: string) {
+      super(message);
+      this.status = status;
+    }
+  },
+  isUnauthorizedError: (err: unknown): err is { status: number } =>
+    err instanceof Error && 'status' in err && (err as { status: number }).status === 401,
+}));
 
 vi.mock('./hooks/useMilestoneEngine', () => ({
   useMilestoneEngine: () => mockEngine,
@@ -480,7 +498,7 @@ describe('App shell — loading and fatal error (F10.7)', () => {
     expect(
       screen.queryByRole('heading', { name: /Good morning, Sam\./i }),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
   });
 
   it('shows full-column server error with Retry when isFatalError', () => {
@@ -545,5 +563,139 @@ describe('App shell — loading and fatal error (F10.7)', () => {
     }
 
     expect(screen.queryByRole('heading', { name: 'Morning Check-In' })).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * F11.2 — Session gate: 401 → LoginScreen; authenticated shell after login.
+ * Implementer: expose `isUnauthorized` on MilestoneEngineResult when dashboard
+ * fetch returns 401; App branches before tab shell (distinct from isFatalError).
+ */
+describe('App — session auth gate (F11.2)', () => {
+  type EngineWithAuth = typeof mockEngine & { isUnauthorized?: boolean };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetMockEngine();
+    (mockEngine as EngineWithAuth).isUnauthorized = false;
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('shows LoginScreen when engine reports isUnauthorized', () => {
+    (mockEngine as EngineWithAuth).isUnauthorized = true;
+    renderWithProviders(<App />);
+
+    expect(screen.getByTestId('login-screen')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: /Good morning, Sam\./i }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
+  });
+
+  it('hides tab bar while initial dashboard load is pending', () => {
+    (mockEngine as EngineWithAuth).isUnauthorized = false;
+    mockEngine.isInitialLoading = true;
+    mockEngine.isFatalError = false;
+    renderWithProviders(<App />);
+
+    expect(screen.getByTestId('app-dashboard-skeleton')).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('login-screen')).not.toBeInTheDocument();
+  });
+
+  it('shows dashboard shell when engine is authorized and loaded', () => {
+    (mockEngine as EngineWithAuth).isUnauthorized = false;
+    mockEngine.isInitialLoading = false;
+    mockEngine.isFatalError = false;
+    renderWithProviders(<App />);
+
+    expect(screen.queryByTestId('login-screen')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Good morning, Sam\./i })).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
+  });
+
+  it('does not treat unauthorized as fatal server error', () => {
+    (mockEngine as EngineWithAuth).isUnauthorized = true;
+    mockEngine.isFatalError = false;
+    renderWithProviders(<App />);
+
+    expect(screen.getByTestId('login-screen')).toBeInTheDocument();
+    expect(screen.queryByTestId('app-fatal-error')).not.toBeInTheDocument();
+  });
+
+  it('shows dashboard shell after successful login when session was unauthorized', async () => {
+    const user = userEvent.setup();
+    (mockEngine as EngineWithAuth).isUnauthorized = true;
+    mockEngine.refetchAll = vi.fn(() => {
+      (mockEngine as EngineWithAuth).isUnauthorized = false;
+    });
+    apiFetchMock.mockResolvedValueOnce({ ok: true });
+
+    const { rerender } = renderWithProviders(<App />);
+    expect(screen.getByTestId('login-screen')).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(/password/i), 'session-secret');
+    await user.click(screen.getByRole('button', { name: /sign in/i }));
+
+    await waitFor(() => {
+      expect(apiFetchMock).toHaveBeenCalledWith(
+        '/auth/login',
+        expect.objectContaining({ method: 'POST' }),
+      );
+      expect(mockEngine.refetchAll).toHaveBeenCalled();
+    });
+
+    rerender(<App />);
+
+    expect(screen.queryByTestId('login-screen')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Good morning, Sam\./i })).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
+  });
+
+  it('returns to LoginScreen after Log out on Settings tab', async () => {
+    const user = userEvent.setup();
+    (mockEngine as EngineWithAuth).isUnauthorized = false;
+    apiFetchMock.mockResolvedValueOnce(undefined);
+
+    renderWithProviders(<App />);
+    await user.click(screen.getByRole('button', { name: 'Settings' }));
+    await user.click(screen.getByRole('button', { name: /log out/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('login-screen')).toBeInTheDocument();
+    });
+    expect(apiFetchMock).toHaveBeenCalledWith(
+      '/auth/logout',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(
+      screen.queryByRole('heading', { name: /Good morning, Sam\./i }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * F11.2 — Production dev-mode guard via App → Settings tab.
+ */
+describe('App — Settings dev reset hidden in prod (F11.2)', () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllEnvs();
+  });
+
+  it('does not show Reset mock data on Settings when VITE_DEV_MODE is false', async () => {
+    vi.stubEnv('VITE_DEV_MODE', 'false');
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    await user.click(screen.getByRole('button', { name: 'Settings' }));
+
+    expect(screen.getByRole('heading', { name: /settings/i })).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /reset mock data/i }),
+    ).not.toBeInTheDocument();
   });
 });

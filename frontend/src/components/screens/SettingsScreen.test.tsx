@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { screen, cleanup, within } from '@testing-library/react';
+import { screen, cleanup, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders';
 import { mockEngine, resetMockEngine } from '../../test/mockEngine';
@@ -1259,6 +1259,48 @@ describe('SettingsScreen — Reset mock data button: onClick wiring', () => {
       '/dev/reset',
       expect.objectContaining({ method: 'POST' }),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F11.2 — Session logout (footer)
+// ---------------------------------------------------------------------------
+// Implementer: footer control calls apiFetch('/auth/logout', { method: 'POST' })
+// and onUnauthenticated (App shows LoginScreen).
+// ---------------------------------------------------------------------------
+
+describe('SettingsScreen — F11.2 logout', () => {
+  beforeEach(() => {
+    apiFetchMock.mockClear();
+    apiFetchMock.mockResolvedValue(undefined);
+  });
+
+  it('renders Log out in the Settings footer', () => {
+    const engine = makeEngine({ block: ACTIVE_BLOCK });
+
+    renderWithProviders(<SettingsScreen engine={engine} onUnauthenticated={vi.fn()} />);
+
+    expect(screen.getByRole('button', { name: /log out/i })).toBeInTheDocument();
+  });
+
+  it('POSTs /auth/logout and calls onUnauthenticated when Log out is pressed', async () => {
+    const user = userEvent.setup();
+    const onUnauthenticated = vi.fn();
+    const engine = makeEngine({ block: ACTIVE_BLOCK });
+
+    renderWithProviders(
+      <SettingsScreen engine={engine} onUnauthenticated={onUnauthenticated} />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /log out/i }));
+
+    await waitFor(() => {
+      expect(apiFetchMock).toHaveBeenCalledWith(
+        '/auth/logout',
+        expect.objectContaining({ method: 'POST' }),
+      );
+      expect(onUnauthenticated).toHaveBeenCalledTimes(1);
+    });
   });
 });
 

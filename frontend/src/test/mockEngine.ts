@@ -54,6 +54,7 @@ function createBaseline(): MilestoneEngineResult {
     // H10.2 — app shell query status
     isInitialLoading: false,
     isFatalError: false,
+    isUnauthorized: false,
     refetchAll: () => undefined,
     // F1.3 mutations
     submitLog: () => undefined,
