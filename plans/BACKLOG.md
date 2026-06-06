@@ -78,6 +78,21 @@ Delivered themes: activity-linked goal auto-progress; log date + edit; class/exe
 | Activity class editor | S25.F8 | Done (was create-only) |
 | Incident chips from check-in history | S25.F9 | Done |
 
+## Stage 2.5 polish follow-up (owner feedback, 2026-06-06)
+
+**Tickets:** `plans/tickets-stage-2-5-polish-followup-2026-06-06.md` (P25.2–P25.7)
+
+Owner decisions **locked and signed off** 2026-06-06: exercise daily + weekly volume caps (km/minutes/hours); no class load caps; no abstract load points; sanitized rule labels (rest vs frequency vs consecutive); centered modals; compact date popover.
+
+| Item | Ticket | Status |
+| --- | --- | --- |
+| Rule labels: rest vs frequency vs consecutive | P25.6 | Ready |
+| Exercise volume caps + units; drop load points UI | P25.7 | Ready (after P25.6) |
+| Centered modals (class new/edit/delete) | P25.2 | Ready |
+| Edit activity → centered modal (no deactivate) | P25.3 | Ready (after P25.2) |
+| New activity → centered modal | P25.4 | Ready (after P25.2) |
+| Date picker → compact popover | P25.5 | Ready |
+
 ## Product gaps still open (not in the list above)
 
 - **Settings preference toggles** — Notifications and Metric units are local React state only (prototype; no backend).
