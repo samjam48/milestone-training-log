@@ -19,6 +19,7 @@ import type {
   ActivityClassPatch,
 } from '../../hooks/useMilestoneEngine';
 import { ACTIVITY_VOLUME_UNIT_OPTIONS } from './activityVolumeUnits';
+import { formatSettingsRuleSummary } from '../../lib/ruleTaxonomy';
 import type {
   Activity,
   ActivityClass,
@@ -26,7 +27,6 @@ import type {
   ActivityType,
   ID,
   Rule,
-  RuleType,
   VolumeUnit,
   WeeklyTarget,
   TrainingBlock,
@@ -60,20 +60,6 @@ function formatShortDate(iso: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Rule label map
-// ---------------------------------------------------------------------------
-
-type RuleLabelFn = (v: number) => string;
-
-const RULE_LABEL: Partial<Record<RuleType, RuleLabelFn>> = {
-  rest_between_class:    (v) => `Min ${v}-day rest`,
-  frequency_limit:       (v) => `Max ${v}× / week`,
-  weekly_load_cap:       (v) => `Load cap ${v} / week`,
-  consecutive_day_limit: (v) => `Max ${v} consecutive days`,
-  weekly_activity_count: (v) => `Max ${v} sessions / week`,
-};
-
-// ---------------------------------------------------------------------------
 // BlockSummaryCard
 // ---------------------------------------------------------------------------
 
@@ -99,6 +85,12 @@ function BlockSummaryCard({
 }: BlockSummaryCardProps): React.ReactElement {
   const classMap = new Map(activityClasses.map((c) => [c.id, c]));
   const activeRules = rules.filter((r) => r.enabled);
+  const visibleRecoveryRules = activeRules
+    .map((rule) => ({
+      rule,
+      summary: formatSettingsRuleSummary(rule.ruleType, rule.thresholdValue),
+    }))
+    .filter((entry): entry is { rule: Rule; summary: string } => entry.summary != null);
 
   return (
     <Card pad="md">
@@ -148,13 +140,12 @@ function BlockSummaryCard({
       )}
 
       {/* Recovery rules */}
-      {activeRules.length > 0 && (
+      {visibleRecoveryRules.length > 0 && (
         <div className="mb-4 pt-3 border-t border-border-subtle">
           <p className="text-label uppercase font-medium text-ink-faint mb-2">Recovery Rules</p>
           <ul className="flex flex-col divide-y divide-border-subtle">
-            {activeRules.map((rule) => {
+            {visibleRecoveryRules.map(({ rule, summary }) => {
               const cls = rule.activityClassId ? classMap.get(rule.activityClassId) : null;
-              const labelFn = RULE_LABEL[rule.ruleType];
               return (
                 <li
                   key={rule.id}
@@ -163,9 +154,7 @@ function BlockSummaryCard({
                   <span className="text-ink-muted truncate">
                     {cls ? cls.name : 'All classes'}
                   </span>
-                  <span className="text-ink shrink-0">
-                    {labelFn ? labelFn(rule.thresholdValue) : rule.ruleType}
-                  </span>
+                  <span className="text-ink shrink-0">{summary}</span>
                 </li>
               );
             })}

@@ -6,6 +6,7 @@ import type { Activity, ActivityClass, Rule, TrainingBlock, WeeklyTarget } from 
 import type { MilestoneEngineResult, RuleDraft } from '../../hooks/useMilestoneEngine';
 import { renderWithProviders } from '../../test/renderWithProviders';
 import { mockEngine, resetMockEngine } from '../../test/mockEngine';
+import { P25_6_RULE_LABELS } from '../../test/ruleTaxonomy';
 import { EditBlockRulesScreen } from './EditBlockRulesScreen';
 
 const CLASS_RUNNING: ActivityClass = {
@@ -240,7 +241,7 @@ describe('EditBlockRulesScreen', () => {
     );
 
     expect(
-      screen.getByRole('spinbutton', { name: 'Max sessions per week' }),
+      screen.getByRole('spinbutton', { name: P25_6_RULE_LABELS.frequency_limit }),
     ).toHaveValue(3);
   });
 
@@ -385,8 +386,8 @@ describe('EditBlockRulesScreen', () => {
       />,
     );
 
-    expect(screen.getByText('Min rest between sessions')).toBeInTheDocument();
-    expect(screen.getByText('Max sessions per week')).toBeInTheDocument();
+    expect(screen.getByText(P25_6_RULE_LABELS.rest_between_class)).toBeInTheDocument();
+    expect(screen.getByText(P25_6_RULE_LABELS.frequency_limit)).toBeInTheDocument();
     expect(screen.getAllByText('Running').length).toBeGreaterThanOrEqual(1);
     expect(
       screen.queryByText('Minimum recovery time before this class repeats.'),
@@ -584,7 +585,7 @@ describe('EditBlockRulesScreen — F10.10 add and delete rules', () => {
     expect(deleteRule).toHaveBeenCalledWith(RULE_RUNNING_REST.id);
 
     const remainingInput = screen.getByRole('spinbutton', {
-      name: 'Max sessions per week',
+      name: P25_6_RULE_LABELS.frequency_limit,
     });
     await user.clear(remainingInput);
     await user.type(remainingInput, '5');
@@ -628,7 +629,7 @@ describe('EditBlockRulesScreen — F10.9 loading and error polish', () => {
     renderRulesScreen({ isInitialLoading: true });
 
     expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
-    expect(screen.queryByText(/min rest between sessions/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/minimum days between sessions/i)).not.toBeInTheDocument();
   });
 
   it('shows an actionable error with Retry when engine.isFatalError is true', () => {

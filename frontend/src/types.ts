@@ -152,8 +152,10 @@ export interface TrainingBlock extends Timestamped {
 export type RuleType =
   | 'rest_between_class'      // min N days between same-class activities
   | 'frequency_limit'         // max N activities per window
-  | 'weekly_load_cap'         // sum(volume * rpe) ≤ N per week
+  | 'weekly_load_cap'         // sum(volume * rpe) ≤ N per week (legacy — hidden from UI)
   | 'consecutive_day_limit'   // max N consecutive days with activity
+  | 'weekly_volume_cap'       // max volume per week for one exercise (P25.7: limit_unit)
+  | 'daily_volume_cap'        // max volume per day for one exercise (P25.7: limit_unit)
   | 'weekly_activity_count';  // cross-class: max N performance acts / week
 
 export interface Rule extends Timestamped {

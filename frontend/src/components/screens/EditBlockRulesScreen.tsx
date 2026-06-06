@@ -5,6 +5,12 @@ import { Card } from '../ui/Card';
 import { StackScreenEngineBody } from '../ui/StackScreenEngineBody';
 import type { MilestoneEngineResult, RuleDraft } from '../../hooks/useMilestoneEngine';
 import type { Activity, ActivityClass, Rule, RuleType, VolumeUnit, WeeklyTarget } from '../../types';
+import {
+  CLASS_ADD_RULE_TYPES,
+  EXERCISE_ADD_RULE_TYPES,
+  getRuleHelper,
+  getRuleLabel,
+} from '../../lib/ruleTaxonomy';
 
 export interface EditBlockRulesScreenProps {
   engine: MilestoneEngineResult;
@@ -18,37 +24,52 @@ interface RuleDefinition {
   step: number;
 }
 
-const CLASS_RULE_TYPE_OPTIONS: { value: RuleType; label: string }[] = [
-  { value: 'rest_between_class', label: 'Rest between class' },
-  { value: 'frequency_limit', label: 'Frequency limit' },
-  { value: 'weekly_load_cap', label: 'Weekly load cap' },
-  { value: 'consecutive_day_limit', label: 'Consecutive day limit' },
-];
+const CLASS_RULE_TYPE_OPTIONS = CLASS_ADD_RULE_TYPES.map((value) => ({
+  value,
+  label: getRuleLabel(value),
+}));
+
+const EXERCISE_RULE_TYPE_OPTIONS = EXERCISE_ADD_RULE_TYPES.map((value) => ({
+  value,
+  label: getRuleLabel(value),
+}));
 
 const WEEKLY_TARGET_UNITS: VolumeUnit[] = ['km', 'mi', 'm', 'minutes', 'sessions', 'reps', 'sets'];
 
 const RULE_DEFINITIONS: Record<RuleType, RuleDefinition> = {
   rest_between_class: {
-    label: 'Min rest between sessions',
+    label: getRuleLabel('rest_between_class'),
     unit: 'days',
     min: 1,
     step: 1,
   },
   frequency_limit: {
-    label: 'Max sessions per week',
+    label: getRuleLabel('frequency_limit'),
     unit: '×/wk',
     min: 1,
     step: 1,
   },
   weekly_load_cap: {
-    label: 'Weekly load cap',
+    label: getRuleLabel('weekly_load_cap'),
     unit: 'load',
     min: 10,
     step: 1,
   },
   consecutive_day_limit: {
-    label: 'Max consecutive days',
+    label: getRuleLabel('consecutive_day_limit'),
     unit: 'days',
+    min: 1,
+    step: 1,
+  },
+  weekly_volume_cap: {
+    label: getRuleLabel('weekly_volume_cap'),
+    unit: 'volume',
+    min: 1,
+    step: 1,
+  },
+  daily_volume_cap: {
+    label: getRuleLabel('daily_volume_cap'),
+    unit: 'volume',
     min: 1,
     step: 1,
   },
@@ -143,6 +164,7 @@ function RuleRow({
   const definition = RULE_DEFINITIONS[rule.ruleType];
   const inputId = `rule-threshold-${rule.id}`;
   const thresholdValue = draftThresholds[rule.id] ?? formatThreshold(rule.thresholdValue);
+  const helperText = getRuleHelper(rule.ruleType);
 
   return (
     <div className={cn('px-4 py-3.5', indented && 'pl-8')}>
@@ -156,6 +178,9 @@ function RuleRow({
           </label>
           {activityName != null ? (
             <p className="mt-0.5 text-caption text-ink-muted">{definition.label}</p>
+          ) : null}
+          {helperText != null ? (
+            <p className="mt-1 text-caption text-ink-muted">{helperText}</p>
           ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -322,6 +347,7 @@ function AddRuleForm({
   const [ruleType, setRuleType] = React.useState<RuleType>(DEFAULT_NEW_RULE_DRAFT.ruleType);
   const [threshold, setThreshold] = React.useState(String(DEFAULT_NEW_RULE_DRAFT.thresholdValue));
   const [activityId, setActivityId] = React.useState(selectedActivityId);
+  const helperText = getRuleHelper(ruleType);
 
   React.useEffect(() => {
     setActivityId(selectedActivityId);
@@ -388,6 +414,9 @@ function AddRuleForm({
             </option>
           ))}
         </select>
+        {helperText != null ? (
+          <p className="mt-1.5 text-caption text-ink-muted">{helperText}</p>
+        ) : null}
       </div>
       <div>
         <label
@@ -586,7 +615,7 @@ function ClassRulesSection({
           )}
           {addingExerciseRule ? (
             <AddRuleForm
-              ruleTypeOptions={CLASS_RULE_TYPE_OPTIONS}
+              ruleTypeOptions={EXERCISE_RULE_TYPE_OPTIONS}
               showActivityPicker
               activities={classActivities}
               onSave={(ruleType, thresholdValue, activityId) => {

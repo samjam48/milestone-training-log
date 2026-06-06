@@ -14,6 +14,7 @@ import { screen, cleanup, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders';
 import { mockEngine, resetMockEngine } from '../../test/mockEngine';
+import { P25_6_RULE_LABELS } from '../../test/ruleTaxonomy';
 import type {
   ActivityClass,
   Activity,
@@ -128,17 +129,6 @@ const RULE_DISABLED: Rule = {
   thresholdValue: 100,
   windowDays: 7,
   enabled: false,
-  createdAt: '2026-05-01T00:00:00Z',
-};
-
-const RULE_CROSS_CLASS: Rule = {
-  id: 'rule-cross-1',
-  trainingBlockId: 'blk-active',
-  activityClassId: null,
-  ruleType: 'weekly_activity_count',
-  thresholdValue: 5,
-  windowDays: 7,
-  enabled: true,
   createdAt: '2026-05-01T00:00:00Z',
 };
 
@@ -473,8 +463,10 @@ describe('SettingsScreen — Recovery Rules', () => {
 
     renderWithProviders(<SettingsScreen engine={engine} />);
 
-    // RULE_REST is rest_between_class with threshold 2 → "Min 2-day rest"
-    expect(screen.getByText(/min 2.day rest/i)).toBeInTheDocument();
+    // RULE_REST is rest_between_class with threshold 2
+    expect(
+      screen.getByText(new RegExp(P25_6_RULE_LABELS.rest_between_class, 'i')),
+    ).toBeInTheDocument();
   });
 
   it('renders frequency_limit rule with correct label', () => {
@@ -487,8 +479,10 @@ describe('SettingsScreen — Recovery Rules', () => {
 
     renderWithProviders(<SettingsScreen engine={engine} />);
 
-    // frequency_limit with threshold 3 → "Max 3× / week"
-    expect(screen.getByText(/max 3.* week/i)).toBeInTheDocument();
+    // frequency_limit with threshold 3
+    expect(
+      screen.getByText(new RegExp(P25_6_RULE_LABELS.frequency_limit, 'i')),
+    ).toBeInTheDocument();
   });
 
   it('excludes disabled rules from the recovery rules summary', () => {
@@ -504,13 +498,21 @@ describe('SettingsScreen — Recovery Rules', () => {
     // RULE_DISABLED is weekly_load_cap — its label should NOT appear
     expect(screen.queryByText(/load cap/i)).not.toBeInTheDocument();
     // RULE_REST should still appear
-    expect(screen.getByText(/min 2.day rest/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(new RegExp(P25_6_RULE_LABELS.rest_between_class, 'i')),
+    ).toBeInTheDocument();
   });
 
   it('renders "All classes" label for rules with null activityClassId', () => {
+    const crossClassRestRule: Rule = {
+      ...RULE_REST,
+      id: 'rule-cross-rest',
+      activityClassId: null,
+    };
+
     const engine = makeEngine({
       block: ACTIVE_BLOCK,
-      rules: [RULE_CROSS_CLASS],
+      rules: [crossClassRestRule],
       weeklyTargets: [],
       activityClasses: [],
     });
@@ -520,7 +522,7 @@ describe('SettingsScreen — Recovery Rules', () => {
     expect(screen.getByText(/all classes/i)).toBeInTheDocument();
   });
 
-  it('falls back to raw ruleType when RuleType is not in RULE_LABEL map', () => {
+  it('falls back to raw ruleType when rule type is not in taxonomy map', () => {
     const unknownRule: Rule = {
       ...RULE_REST,
       id: 'rule-unknown',
