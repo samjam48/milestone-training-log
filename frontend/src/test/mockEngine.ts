@@ -1,4 +1,8 @@
-import type { MilestoneEngineResult } from '../hooks/useMilestoneEngine';
+import type {
+  MilestoneEngineResult,
+  NewActivityClassDraft,
+} from '../hooks/useMilestoneEngine';
+import { createActivityClass } from '../lib/api';
 import type { Suggestion } from '../lib/engine';
 import type { Activity, ActivityClass } from '../types';
 
@@ -42,6 +46,15 @@ function createBaseline(): MilestoneEngineResult {
     previousBlocks: [],
     // F2.0 mutations
     submitNewActivity: () => undefined,
+    submitNewActivityClass: async (draft: NewActivityClassDraft) => {
+      await createActivityClass({
+        id: crypto.randomUUID(),
+        name: draft.name,
+        type: draft.type,
+        description: draft.description,
+        defaultRecoveryWindowDays: draft.defaultRecoveryWindowDays ?? 3,
+      });
+    },
     updateActivity: () => undefined,
     deactivateActivity: () => undefined,
     createGoal: () => undefined,

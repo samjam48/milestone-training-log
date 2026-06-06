@@ -13,6 +13,7 @@
 
 import * as React from 'react';
 import { cn } from '../../lib/cn';
+import { BackButton } from '../ui/BackButton';
 import { Card } from '../ui/Card';
 import { Slider } from '../ui/Slider';
 import { SegmentedControl } from '../ui/SegmentedControl';
@@ -26,6 +27,7 @@ interface Props {
   initialActivityId?: string;
   onBack: () => void;
   onComplete: () => void;
+  onCreateActivity?: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -46,16 +48,6 @@ const FEEL_OPTIONS = [
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
-
-const BackButton: React.FC<{ onPress: () => void }> = ({ onPress }) => (
-  <button type="button" onClick={onPress}
-    className="flex items-center gap-1.5 text-body text-ink-muted hover:text-ink transition-colors duration-snap py-1">
-    <svg width={20} height={20} viewBox="0 0 20 20" fill="none" aria-hidden="true">
-      <path d="M12.5 15l-5-5 5-5" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-    Back
-  </button>
-);
 
 const FieldLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <p className="text-body-lg font-semibold text-ink mb-3">{children}</p>
@@ -88,16 +80,28 @@ function groupActivities(classes: ActivityClass[], activities: Activity[]): Grou
   })).filter(g => g.acts.length > 0);
 }
 
+function resolveInitialActivityId(
+  initialActivityId: string | undefined,
+  activities: Activity[],
+): string {
+  if (initialActivityId == null || initialActivityId === '') return '';
+  const act = activities.find(a => a.id === initialActivityId);
+  if (act == null || !act.isActive) return '';
+  return initialActivityId;
+}
+
 // ---------------------------------------------------------------------------
 // Screen
 // ---------------------------------------------------------------------------
 
 export const LogActivityScreen: React.FC<Props> = ({
-  engine, initialActivityId, onBack, onComplete,
+  engine, initialActivityId, onBack, onComplete, onCreateActivity,
 }) => {
   const { activityClasses, activities, checkViolations, submitLog } = engine;
 
-  const [selectedId,  setSelectedId]  = React.useState<string>(initialActivityId ?? '');
+  const [selectedId,  setSelectedId]  = React.useState<string>(
+    () => resolveInitialActivityId(initialActivityId, activities),
+  );
   const [duration,    setDuration]    = React.useState(0);
   const [volume,      setVolume]      = React.useState(0);
   const [rpe,         setRpe]         = React.useState(5);
@@ -106,6 +110,7 @@ export const LogActivityScreen: React.FC<Props> = ({
   const [submitted,   setSubmitted]   = React.useState(false);
 
   const groups  = React.useMemo(() => groupActivities(activityClasses, activities), [activityClasses, activities]);
+  const hasActiveActivities = groups.length > 0;
   const selAct  = activities.find(a => a.id === selectedId);
 
   // Live violation check — updates on every relevant input change
@@ -145,14 +150,30 @@ export const LogActivityScreen: React.FC<Props> = ({
   );
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col h-full overflow-y-auto">
+    <form onSubmit={handleSubmit} className="flex flex-col h-full min-h-0">
       {/* Header */}
-      <div className="px-4 pt-4 pb-2 shrink-0">
+      <div className="px-4 pb-2 shrink-0">
         <BackButton onPress={onBack} />
         <h1 className="text-title font-bold text-ink mt-3">Log Activity</h1>
       </div>
 
-      <div className="flex flex-col gap-4 px-4 pb-6 mt-2">
+      <div className="flex flex-1 min-h-0 flex-col gap-4 overflow-y-auto px-4 pb-4 mt-2">
+        {!hasActiveActivities ? (
+          <div
+            data-testid="log-activity-empty-state"
+            className="flex flex-col items-center justify-center gap-4 text-center mt-8 px-2"
+          >
+            <p className="text-title font-semibold text-ink">No activities yet</p>
+            <button
+              type="button"
+              onClick={onCreateActivity}
+              className="h-11 rounded-md bg-ink px-6 text-body font-semibold text-ink-inverse transition-colors duration-snap active:bg-ink/80"
+            >
+              Create activity
+            </button>
+          </div>
+        ) : (
+          <>
         {/* Activity picker */}
         <Card pad="md">
           <FieldLabel>What did you do?</FieldLabel>
@@ -221,18 +242,24 @@ export const LogActivityScreen: React.FC<Props> = ({
                 className={cn('w-full rounded-md bg-bg-sunken border border-border px-3 py-2.5 resize-none',
                   'text-body text-ink placeholder:text-ink-faint focus:outline-none focus:border-border-strong')} />
             </Card>
-
-            <button type="submit" disabled={!canSubmit}
-              className={cn('h-12 w-full rounded-md text-body-lg font-semibold transition-colors duration-snap',
-                violations.length > 0
-                  ? 'bg-caution text-ink-inverse active:brightness-90'
-                  : 'bg-ink text-ink-inverse active:opacity-80',
-                !canSubmit && 'opacity-40 cursor-not-allowed')}>
-              {violations.length > 0 ? 'Log anyway' : 'Log session'}
-            </button>
+          </>
+        )}
           </>
         )}
       </div>
+
+      {hasActiveActivities && (
+      <div className="shrink-0 border-t border-border bg-bg px-4 py-3 pb-safe-bottom">
+        <button type="submit" disabled={!canSubmit}
+          className={cn('h-12 w-full rounded-md text-body-lg font-semibold transition-colors duration-snap',
+            violations.length > 0
+              ? 'bg-caution text-ink-inverse active:brightness-90'
+              : 'bg-ink text-ink-inverse active:opacity-80',
+            !canSubmit && 'opacity-40 cursor-not-allowed')}>
+          {violations.length > 0 ? 'Log anyway' : 'Log session'}
+        </button>
+      </div>
+      )}
     </form>
   );
 };

@@ -10,9 +10,23 @@ import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '../../lib/cn';
 import { Card, CardHeader, CardTitle, CardMeta } from '../ui/Card';
 import { ReviewMilestoneBadge } from '../ui/ReviewMilestoneBadge';
-import { apiFetch } from '../../lib/api/client';
-import type { MilestoneEngineResult, NewActivityDraft } from '../../hooks/useMilestoneEngine';
-import type { Activity, ActivityClass, ActivityLog, ID, Rule, RuleType, WeeklyTarget, TrainingBlock } from '../../types';
+import { apiFetch, ApiError } from '../../lib/api/client';
+import type {
+  MilestoneEngineResult,
+  NewActivityClassDraft,
+  NewActivityDraft,
+} from '../../hooks/useMilestoneEngine';
+import type {
+  Activity,
+  ActivityClass,
+  ActivityLog,
+  ActivityType,
+  ID,
+  Rule,
+  RuleType,
+  WeeklyTarget,
+  TrainingBlock,
+} from '../../types';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -25,6 +39,7 @@ export interface SettingsScreenProps {
   onNewBlock?: () => void;
   onViewBlock?: (blockId: ID) => void;
   onEditActivity?: (activity: Activity) => void;
+  onOpenNewActivity?: () => void;
   onUnauthenticated?: () => void;
 }
 
@@ -344,6 +359,198 @@ function PreferenceRow({
 }
 
 // ---------------------------------------------------------------------------
+// NewActivityClassForm — create activity class dialog
+// ---------------------------------------------------------------------------
+
+interface NewActivityClassFormProps {
+  open: boolean;
+  onClose: () => void;
+  onSubmit: (draft: NewActivityClassDraft) => Promise<void>;
+}
+
+function NewActivityClassForm({
+  open,
+  onClose,
+  onSubmit,
+}: NewActivityClassFormProps): React.ReactElement | null {
+  const [name, setName] = React.useState('');
+  const [type, setType] = React.useState<ActivityType>('performance');
+  const [description, setDescription] = React.useState('');
+  const [recoveryWindowDays, setRecoveryWindowDays] = React.useState(3);
+  const [apiError, setApiError] = React.useState<string | null>(null);
+  const [submitting, setSubmitting] = React.useState(false);
+
+  React.useEffect(() => {
+    if (open) {
+      setName('');
+      setType('performance');
+      setDescription('');
+      setRecoveryWindowDays(3);
+      setApiError(null);
+      setSubmitting(false);
+    }
+  }, [open]);
+
+  if (!open) return null;
+
+  const trimmedName = name.trim();
+  const canCreate = trimmedName.length > 0 && !submitting;
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>): Promise<void> {
+    e.preventDefault();
+    if (!canCreate) return;
+
+    setApiError(null);
+    setSubmitting(true);
+
+    const draft: NewActivityClassDraft = {
+      name: trimmedName,
+      type,
+      defaultRecoveryWindowDays: recoveryWindowDays,
+    };
+    const trimmedDescription = description.trim();
+    if (trimmedDescription.length > 0) {
+      draft.description = trimmedDescription;
+    }
+
+    try {
+      await onSubmit(draft);
+      onClose();
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setApiError(err.message);
+      } else if (err instanceof Error) {
+        setApiError(err.message);
+      } else {
+        setApiError('Could not create activity class.');
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <>
+      <div
+        className="fixed inset-0 z-50 bg-black/60"
+        style={{ backdropFilter: 'blur(4px)' }}
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <div
+        className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-[440px] rounded-t-2xl bg-bg-raised border-t border-border pb-safe-bottom"
+        role="dialog"
+        aria-modal="true"
+        aria-label="New activity class"
+      >
+        <div className="flex justify-center pt-3 pb-1">
+          <div className="h-1 w-10 rounded-full bg-border" aria-hidden="true" />
+        </div>
+
+        <form className="px-4 pb-8 pt-2" onSubmit={(e) => { void handleSubmit(e); }}>
+          <div className="flex items-center justify-between mb-5">
+            <h2 className="text-title font-bold text-ink">New Activity Class</h2>
+            <button
+              type="button"
+              onClick={onClose}
+              className="h-8 w-8 flex items-center justify-center rounded-full text-ink-muted hover:text-ink hover:bg-bg-overlay transition-colors duration-snap"
+              aria-label="Close"
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path
+                  d="M4 4l8 8M12 4l-8 8"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </button>
+          </div>
+
+          <div className="flex flex-col gap-4">
+            <label className="flex flex-col gap-1.5">
+              <span className="text-label font-medium text-ink-muted">Class name</span>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="h-11 rounded-md border border-border bg-bg px-3 text-body text-ink"
+                autoComplete="off"
+              />
+            </label>
+
+            <fieldset className="flex flex-col gap-2 border-0 p-0 m-0">
+              <legend className="text-label font-medium text-ink-muted mb-1">Type</legend>
+              <label className="flex items-center gap-2 text-body text-ink">
+                <input
+                  type="radio"
+                  name="activityClassType"
+                  value="performance"
+                  checked={type === 'performance'}
+                  onChange={() => setType('performance')}
+                />
+                Performance
+              </label>
+              <label className="flex items-center gap-2 text-body text-ink">
+                <input
+                  type="radio"
+                  name="activityClassType"
+                  value="recovery"
+                  checked={type === 'recovery'}
+                  onChange={() => setType('recovery')}
+                  aria-label="Recovery"
+                />
+                <span aria-hidden="true">Recovery</span>
+              </label>
+            </fieldset>
+
+            <label className="flex flex-col gap-1.5">
+              <span className="text-label font-medium text-ink-muted">Description</span>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={3}
+                className="rounded-md border border-border bg-bg px-3 py-2 text-body text-ink resize-none"
+              />
+            </label>
+
+            <label className="flex flex-col gap-1.5">
+              <span className="text-label font-medium text-ink-muted">Recovery window (days)</span>
+              <input
+                type="number"
+                min={1}
+                value={recoveryWindowDays}
+                onChange={(e) => setRecoveryWindowDays(Number(e.target.value))}
+                className="h-11 rounded-md border border-border bg-bg px-3 text-body text-ink tabular-nums"
+              />
+            </label>
+
+            {apiError != null && (
+              <p className="text-body text-danger-fg" role="alert">
+                {apiError}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={!canCreate}
+              className={cn(
+                'w-full h-11 rounded-md text-body font-medium transition-colors duration-snap',
+                canCreate
+                  ? 'bg-ink text-ink-inverse hover:opacity-90'
+                  : 'bg-bg-sunken text-ink-faint cursor-not-allowed',
+              )}
+            >
+              Create class
+            </button>
+          </div>
+        </form>
+      </div>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // SettingsScreen
 // ---------------------------------------------------------------------------
 
@@ -354,6 +561,7 @@ export function SettingsScreen({
   onNewBlock,
   onViewBlock,
   onEditActivity,
+  onOpenNewActivity,
   onUnauthenticated,
 }: SettingsScreenProps): React.ReactElement {
   const {
@@ -366,6 +574,7 @@ export function SettingsScreen({
     previousBlocks,
     deactivateActivity,
     updateActivity,
+    submitNewActivityClass,
   } = engine;
 
   const queryClient = useQueryClient();
@@ -373,6 +582,7 @@ export function SettingsScreen({
   const [metricUnits, setMetricUnits] = React.useState(true);
   const [resetState, setResetState] = React.useState<'idle' | 'confirming' | 'done'>('idle');
   const [pendingDeactivateId, setPendingDeactivateId] = React.useState<string | null>(null);
+  const [showNewClassForm, setShowNewClassForm] = React.useState(false);
 
   function handleResetMockData(): void {
     if (resetState === 'idle') {
@@ -528,11 +738,52 @@ export function SettingsScreen({
           + New Training Block
         </button>
 
+        {/* ── Activity classes ── */}
+        <section>
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <p className="text-label uppercase font-medium text-ink-muted">
+              Activity classes
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowNewClassForm(true)}
+              className="shrink-0 h-8 px-2.5 rounded-md text-caption font-medium text-ink-muted bg-bg-sunken hover:bg-bg-overlay transition-colors duration-snap"
+            >
+              + New class
+            </button>
+          </div>
+          {activityClasses.length > 0 && (
+            <Card pad="none">
+              <ul className="divide-y divide-border-subtle">
+                {activityClasses.map((cls) => (
+                  <li
+                    key={cls.id}
+                    className="px-4 py-3 text-body font-medium text-ink"
+                  >
+                    {cls.name}
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
+        </section>
+
         {/* ── Activities ── */}
         <section>
-          <p className="text-label uppercase font-medium text-ink-muted mb-3">
-            Activities
-          </p>
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <p className="text-label uppercase font-medium text-ink-muted">
+              Activities
+            </p>
+            {onOpenNewActivity != null && (
+              <button
+                type="button"
+                onClick={onOpenNewActivity}
+                className="shrink-0 h-8 px-2.5 rounded-md text-caption font-medium text-ink-muted bg-bg-sunken hover:bg-bg-overlay transition-colors duration-snap"
+              >
+                + New Activity
+              </button>
+            )}
+          </div>
           {grouped.length > 0 && (
             <Card pad="none">
               <div className="divide-y divide-border-subtle">
@@ -697,6 +948,12 @@ export function SettingsScreen({
           Log out
         </button>
       </footer>
+
+      <NewActivityClassForm
+        open={showNewClassForm}
+        onClose={() => setShowNewClassForm(false)}
+        onSubmit={submitNewActivityClass}
+      />
     </div>
   );
 }

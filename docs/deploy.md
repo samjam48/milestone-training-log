@@ -1,8 +1,41 @@
 # Production deployment
 
-This runbook covers hosting the Milestone backend on **Render**, frontend on **Netlify**, and production data on **Supabase**. Operational detail for Phase 11 also lives in [`plans/TRD.md` §12](../plans/TRD.md#12-production-deployment-phase-11) (services, matrix, backup); this file is the step-by-step owner runbook.
+This runbook covers hosting the Milestone backend on **Render**, frontend on **Netlify**, and production data on **Supabase**. Operational detail also lives in [`plans/TRD.md` §12](../plans/TRD.md#12-production-deployment-phase-11) (services, matrix, backup).
 
-Owner checklists **O11.0** (accounts and secrets), **O11.1** (first deploy and proxy), and **O11.2** (phone smoke) are defined in [`plans/tickets-phase-11-production-2026-06-04.md`](../plans/tickets-phase-11-production-2026-06-04.md). Follow that ticket file for ordered tasks; sections below map to those phases.
+Owner checklists **O11.0**–**O11.2** are in [`plans/tickets-phase-11-production-2026-06-04.md`](../plans/tickets-phase-11-production-2026-06-04.md) (all complete as of 2026-06-05).
+
+## Current production status (2026-06-05)
+
+| Item | Value |
+| ---- | ----- |
+| **App (daily use)** | [https://milestone-activity.netlify.app](https://milestone-activity.netlify.app) |
+| **Backend (direct)** | [https://milestone-training-log.onrender.com](https://milestone-training-log.onrender.com) |
+| **Health** | `GET /api/health` on either host (Netlify proxies `/api/*` to Render) |
+| **Git deploy branch** | `main` (Render + Netlify) |
+| **Database** | Supabase project `milestone` — **Session pooler** `DATABASE_URL` on Render (not direct `db.*` host; required for Render IPv4) |
+| **Auth** | Shared password + session cookie; `APP_DEV_MODE=false`, `VITE_DEV_MODE=false` in prod |
+| **Data** | Schema via `alembic upgrade head` on deploy; **no seed** in production |
+
+**Operator notes from first deploy:**
+
+- URL-encode special characters in `DATABASE_URL` passwords (e.g. `*` → `%2A`).
+- Alembic reads `DATABASE_URL` directly (`backend/alembic/env.py`) so `%` in encoded passwords does not break ConfigParser.
+- `frontend/netlify.toml` proxies `/api/*` to `milestone-training-log.onrender.com`.
+- Render free tier: expect cold-start delay after idle (see below).
+
+## Production setup — first use on production
+
+Production starts with an empty database after deploy (schema only). **Never run `scripts/seed.py` against Supabase** — use seed only against local SQLite during development.
+
+Open the [Netlify app URL](https://milestone-activity.netlify.app) and complete setup in this order:
+
+1. **Sign in** with the shared app password.
+2. **Activity classes** — Settings → **+ New class** (name, type, optional description).
+3. **+ New Activity** — Log tab (or Settings → Activities) to add an activity.
+4. **Training block** — Settings → **+ New Training Block**.
+5. **+ Log Activity** on the Log tab; **Morning check-in** on the Dashboard tab.
+
+Stage 2 polish context: [`plans/PRD.md` §10](../plans/PRD.md#10-stage-2--use-driven-polish).
 
 ## Environment matrix
 
@@ -10,7 +43,7 @@ Local development uses SQLite; production uses Supabase Postgres. Do not point a
 
 | Variable | Local | Production |
 | -------- | ----- | ---------- |
-| `DATABASE_URL` | `sqlite:///./data/milestone.db` | Supabase `postgresql+psycopg://...` |
+| `DATABASE_URL` | `sqlite:///./data/milestone.db` | Supabase **Session pooler** `postgresql+psycopg://...` (URL-encode password) |
 | `APP_DEV_MODE` | optional `true` in `.env` | `false` on Render |
 | `VITE_DEV_MODE` | optional `true` | `false` on Netlify |
 | `VITE_API_BASE_URL` | empty (Vite dev proxy) | empty (browser uses Netlify `/api` proxy) |

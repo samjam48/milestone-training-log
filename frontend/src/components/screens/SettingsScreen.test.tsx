@@ -236,6 +236,7 @@ interface SettingsScreenCallbackProps {
   onNewBlock?: () => void;
   onViewBlock?: (blockId: string) => void;
   onEditActivity?: (activity: Activity) => void;
+  onOpenNewActivity?: () => void;
 }
 
 const SettingsScreenWithCallbacks = SettingsScreen as unknown as (
@@ -420,8 +421,9 @@ describe('SettingsScreen — Weekly Targets', () => {
 
     renderWithProviders(<SettingsScreen engine={engine} />);
 
-    // Class name resolved from activityClassId
-    expect(screen.getByText(CLASS_RUNNING.name)).toBeInTheDocument();
+    // Class name resolved from activityClassId (scoped to block summary card)
+    const blockSection = getSectionByHeading(/^training block$/i);
+    expect(within(blockSection).getByText(CLASS_RUNNING.name)).toBeInTheDocument();
     // Target value and unit
     expect(screen.getByText(/20/)).toBeInTheDocument();
     expect(screen.getByText(/km/i)).toBeInTheDocument();
@@ -437,7 +439,8 @@ describe('SettingsScreen — Weekly Targets', () => {
 
     renderWithProviders(<SettingsScreen engine={engine} />);
 
-    expect(screen.getByText('Running')).toBeInTheDocument();
+    const blockSection = getSectionByHeading(/^training block$/i);
+    expect(within(blockSection).getByText('Running')).toBeInTheDocument();
   });
 
   it('falls back to raw activityClassId when class is not found in weekly targets', () => {
@@ -666,7 +669,7 @@ describe('SettingsScreen — Activities Manager', () => {
 
     renderWithProviders(<SettingsScreen engine={engine} />);
 
-    expect(screen.getByText(/activities/i)).toBeInTheDocument();
+    expect(screen.getByText(/^activities$/i)).toBeInTheDocument();
   });
 
   it('groups activities by class', () => {
@@ -679,12 +682,13 @@ describe('SettingsScreen — Activities Manager', () => {
 
     renderWithProviders(<SettingsScreen engine={engine} />);
 
+    const activitiesSection = getSectionByHeading(/^activities$/i);
     // Both class names should appear as group headers
-    expect(screen.getByText('Running')).toBeInTheDocument();
-    expect(screen.getByText('Strength')).toBeInTheDocument();
+    expect(within(activitiesSection).getByText('Running')).toBeInTheDocument();
+    expect(within(activitiesSection).getByText('Strength')).toBeInTheDocument();
     // Both activity names should appear
-    expect(screen.getByText(ACTIVITY_RUNNING.name)).toBeInTheDocument();
-    expect(screen.getByText(ACTIVITY_STRENGTH.name)).toBeInTheDocument();
+    expect(within(activitiesSection).getByText(ACTIVITY_RUNNING.name)).toBeInTheDocument();
+    expect(within(activitiesSection).getByText(ACTIVITY_STRENGTH.name)).toBeInTheDocument();
   });
 
   it('shows last-log date for activities that have logs', () => {
@@ -1370,6 +1374,320 @@ describe('SettingsScreen — F10.6 review milestone badge', () => {
     expect(
       withinPreviousBlockRow(PREVIOUS_BLOCK_1.name).getByLabelText(REVIEW_MILESTONE_BADGE),
     ).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// S2.6 — Create activity class (Settings)
+// plans/tickets-stage-2-polish-2026-06-05.md
+// ---------------------------------------------------------------------------
+
+function renderStatefulActivityClassSettings(options: {
+  activityClasses?: ActivityClass[];
+} = {}) {
+  let currentClasses = options.activityClasses ?? [];
+
+  let renderApi = renderWithProviders(<div />);
+
+  const submitNewActivityClass = vi.fn(async (
+    draft: {
+      name: string;
+      type: ActivityClass['type'];
+      description?: string;
+      defaultRecoveryWindowDays?: number;
+    },
+  ) => {
+    currentClasses = [
+      ...currentClasses,
+      {
+        id: 'cls-new-test',
+        userId: 'user-1',
+        name: draft.name,
+        type: draft.type,
+        description: draft.description,
+        defaultRecoveryWindowDays: draft.defaultRecoveryWindowDays ?? 3,
+        createdAt: '2026-06-05T00:00:00Z',
+      },
+    ];
+    rerenderCurrent();
+  });
+
+  const rerenderCurrent = () => {
+    renderApi.rerender(
+      <SettingsScreen
+        engine={makeEngine({
+          block: ACTIVE_BLOCK,
+          activityClasses: currentClasses,
+          activities: [],
+          logs: [],
+          submitNewActivityClass,
+        } as Partial<typeof mockEngine>)}
+      />,
+    );
+  };
+
+  renderApi.unmount();
+  renderApi = renderWithProviders(
+    <SettingsScreen
+      engine={makeEngine({
+        block: ACTIVE_BLOCK,
+        activityClasses: currentClasses,
+        activities: [],
+        logs: [],
+        submitNewActivityClass,
+      } as Partial<typeof mockEngine>)}
+    />,
+  );
+
+  return { submitNewActivityClass };
+}
+
+describe('SettingsScreen — S2.6 create activity class', () => {
+  it('renders an Activity classes section', () => {
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [CLASS_RUNNING],
+      activities: [],
+      logs: [],
+    });
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    expect(screen.getByText(/activity classes/i)).toBeInTheDocument();
+  });
+
+  it('renders a + New class control in the Activity classes section', () => {
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [],
+      activities: [],
+      logs: [],
+    });
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    expect(
+      screen.getByRole('button', { name: /\+ new class/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('lists existing activity classes in the Activity classes section', () => {
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [CLASS_RUNNING, CLASS_STRENGTH],
+      activities: [],
+      logs: [],
+    });
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    const section = getSectionByHeading(/^activity classes$/i);
+    expect(within(section).getByText(CLASS_RUNNING.name)).toBeInTheDocument();
+    expect(within(section).getByText(CLASS_STRENGTH.name)).toBeInTheDocument();
+  });
+
+  it('opens the new-class form when + New class is clicked', async () => {
+    const user = userEvent.setup();
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [],
+      activities: [],
+      logs: [],
+    });
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    await user.click(screen.getByRole('button', { name: /\+ new class/i }));
+
+    expect(
+      screen.getByRole('dialog', { name: /new activity class/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/class name/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/performance/i)).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: /^recovery$/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/description/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/recovery window/i)).toHaveValue(3);
+  });
+
+  it('calls engine.submitNewActivityClass with name, type, and default recovery window on submit', async () => {
+    const user = userEvent.setup();
+    const submitNewActivityClass = vi.fn();
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [],
+      activities: [],
+      logs: [],
+      submitNewActivityClass,
+    } as Partial<typeof mockEngine>);
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    await user.click(screen.getByRole('button', { name: /\+ new class/i }));
+    await user.type(screen.getByLabelText(/class name/i), 'Foot Load');
+    await user.click(screen.getByLabelText(/performance/i));
+    await user.click(screen.getByRole('button', { name: /create class/i }));
+
+    expect(submitNewActivityClass).toHaveBeenCalledTimes(1);
+    expect(submitNewActivityClass).toHaveBeenCalledWith({
+      name: 'Foot Load',
+      type: 'performance',
+      defaultRecoveryWindowDays: 3,
+    });
+  });
+
+  it('includes optional description when provided before submit', async () => {
+    const user = userEvent.setup();
+    const submitNewActivityClass = vi.fn();
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [],
+      activities: [],
+      logs: [],
+      submitNewActivityClass,
+    } as Partial<typeof mockEngine>);
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    await user.click(screen.getByRole('button', { name: /\+ new class/i }));
+    await user.type(screen.getByLabelText(/class name/i), 'Mobility');
+    await user.click(screen.getByRole('radio', { name: /^recovery$/i }));
+    await user.type(
+      screen.getByLabelText(/description/i),
+      'Stretching and mobility work',
+    );
+    await user.click(screen.getByRole('button', { name: /create class/i }));
+
+    expect(submitNewActivityClass).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'Mobility',
+        type: 'recovery',
+        description: 'Stretching and mobility work',
+      }),
+    );
+  });
+
+  it('keeps Create disabled when class name is empty', async () => {
+    const user = userEvent.setup();
+    const submitNewActivityClass = vi.fn();
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [],
+      activities: [],
+      logs: [],
+      submitNewActivityClass,
+    } as Partial<typeof mockEngine>);
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    await user.click(screen.getByRole('button', { name: /\+ new class/i }));
+
+    const createButton = screen.getByRole('button', { name: /create class/i });
+    expect(createButton).toBeDisabled();
+
+    await user.click(createButton);
+    expect(submitNewActivityClass).not.toHaveBeenCalled();
+  });
+
+  it('shows the new class in the Activity classes list after save without full page reload', async () => {
+    const user = userEvent.setup();
+    const { submitNewActivityClass } = renderStatefulActivityClassSettings({
+      activityClasses: [],
+    });
+
+    await user.click(screen.getByRole('button', { name: /\+ new class/i }));
+    await user.type(screen.getByLabelText(/class name/i), 'Foot Load');
+    await user.click(screen.getByLabelText(/performance/i));
+    await user.click(screen.getByRole('button', { name: /create class/i }));
+
+    expect(submitNewActivityClass).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('Foot Load')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('dialog', { name: /new activity class/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows API error message when create fails with duplicate id', async () => {
+    const user = userEvent.setup();
+    apiFetchMock.mockRejectedValueOnce(
+      new (class ApiError extends Error {
+        status: number;
+        constructor(status: number, message: string) {
+          super(message);
+          this.status = status;
+        }
+      })(409, 'Activity class already exists'),
+    );
+
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [],
+      activities: [],
+      logs: [],
+    });
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    await user.click(screen.getByRole('button', { name: /\+ new class/i }));
+    await user.type(screen.getByLabelText(/class name/i), 'Duplicate');
+    await user.click(screen.getByLabelText(/performance/i));
+    await user.click(screen.getByRole('button', { name: /create class/i }));
+
+    expect(
+      await screen.findByText(/activity class already exists/i),
+    ).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// S2.7 — New Activity entry (Settings)
+// plans/tickets-stage-2-polish-2026-06-05.md
+// ---------------------------------------------------------------------------
+
+describe('SettingsScreen — S2.7 New Activity entry', () => {
+  it('renders + New Activity in the Activities section', () => {
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [CLASS_RUNNING],
+      activities: [ACTIVITY_RUNNING],
+      logs: [],
+    });
+
+    renderSettingsScreenWithCallbacks({ engine, onOpenNewActivity: vi.fn() });
+
+    const activitiesSection = getSectionByHeading(/^activities$/i);
+    expect(
+      within(activitiesSection).getByRole('button', { name: /\+ new activity/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('calls onOpenNewActivity when + New Activity is clicked', async () => {
+    const user = userEvent.setup();
+    const onOpenNewActivity = vi.fn();
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [CLASS_RUNNING],
+      activities: [],
+      logs: [],
+    });
+
+    renderSettingsScreenWithCallbacks({ engine, onOpenNewActivity });
+
+    await user.click(screen.getByRole('button', { name: /\+ new activity/i }));
+
+    expect(onOpenNewActivity).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows + New Activity even when there are no activities yet', () => {
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [CLASS_RUNNING],
+      activities: [],
+      logs: [],
+    });
+
+    renderSettingsScreenWithCallbacks({ engine, onOpenNewActivity: vi.fn() });
+
+    expect(screen.getByRole('button', { name: /\+ new activity/i })).toBeInTheDocument();
   });
 });
 

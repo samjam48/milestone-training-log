@@ -2,7 +2,7 @@
 // AppShell — root mobile frame
 // -----------------------------------------------------------------------------
 // Single column, full-viewport, dark canvas. Honours iOS safe areas and
-// reserves space for the BottomTabBar via `pb-tabbar`. Children scroll
+// reserves space for the BottomTabBar via tabbar + safe-bottom padding. Children scroll
 // independently of the tab bar (which is fixed by BottomTabBar itself).
 //
 // Layout contract:
@@ -32,11 +32,13 @@ export const AppShell = React.forwardRef<HTMLDivElement, AppShellProps>(
         ref={ref}
         className={cn(
           // Canvas — bounded viewport column. Content within scrolls independently; AppShell is not a scroll container.
-          'relative flex min-h-screen h-dvh w-full flex-col bg-bg text-ink font-sans antialiased',
+          'relative flex min-h-screen h-[100svh] w-full flex-col bg-bg text-ink font-sans antialiased',
           // Safe-area top inset (status bar on notched devices)
           'pt-safe-top',
-          // Reserve bottom space when tab bar is mounted (+ device home indicator)
-          withTabBar && 'pb-[calc(theme(spacing.tabbar)+theme(spacing.safe-bottom))]',
+          // Reserve bottom space: tab bar + safe area on tab screens; safe area only on overlays
+          withTabBar
+            ? 'pb-[calc(theme(spacing.tabbar)+theme(spacing.safe-bottom))]'
+            : 'pb-safe-bottom',
           // Constrain to phone width on desktop preview so dev surface matches mobile
           'mx-auto max-w-[440px]',
           className,

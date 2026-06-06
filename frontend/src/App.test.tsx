@@ -9,6 +9,11 @@ import { screen, within, cleanup, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from './test/renderWithProviders';
 import {
+  spyOnBrowserHistory,
+  dispatchPopState,
+  bridgeHistoryBackToPopstate,
+} from './test/navigationHistory';
+import {
   mockEngine,
   resetMockEngine,
   applyC63DashboardFixtures,
@@ -113,7 +118,7 @@ describe('App shell (F1.1)', () => {
     await user.click(screen.getByRole('button', { name: 'Complete morning check-in' }));
     expect(screen.getByRole('heading', { name: 'Morning Check-In' })).toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Go back' }));
+    await user.click(screen.getByRole('button', { name: /go back/i }));
     expect(screen.getByRole('heading', { name: /Good morning, Sam\./i })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
   });
@@ -125,7 +130,7 @@ describe('App shell (F1.1)', () => {
     await user.click(screen.getByRole('button', { name: '+ Log Activity' }));
     expect(screen.getByRole('heading', { name: 'Log Activity' })).toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Back' }));
+    await user.click(screen.getByRole('button', { name: /go back/i }));
     expect(screen.getByRole('heading', { name: 'Log History' })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
   });
@@ -137,7 +142,7 @@ describe('App shell (F1.1)', () => {
     await user.click(screen.getByRole('button', { name: '+ Log Incident' }));
     expect(screen.getByRole('heading', { name: 'Log Incident' })).toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Back' }));
+    await user.click(screen.getByRole('button', { name: /go back/i }));
     expect(screen.getByRole('heading', { name: 'Log History' })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
   });
@@ -298,7 +303,7 @@ describe('Screen stack — push/pop navigation (F8.2)', () => {
     expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
 
     // Pop the stack via the back button inside the overlay
-    await user.click(screen.getByRole('button', { name: 'Back' }));
+    await user.click(screen.getByRole('button', { name: /go back/i }));
 
     // Overlay must be gone, tab bar restored
     expect(screen.queryByTestId('stack-screen-overlay')).not.toBeInTheDocument();
@@ -312,7 +317,7 @@ describe('Screen stack — push/pop navigation (F8.2)', () => {
     await user.click(screen.getByRole('button', { name: 'Complete morning check-in' }));
     expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Go back' }));
+    await user.click(screen.getByRole('button', { name: /go back/i }));
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
   });
 
@@ -324,7 +329,7 @@ describe('Screen stack — push/pop navigation (F8.2)', () => {
     await user.click(screen.getByRole('button', { name: '+ Log Activity' }));
     expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Back' }));
+    await user.click(screen.getByRole('button', { name: /go back/i }));
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
   });
 
@@ -336,7 +341,7 @@ describe('Screen stack — push/pop navigation (F8.2)', () => {
     await user.click(screen.getByRole('button', { name: '+ Log Incident' }));
     expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Back' }));
+    await user.click(screen.getByRole('button', { name: /go back/i }));
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
   });
 
@@ -380,10 +385,10 @@ describe('Settings stack navigation (F9.4)', () => {
 
     expect(screen.getByTestId('stack-screen-overlay')).toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /go back/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /edit rules/i })).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Back' }));
+    await user.click(screen.getByRole('button', { name: /go back/i }));
 
     expect(screen.queryByTestId('stack-screen-overlay')).not.toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
@@ -398,10 +403,10 @@ describe('Settings stack navigation (F9.4)', () => {
 
     expect(screen.getByTestId('stack-screen-overlay')).toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /go back/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /block review/i })).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Back' }));
+    await user.click(screen.getByRole('button', { name: /go back/i }));
 
     expect(screen.queryByTestId('stack-screen-overlay')).not.toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
@@ -416,10 +421,10 @@ describe('Settings stack navigation (F9.4)', () => {
 
     expect(screen.getByTestId('stack-screen-overlay')).toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /go back/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /new training block/i })).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Back' }));
+    await user.click(screen.getByRole('button', { name: /go back/i }));
 
     expect(screen.queryByTestId('stack-screen-overlay')).not.toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
@@ -454,10 +459,10 @@ describe('Settings stack navigation (F9.4)', () => {
 
     expect(screen.getByTestId('stack-screen-overlay')).toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /go back/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /edit activity/i })).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Back' }));
+    await user.click(screen.getByRole('button', { name: /go back/i }));
 
     expect(screen.queryByTestId('stack-screen-overlay')).not.toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
@@ -472,7 +477,7 @@ describe('Settings stack navigation (F9.4)', () => {
     const overlay = screen.getByTestId('stack-screen-overlay');
     expect(overlay).toBeInTheDocument();
     expect(overlay.textContent).toBe('');
-    expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /go back/i })).not.toBeInTheDocument();
   });
 });
 
@@ -697,5 +702,516 @@ describe('App — Settings dev reset hidden in prod (F11.2)', () => {
     expect(
       screen.queryByRole('button', { name: /reset mock data/i }),
     ).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * S2.3 — Browser history integration (Android system Back).
+ * Implementer: sync overlay / screenStack with history.pushState, popstate,
+ * history.back, and optional replaceState on authenticated shell entry.
+ */
+describe('S2.3 — Browser history integration (Android system Back)', () => {
+  let historySpies: ReturnType<typeof spyOnBrowserHistory>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetMockEngine();
+    historySpies = spyOnBrowserHistory();
+  });
+
+  afterEach(() => {
+    historySpies.pushState.mockRestore();
+    historySpies.replaceState.mockRestore();
+    historySpies.back.mockRestore();
+    cleanup();
+  });
+
+  it('pushes a history entry when opening the morning check-in overlay', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    await user.click(screen.getByRole('button', { name: 'Complete morning check-in' }));
+
+    expect(screen.getByRole('heading', { name: 'Morning Check-In' })).toBeInTheDocument();
+    expect(historySpies.pushState).toHaveBeenCalled();
+  });
+
+  it('pushes a history entry when opening log-activity overlay from Log tab', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
+    await user.click(screen.getByRole('button', { name: '+ Log Activity' }));
+
+    expect(screen.getByRole('heading', { name: 'Log Activity' })).toBeInTheDocument();
+    expect(historySpies.pushState).toHaveBeenCalled();
+  });
+
+  it('pushes a history entry when opening log-incident overlay from Log tab', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
+    await user.click(screen.getByRole('button', { name: '+ Log Incident' }));
+
+    expect(screen.getByRole('heading', { name: 'Log Incident' })).toBeInTheDocument();
+    expect(historySpies.pushState).toHaveBeenCalled();
+  });
+
+  it('closes an open overlay on popstate and leaves the active tab unchanged', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
+    await user.click(screen.getByRole('button', { name: '+ Log Activity' }));
+
+    expect(screen.getByRole('heading', { name: 'Log Activity' })).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
+
+    dispatchPopState();
+
+    expect(screen.queryByRole('heading', { name: 'Log Activity' })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Log History' })).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
+    expect(within(getPrimaryNav()).getByRole('button', { name: 'Log' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+  });
+
+  it('pushes a history entry when pushing a stack screen onto the navigation stack', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Goals' }));
+    await user.click(screen.getByRole('button', { name: /\+ new goal/i }));
+
+    expect(screen.getByTestId('stack-screen-overlay')).toBeInTheDocument();
+    expect(historySpies.pushState).toHaveBeenCalled();
+  });
+
+  it('pops one stack level on popstate when the stack is two screens deep', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    await user.click(screen.getByTestId('test-push-unknown-screen'));
+    await user.click(screen.getByTestId('test-push-unknown-screen'));
+
+    expect(screen.getByTestId('stack-screen-overlay')).toBeInTheDocument();
+
+    dispatchPopState();
+    expect(screen.getByTestId('stack-screen-overlay')).toBeInTheDocument();
+
+    dispatchPopState();
+    expect(screen.queryByTestId('stack-screen-overlay')).not.toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
+  });
+
+  it('uses history.back when in-app Back closes a tab overlay', async () => {
+    const restoreBack = bridgeHistoryBackToPopstate(historySpies.back);
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    try {
+      await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
+      await user.click(screen.getByRole('button', { name: '+ Log Incident' }));
+      expect(screen.getByRole('heading', { name: 'Log Incident' })).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: /go back/i }));
+
+      expect(historySpies.back).toHaveBeenCalled();
+      expect(screen.queryByRole('heading', { name: 'Log Incident' })).not.toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Log History' })).toBeInTheDocument();
+    } finally {
+      restoreBack();
+    }
+  });
+
+  it('uses history.back when Done closes check-in overlay after successful submit', async () => {
+    const restoreBack = bridgeHistoryBackToPopstate(historySpies.back);
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    try {
+      await user.click(screen.getByRole('button', { name: 'Complete morning check-in' }));
+      expect(screen.getByRole('heading', { name: 'Morning Check-In' })).toBeInTheDocument();
+      historySpies.back.mockClear();
+
+      await user.click(screen.getByRole('button', { name: /save check-in/i }));
+      expect(screen.getByText('Check-in logged.')).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: /^done$/i }));
+
+      expect(historySpies.back).toHaveBeenCalled();
+      expect(screen.queryByRole('heading', { name: 'Morning Check-In' })).not.toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /Good morning, Sam\./i })).toBeInTheDocument();
+
+      dispatchPopState();
+      expect(screen.getByRole('heading', { name: /Good morning, Sam\./i })).toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: 'Morning Check-In' })).not.toBeInTheDocument();
+    } finally {
+      restoreBack();
+    }
+  });
+
+  it('uses history.back when Done closes log-incident overlay after successful submit', async () => {
+    const restoreBack = bridgeHistoryBackToPopstate(historySpies.back);
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    try {
+      await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
+      await user.click(screen.getByRole('button', { name: '+ Log Incident' }));
+      expect(screen.getByRole('heading', { name: 'Log Incident' })).toBeInTheDocument();
+      historySpies.back.mockClear();
+
+      await user.type(screen.getByPlaceholderText('e.g. Right toe'), 'Left heel');
+      await user.click(screen.getByRole('button', { name: /record incident/i }));
+      expect(screen.getByText('Incident recorded.')).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: /^done$/i }));
+
+      expect(historySpies.back).toHaveBeenCalled();
+      expect(screen.queryByRole('heading', { name: 'Log Incident' })).not.toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Log History' })).toBeInTheDocument();
+
+      dispatchPopState();
+      expect(screen.getByRole('heading', { name: 'Log History' })).toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: 'Log Incident' })).not.toBeInTheDocument();
+    } finally {
+      restoreBack();
+    }
+  });
+
+  it('uses history.back when log-activity overlay auto-closes after successful submit', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const restoreBack = bridgeHistoryBackToPopstate(historySpies.back);
+    applyC63DashboardFixtures();
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    try {
+      await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
+      await user.click(screen.getByRole('button', { name: '+ Log Activity' }));
+      expect(screen.getByRole('heading', { name: 'Log Activity' })).toBeInTheDocument();
+      historySpies.back.mockClear();
+
+      await user.click(screen.getByRole('button', { name: 'Stretching' }));
+      const durationLabel = screen.getByText('Duration');
+      const durationField = durationLabel.parentElement;
+      expect(durationField).not.toBeNull();
+      await user.type(within(durationField!).getByRole('spinbutton'), '20');
+      await user.click(screen.getByRole('button', { name: /log session/i }));
+
+      expect(screen.getByText('Session logged.')).toBeInTheDocument();
+      await vi.advanceTimersByTimeAsync(800);
+
+      expect(historySpies.back).toHaveBeenCalled();
+      expect(screen.queryByRole('heading', { name: 'Log Activity' })).not.toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Log History' })).toBeInTheDocument();
+
+      dispatchPopState();
+      expect(screen.getByRole('heading', { name: 'Log History' })).toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: 'Log Activity' })).not.toBeInTheDocument();
+    } finally {
+      restoreBack();
+      vi.useRealTimers();
+    }
+  });
+
+  it('uses history.back when in-app Back pops a stack screen', async () => {
+    const restoreBack = bridgeHistoryBackToPopstate(historySpies.back);
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    try {
+      await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Settings' }));
+      await user.click(screen.getByRole('button', { name: /edit rules/i }));
+      expect(screen.getByRole('heading', { name: /edit rules/i })).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: /go back/i }));
+
+      expect(historySpies.back).toHaveBeenCalled();
+      expect(screen.queryByTestId('stack-screen-overlay')).not.toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /settings/i })).toBeInTheDocument();
+    } finally {
+      restoreBack();
+    }
+  });
+
+  it('does not double-pop overlay state when popstate fires once', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    await user.click(screen.getByRole('button', { name: 'Complete morning check-in' }));
+    expect(screen.getByRole('heading', { name: 'Morning Check-In' })).toBeInTheDocument();
+
+    dispatchPopState();
+    expect(screen.queryByRole('heading', { name: 'Morning Check-In' })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Good morning, Sam\./i })).toBeInTheDocument();
+
+    dispatchPopState();
+    expect(screen.getByRole('heading', { name: /Good morning, Sam\./i })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Morning Check-In' })).not.toBeInTheDocument();
+  });
+
+  it('seeds history with replaceState when the authenticated shell first renders', () => {
+    renderWithProviders(<App />);
+
+    expect(screen.getByRole('heading', { name: /Good morning, Sam\./i })).toBeInTheDocument();
+    expect(historySpies.replaceState).toHaveBeenCalled();
+  });
+
+  it('seeds history with replaceState after transitioning from LoginScreen to the tab shell', async () => {
+    type EngineWithAuth = typeof mockEngine & { isUnauthorized?: boolean };
+    const user = userEvent.setup();
+    (mockEngine as EngineWithAuth).isUnauthorized = true;
+    mockEngine.refetchAll = vi.fn(() => {
+      (mockEngine as EngineWithAuth).isUnauthorized = false;
+    });
+    apiFetchMock.mockResolvedValueOnce({ ok: true });
+
+    const { rerender } = renderWithProviders(<App />);
+    expect(screen.getByTestId('login-screen')).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(/password/i), 'session-secret');
+    await user.click(screen.getByRole('button', { name: /sign in/i }));
+
+    await waitFor(() => {
+      expect(mockEngine.refetchAll).toHaveBeenCalled();
+    });
+    rerender(<App />);
+
+    expect(screen.getByRole('heading', { name: /Good morning, Sam\./i })).toBeInTheDocument();
+    expect(historySpies.replaceState).toHaveBeenCalled();
+  });
+
+  it('does not push history entries on the login screen', () => {
+    type EngineWithAuth = typeof mockEngine & { isUnauthorized?: boolean };
+    (mockEngine as EngineWithAuth).isUnauthorized = true;
+    renderWithProviders(<App />);
+
+    expect(screen.getByTestId('login-screen')).toBeInTheDocument();
+    expect(historySpies.pushState).not.toHaveBeenCalled();
+    expect(historySpies.replaceState).not.toHaveBeenCalled();
+  });
+
+  it('does not push history entries while the fatal error shell is shown', async () => {
+    const user = userEvent.setup();
+    mockEngine.isFatalError = true;
+    renderWithProviders(<App />);
+
+    expect(screen.getByTestId('app-fatal-error')).toBeInTheDocument();
+    expect(historySpies.pushState).not.toHaveBeenCalled();
+
+    const retry = screen.getByRole('button', { name: 'Retry' });
+    await user.click(retry);
+    expect(historySpies.pushState).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// S2.7 — NewActivitySheet wiring (plans/tickets-stage-2-polish-2026-06-05.md)
+// ---------------------------------------------------------------------------
+
+const s27ActivityClass: ActivityClass = {
+  id: 'cls-s27-running',
+  userId: 'user-1',
+  name: 'Running',
+  type: 'performance',
+  defaultRecoveryWindowDays: 3,
+  createdAt: '2026-01-01T00:00:00Z',
+};
+
+function applyS27ActivityClassFixture(): void {
+  mockEngine.activityClasses = [s27ActivityClass];
+  mockEngine.activities = [];
+}
+
+function getNewActivityDialog(): HTMLElement {
+  return screen.getByRole('dialog', { name: /create new activity/i });
+}
+
+describe('App — S2.7 NewActivitySheet wiring', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetMockEngine();
+    applyS27ActivityClassFixture();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('mounts NewActivitySheet and opens it from the Log tab + New Activity CTA', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
+    await user.click(screen.getByRole('button', { name: '+ New Activity' }));
+
+    expect(getNewActivityDialog()).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'New Activity' })).toBeInTheDocument();
+  });
+
+  it('calls engine.submitNewActivity when the sheet form is submitted', async () => {
+    const user = userEvent.setup();
+    const submitNewActivity = vi.fn();
+    mockEngine.submitNewActivity = submitNewActivity;
+    renderWithProviders(<App />);
+
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
+    await user.click(screen.getByRole('button', { name: '+ New Activity' }));
+    await user.type(screen.getByRole('textbox', { name: /activity name/i }), 'Evening jog');
+    await user.click(screen.getByRole('button', { name: /^create$/i }));
+
+    expect(submitNewActivity).toHaveBeenCalledTimes(1);
+    expect(submitNewActivity).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'Evening jog',
+        activityClassId: s27ActivityClass.id,
+        type: 'performance',
+        defaultVolumeUnit: 'km',
+        id: expect.stringMatching(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+        ),
+      }),
+    );
+  });
+
+  it('closes the sheet on Cancel without calling submitNewActivity', async () => {
+    const user = userEvent.setup();
+    const submitNewActivity = vi.fn();
+    mockEngine.submitNewActivity = submitNewActivity;
+    renderWithProviders(<App />);
+
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
+    await user.click(screen.getByRole('button', { name: '+ New Activity' }));
+    await user.click(screen.getByRole('button', { name: /^cancel$/i }));
+
+    expect(submitNewActivity).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole('dialog', { name: /create new activity/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('opens the same NewActivitySheet from Settings Activities + New Activity', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Settings' }));
+    await user.click(screen.getByRole('button', { name: '+ New Activity' }));
+
+    expect(getNewActivityDialog()).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /settings/i })).toBeInTheDocument();
+  });
+
+  it('shows only one NewActivitySheet instance when opened from Log tab', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
+    await user.click(screen.getByRole('button', { name: '+ New Activity' }));
+
+    expect(screen.getAllByRole('dialog', { name: /create new activity/i })).toHaveLength(1);
+  });
+
+  it('shows empty-class copy when no activity classes exist', async () => {
+    const user = userEvent.setup();
+    mockEngine.activityClasses = [];
+    renderWithProviders(<App />);
+
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
+    await user.click(screen.getByRole('button', { name: '+ New Activity' }));
+
+    expect(screen.getByText(/no activity classes/i)).toBeInTheDocument();
+  });
+
+  it('routes toward class creation when activityClasses is empty via Add activity class', async () => {
+    const user = userEvent.setup();
+    mockEngine.activityClasses = [];
+    renderWithProviders(<App />);
+
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
+    await user.click(screen.getByRole('button', { name: '+ New Activity' }));
+    await user.click(screen.getByRole('button', { name: /add activity class/i }));
+
+    expect(screen.getByRole('heading', { name: /settings/i })).toBeInTheDocument();
+    expect(screen.getByText(/activity classes/i)).toBeInTheDocument();
+  });
+
+  it('opens log-activity overlay with the created activity pre-selected after sheet submit', async () => {
+    const user = userEvent.setup();
+
+    mockEngine.submitNewActivity = (draft) => {
+      // Mirrors broken engine: mutation persists a different id than the sheet draft.
+      mockEngine.activities = [
+        {
+          id: crypto.randomUUID(),
+          userId: 'user-1',
+          activityClassId: draft.activityClassId,
+          name: draft.name,
+          type: draft.type,
+          defaultVolumeUnit: draft.defaultVolumeUnit,
+          isActive: true,
+          createdAt: '2026-06-06T00:00:00Z',
+        },
+      ];
+    };
+
+    renderWithProviders(<App />);
+
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
+    await user.click(screen.getByRole('button', { name: '+ New Activity' }));
+    await user.type(screen.getByRole('textbox', { name: /activity name/i }), 'Evening jog');
+    await user.click(screen.getByRole('button', { name: /^create$/i }));
+
+    expect(
+      screen.queryByRole('dialog', { name: /create new activity/i }),
+    ).not.toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Log Activity' })).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('Evening jog')).toBeInTheDocument();
+    expect(screen.getByText('Session details')).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// S2.8 — Log Activity empty state (plans/tickets-stage-2-polish-2026-06-05.md)
+// ---------------------------------------------------------------------------
+
+describe('App — S2.8 Log Activity empty state', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetMockEngine();
+    applyS27ActivityClassFixture();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('shows empty state when opening log-activity with no active activities', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
+    await user.click(screen.getByRole('button', { name: '+ Log Activity' }));
+
+    expect(screen.getByTestId('log-activity-empty-state')).toBeInTheDocument();
+    expect(screen.getByText(/no activities yet/i)).toBeInTheDocument();
+  });
+
+  it('opens NewActivitySheet from Log Activity Create activity CTA', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
+    await user.click(screen.getByRole('button', { name: '+ Log Activity' }));
+    await user.click(screen.getByRole('button', { name: /create activity/i }));
+
+    expect(getNewActivityDialog()).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'New Activity' })).toBeInTheDocument();
   });
 });

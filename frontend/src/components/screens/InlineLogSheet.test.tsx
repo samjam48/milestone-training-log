@@ -12,6 +12,7 @@ import { cleanup, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from '../../App';
 import { renderWithProviders } from '../../test/renderWithProviders';
+import { expectSafeBottomOnlyInset } from '../../test/bottomInsetLayout';
 import {
   applyC63DashboardFixtures,
   c63SafeStretchSuggestion,
@@ -222,5 +223,29 @@ describe('InlineLogSheet quick-log contract (F9.10)', () => {
 
     expect(screen.queryByRole('dialog', { name: /quick log/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Log Activity' })).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// S2.1 — Sheet panel clears device safe area (edge case)
+// ---------------------------------------------------------------------------
+
+describe('InlineLogSheet — S2.1 safe-bottom on sheet panel', () => {
+  beforeEach(() => {
+    resetMockEngine();
+    applyC63DashboardFixtures();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('applies safe-bottom inset on the fixed quick-log sheet panel', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(screen.getByRole('button', { name: 'Log stretching' }));
+    const panel = screen.getByRole('dialog', { name: /quick log — stretching/i });
+    expectSafeBottomOnlyInset(panel);
   });
 });

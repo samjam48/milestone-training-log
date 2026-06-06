@@ -26,7 +26,9 @@
 **Vite proxy:** `"/api" → backend host:port` — relative `/api/...` paths. No CORS
 in dev when using the proxy.
 
-### Production (Phase 11)
+### Production (Phase 11 — live 2026-06-05)
+
+App: `https://milestone-activity.netlify.app` · API: `https://milestone-training-log.onrender.com` · Deploy branch: `main`.
 
 ```
 Phone (Android Chrome) ──HTTPS──▶ Netlify (static dist)
@@ -563,12 +565,13 @@ exists (Phase 0, ticket B0.1).
 - **~~Before Phase 6:~~** ~~Ensure `export/src/` is fully committed and stable~~
   (done — copy wholesale into `frontend/src/` on F1.1)
 - **~~Before Phase 7:~~** Settings/Goals screens ported (done Phases 7–9)
-- **Phase 11 (production):** Create Supabase, Render, and Netlify accounts; set
-  env secrets; connect GitHub to Netlify; complete smoke checklist in §12.4
+- **~~Phase 11 (production):~~** ✅ Complete (2026-06-05) — live on Netlify + Render + Supabase; see §12 and `docs/deploy.md`
 
 ---
 
 ## 12. Production deployment (Phase 11)
+
+**Status:** ✅ **Live** (2026-06-05) — O11.0–O11.2 complete; tickets in `plans/tickets-phase-11-production-2026-06-04.md`.
 
 **Approved design:** `plans/technical-design-production-deploy-2026-06-04.md`  
 **Owner runbook:** [`docs/deploy.md`](../docs/deploy.md) (O11 checklists, backup, cold start, security).
@@ -587,7 +590,7 @@ Default hostnames (`*.netlify.app`, `*.onrender.com`) until custom domain.
 
 | Variable | Local | Production |
 | --- | --- | --- |
-| `DATABASE_URL` | `sqlite:///./data/milestone.db` | Supabase `postgresql+psycopg://...` |
+| `DATABASE_URL` | `sqlite:///./data/milestone.db` | Supabase Session pooler `postgresql+psycopg://...` |
 | `APP_DEV_MODE` | optional `true` | `false` |
 | `VITE_DEV_MODE` | optional `true` | `false` |
 | `VITE_API_BASE_URL` | empty | empty (Netlify proxy) |

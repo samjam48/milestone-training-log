@@ -9,11 +9,12 @@
 
 import * as React from 'react';
 import { cn } from '../../lib/cn';
+import { BackButton } from '../ui/BackButton';
 import { Card } from '../ui/Card';
 import { Slider } from '../ui/Slider';
 import { DelayedTaxAttributionSection } from '../composites/DelayedTaxAttributionSection';
 import type { MilestoneEngineResult, IncidentDraft } from '../../hooks/useMilestoneEngine';
-import type { Score0to10 } from '../../types';
+import type { FlareUpIncident, Score0to10 } from '../../types';
 
 interface Props {
   engine: MilestoneEngineResult;
@@ -21,42 +22,53 @@ interface Props {
   onComplete: () => void;
 }
 
-// ---------------------------------------------------------------------------
-// Quick-pick body part chips
-// ---------------------------------------------------------------------------
-
-const BODY_PARTS = ['Left heel', 'Right heel', 'Left ankle', 'Right ankle', 'Left knee', 'Right knee', 'Lower back', 'Other'];
+/** Distinct trimmed body parts from incident history, recent-first, case-insensitive dedupe. */
+export function buildIncidentBodyPartSuggestions(incidents: FlareUpIncident[]): string[] {
+  const byKey = new Map<string, string>();
+  const sorted = [...incidents].sort((a, b) => {
+    const byDate = b.incidentDate.localeCompare(a.incidentDate);
+    if (byDate !== 0) return byDate;
+    return b.createdAt.localeCompare(a.createdAt);
+  });
+  for (const incident of sorted) {
+    const label = incident.bodyPart.trim();
+    if (!label) continue;
+    const key = label.toLowerCase();
+    if (!byKey.has(key)) byKey.set(key, label);
+  }
+  return [...byKey.values()];
+}
 
 function severityState(v: number) {
   return v >= 7 ? 'danger' : v >= 4 ? 'caution' : 'safe';
 }
-
-const BackButton: React.FC<{ onPress: () => void }> = ({ onPress }) => (
-  <button type="button" onClick={onPress}
-    className="flex items-center gap-1.5 text-body text-ink-muted hover:text-ink transition-colors duration-snap py-1">
-    <svg width={20} height={20} viewBox="0 0 20 20" fill="none" aria-hidden="true">
-      <path d="M12.5 15l-5-5 5-5" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-    Back
-  </button>
-);
 
 // ---------------------------------------------------------------------------
 // Screen
 // ---------------------------------------------------------------------------
 
 export const LogIncidentScreen: React.FC<Props> = ({ engine, onBack, onComplete }) => {
-  const { todayDate, delayedTax, delayedTaxError, activityClasses, submitIncident } = engine;
+  const {
+    todayDate,
+    delayedTax,
+    delayedTaxError,
+    activityClasses,
+    incidents,
+    submitIncident,
+  } = engine;
 
   const [bodyPart,      setBodyPart]      = React.useState('');
-  const [customPart,    setCustomPart]    = React.useState('');
   const [severity,      setSeverity]      = React.useState<number>(5);
   const [causeClassId,  setCauseClassId]  = React.useState<string>('');
   const [notes,         setNotes]         = React.useState('');
   const [submitted,     setSubmitted]     = React.useState(false);
 
-  const resolvedPart = bodyPart === 'Other' ? customPart : bodyPart;
-  const canSubmit    = resolvedPart.trim().length > 0;
+  const bodyPartSuggestions = React.useMemo(
+    () => buildIncidentBodyPartSuggestions(incidents),
+    [incidents],
+  );
+
+  const canSubmit = bodyPart.trim().length > 0;
 
   const formattedDate = new Date(todayDate + 'T00:00:00Z').toLocaleDateString(undefined, {
     weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC',
@@ -66,7 +78,7 @@ export const LogIncidentScreen: React.FC<Props> = ({ engine, onBack, onComplete 
     e.preventDefault();
     if (!canSubmit) return;
     const draft: IncidentDraft = {
-      bodyPart: resolvedPart.trim(),
+      bodyPart: bodyPart.trim(),
       severity: severity as Score0to10,
       activityClassId: causeClassId || undefined,
       notes: notes || undefined,
@@ -100,7 +112,7 @@ export const LogIncidentScreen: React.FC<Props> = ({ engine, onBack, onComplete 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col h-full overflow-y-auto">
       {/* Header */}
-      <div className="px-4 pt-4 pb-2 shrink-0">
+      <div className="px-4 pb-2 shrink-0">
         <BackButton onPress={onBack} />
         <div className="mt-3 flex items-start gap-2">
           <div>
@@ -110,30 +122,36 @@ export const LogIncidentScreen: React.FC<Props> = ({ engine, onBack, onComplete 
         </div>
       </div>
 
-      <div className="flex flex-col gap-4 px-4 pb-6 mt-2">
+      <div className="flex flex-col gap-4 px-4 pb-safe-bottom mt-2">
         {/* Body part */}
         <Card intent="danger" pad="md">
           <p className="text-body-lg font-semibold text-ink mb-3">What's flared up?</p>
-          {/* Quick picks */}
-          <div className="flex flex-wrap gap-2 mb-3">
-            {BODY_PARTS.map(part => (
-              <button key={part} type="button" onClick={() => setBodyPart(part)}
-                className={cn('h-8 px-3 rounded-pill text-body font-medium transition-colors duration-snap border',
-                  bodyPart === part
-                    ? 'bg-danger text-ink-inverse border-danger'
-                    : 'bg-bg-sunken text-ink-muted border-border hover:border-border-strong')}>
-                {part}
-              </button>
-            ))}
-          </div>
-          {/* Custom input when "Other" or nothing picked */}
+          {bodyPartSuggestions.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-3">
+              {bodyPartSuggestions.map(part => (
+                <button
+                  key={part}
+                  type="button"
+                  onClick={() => setBodyPart(part)}
+                  className={cn(
+                    'h-8 px-3 rounded-pill text-body font-medium transition-colors duration-snap border',
+                    'bg-bg-sunken text-ink-muted border-border hover:border-border-strong',
+                  )}
+                >
+                  {part}
+                </button>
+              ))}
+            </div>
+          )}
           <input
             type="text"
-            value={bodyPart === 'Other' ? customPart : bodyPart}
-            onChange={e => { setBodyPart('Other'); setCustomPart(e.target.value); }}
-            placeholder="Or type a custom body part…"
-            className={cn('w-full rounded-md bg-bg-sunken border border-border px-3 py-2.5',
-              'text-body text-ink placeholder:text-ink-faint focus:outline-none focus:border-border-strong')}
+            value={bodyPart}
+            onChange={e => setBodyPart(e.target.value)}
+            placeholder="e.g. Right toe"
+            className={cn(
+              'w-full rounded-md bg-bg-sunken border border-border px-3 py-2.5',
+              'text-body text-ink placeholder:text-ink-faint focus:outline-none focus:border-border-strong',
+            )}
           />
         </Card>
 

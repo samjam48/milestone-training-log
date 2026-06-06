@@ -35,14 +35,33 @@ See [`plans/milestone-architecture.md`](plans/milestone-architecture.md) for the
 # One-time setup: copy env to repo root (Docker Compose reads ./.env)
 cp backend/.env.example .env
 
+# One-time: create schema in the Docker volume (./data/milestone.db)
+docker compose run --rm backend alembic upgrade head
+
 # Start services with Docker Compose
 docker compose up backend
+
+# Optional: load local sample data (SQLite only — never against Supabase)
+docker compose run --rm backend python -m scripts.seed
 
 # Backend: http://localhost:8084 (Swagger UI: /docs)
 # Frontend: http://localhost:${FRONTEND_PORT:-5151} (set FRONTEND_PORT in repo-root .env)
 ```
 
 Default backend port is **8084** (not 8000) to avoid clashing with other local apps. Change `BACKEND_PORT` in `.env` if needed.
+
+## Production
+
+MVP is live (Phase 11 complete, 2026-06-05):
+
+| | URL |
+| --- | --- |
+| **App** | https://milestone-activity.netlify.app |
+| **API** | https://milestone-training-log.onrender.com |
+
+Deploys auto-build from **`main`** (Netlify frontend + Render backend). Full runbook, env matrix, backup, and cold-start notes: [`docs/deploy.md`](docs/deploy.md).
+
+Local dev stays SQLite + optional Docker; production uses Supabase Postgres on Render.
 
 ## Backend setup (local, without Docker)
 

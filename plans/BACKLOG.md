@@ -3,6 +3,10 @@
 Follow-up items outside the current sprint (`AGENTS.md`). Phase 0–10 tickets
 are archived in `plans/archive/phase-0-10/`.
 
+## Stage 2 polish (in tickets — see `plans/tickets-stage-2-polish-2026-06-05.md`)
+
+Implementation tracked there (S2.1–S2.9): bottom CTA inset, login password toggle, Android/history back, incident body-part suggestions, activity class + activity creation, Log tab **+ New Activity**, empty log flows. PWA: optional S2.10.
+
 ## Phase 11 / production follow-ups
 
 - Render keep-alive or paid tier if cold starts become painful on daily use.

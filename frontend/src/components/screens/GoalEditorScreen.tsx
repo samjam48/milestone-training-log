@@ -6,6 +6,7 @@
 
 import * as React from 'react';
 import { cn } from '../../lib/cn';
+import { BackButton } from '../ui/BackButton';
 import { SegmentedControl } from '../ui/SegmentedControl';
 import {
   StackScreenEngineBody,
@@ -128,23 +129,8 @@ export function GoalEditorScreen({
 
   return (
     <section className="flex min-h-0 flex-1 flex-col bg-bg">
-      <header className="flex shrink-0 items-center gap-3 border-b border-border px-4 pb-3 pt-5">
-        <button
-          type="button"
-          onClick={onBack}
-          aria-label="Back"
-          className="h-8 w-8 flex items-center justify-center rounded-full text-ink-muted hover:text-ink hover:bg-bg-overlay transition-colors"
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-            <path
-              d="M10 12L6 8l4-4"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </button>
+      <header className="flex shrink-0 items-center gap-3 border-b border-border px-4 pb-3">
+        <BackButton onPress={onBack} />
         <h1 className="text-title font-bold text-ink flex-1">
           {isEdit ? 'Edit Goal' : 'New Goal'}
         </h1>

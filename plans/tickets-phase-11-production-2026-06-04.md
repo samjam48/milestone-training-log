@@ -27,7 +27,7 @@
 - Tests before code per implementation ticket.
 - No business logic in routers — auth in `services/`.
 - No schema changes for v1 auth (signed cookie only).
-- Branch: `feat/phase-11-production`. Do not push or merge without owner instruction.
+- Production deploys from `main` (merged 2026-06-05). Feature work still uses `feat/` / `fix/` / `chore/` branches.
 - Secrets never committed.
 
 ---
@@ -41,9 +41,9 @@ After implementation tickets through **I11.1** are merged on the branch, complet
 
 | Ticket    | When                                       | Blocks                         |
 | --------- | ------------------------------------------ | ------------------------------ |
-| **O11.0** | ✅ **Done** (2026-06-04) — unblocks B11.1     | —                              |
-| **O11.1** | After B11.3 + B11.4 + I11.1 land on branch | F11.2 manual prod check, O11.2 |
-| **O11.2** | After full ticket batch + O11.1            | Phase 11 sign-off              |
+| **O11.0** | ✅ **Done** (2026-06-04)                     | —                              |
+| **O11.1** | ✅ **Done** (2026-06-05)                     | —                              |
+| **O11.2** | ✅ **Done** (2026-06-05) — Phase 11 sign-off | —                              |
 
 
 ---
@@ -99,9 +99,10 @@ NETLIFY_SITE_URL=             # e.g. https://something.netlify.app
 
 ## O11.1 — Owner first production wiring (Render + Netlify)
 
+**Status:** ✅ **DONE** — owner sign-off 2026-06-05  
 **Type:** owner-only  
-**Depends on:** B11.3, B11.4, I11.1 merged on `feat/phase-11-production`  
-**Blocks:** O11.2; optional manual verification during F11.2
+**Depends on:** B11.3, B11.4, I11.1 merged on `main`  
+**Blocks:** ~~O11.2~~ (cleared)
 
 ### Render Web Service
 
@@ -117,19 +118,19 @@ NETLIFY_SITE_URL=             # e.g. https://something.netlify.app
   | `SESSION_MAX_AGE_DAYS` | `30` (optional)       |
 
 - Health check path: `/api/health`
-- Deploy; wait until live. Copy **service hostname** (no `https://`): `____________`
-- Open `https://<hostname>/api/health` → `{"status":"ok"}` or equivalent
+- Deploy; wait until live. **Service hostname:** `milestone-training-log.onrender.com`
+- Open `https://milestone-training-log.onrender.com/api/health` → `{"status":"ok"}` or equivalent
 - Open `https://<hostname>/docs` → Swagger loads (optional)
 - Confirm Supabase Table Editor shows **empty** application tables (migrations ran, no seed rows)
 
 ### Netlify site
 
-- Import site from GitHub → repo `milestone-training-log`, branch `feat/phase-11-production` (or `main` after merge)
+- Import site from GitHub → repo `milestone-training-log`, branch **`main`**
 - Build settings: base `frontend`, command `npm ci && npm run build`, publish `dist`
 - Environment: `VITE_DEV_MODE=false` (and `VITE_API_BASE_URL` empty/unset)
 - Ensure `frontend/netlify.toml` proxy target uses your Render hostname from above (commit from I11.1 may use placeholder — **update** `to = "https://<RENDER_HOST>/api/:splat"` if still placeholder)
-- Deploy site; copy **site URL**: `____________`
-- Enable automatic deploys on push to chosen production branch
+- Deploy site; **site URL:** `https://milestone-activity.netlify.app`
+- Automatic deploys on push to **`main`**
 
 ### Quick wiring test (desktop)
 
@@ -138,16 +139,21 @@ NETLIFY_SITE_URL=             # e.g. https://something.netlify.app
 
 ### Done when
 
-- Render and Netlify URLs recorded in password manager.
-- Health check passes on Render and via Netlify proxy.
+- [x] Render and Netlify URLs recorded in password manager.
+- [x] Health check passes on Render and via Netlify proxy.
+- [x] `DATABASE_URL` uses Supabase **Session pooler** (direct host failed IPv6 from Render).
+- [x] `frontend/netlify.toml` points at `milestone-training-log.onrender.com`.
+
+**Owner sign-off:** ✅ **2026-06-05**
 
 ---
 
 ## O11.2 — Owner acceptance smoke (Android Chrome)
 
+**Status:** ✅ **DONE** — owner sign-off 2026-06-05  
 **Type:** owner-only  
 **Depends on:** All B11.*, F11.*, I11.* tickets + O11.1  
-**Blocks:** Phase 11 handoff / merge approval
+**Blocks:** ~~Phase 11 handoff / merge approval~~ (cleared)
 
 ### On Pixel 9 Pro (Chrome)
 
@@ -174,7 +180,10 @@ NETLIFY_SITE_URL=             # e.g. https://something.netlify.app
 
 ### Done when
 
-- All boxes ticked; note any bugs in `plans/BACKLOG.md` for Stage 2.
+- [x] Basic production smoke passed (login, core flows, security spot-checks).
+- [x] Bugs for Stage 2 logged in `plans/BACKLOG.md` if any.
+
+**Owner sign-off:** ✅ **2026-06-05**
 
 ---
 
@@ -417,20 +426,23 @@ router pattern from `health.py`.
 
 ## Phase 11 definition of done
 
-- O11.0, O11.1, O11.2 complete (owner)
-- All B11.*, F11.*, I11.* tickets committed on `feat/phase-11-production`
-- `make lint` and `make test` green at end-of-batch handoff
-- Production app usable on Android Chrome with empty DB and session auth
-- Owner reviewed; owner decides merge to `main`
+- [x] O11.0, O11.1, O11.2 complete (owner)
+- [x] All B11.*, F11.*, I11.* tickets merged to `main`
+- [x] `make lint` and `make test` green at PR handoff
+- [x] Production app usable on Android Chrome with empty DB and session auth
+- [x] Owner reviewed; merged to `main` (2026-06-05)
+
+**Phase 11 status:** ✅ **COMPLETE** (2026-06-05)
 
 ---
 
-## Unresolved assumptions
+## Resolved / operational notes (post-deploy)
 
-- Render deploy uses Dockerfile from `backend/`; if Render blueprint (`render.yaml`) is added, keep in sync with B11.3.
-- Local dev may skip auth until `AUTH_PASSWORD` set — implementer documents chosen behaviour in `.env.example`.
-- GitHub → Netlify production branch: `feat/phase-11-production` until merge, then `main`.
+- Render deploy uses `backend/Dockerfile`; `alembic upgrade head && uvicorn` on `$PORT`.
+- Render `DATABASE_URL`: Supabase **Session pooler** (keep long-term; do not switch back to direct IPv6 host).
+- Local dev may skip auth until `AUTH_PASSWORD` set — see `.env.example`.
+- GitHub → Render + Netlify production branch: **`main`**.
 
 ---
 
-**Planner status:** `SIGNED OFF`
+**Planner status:** `SIGNED OFF` · **Phase 11:** `COMPLETE` (2026-06-05)

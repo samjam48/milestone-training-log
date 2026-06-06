@@ -59,19 +59,15 @@ from `backend/` so `backend/pyproject.toml` is loaded.
 
 `make lint` and `make test` should wrap the canonical commands once the repo bootstrap is in place.
 ---
-## Current Sprint — Phase 11: Production deploy
-**Goal:** Ship MVP on the internet for daily phone use — Netlify (frontend, GitHub deploy) + Render (backend) + Supabase (Postgres); empty prod DB; shared-password session via Netlify `/api` proxy + app auth.
-**Status (2026-06-04):** O11.0 complete. Start **B11.1** via orchestrator. **O11.1** after B11.3, B11.4, I11.1.
-**Ticket source:** `plans/tickets-phase-11-production-2026-06-04.md`
-**Branch:** `feat/phase-11-production` (from `main`)
-**Planning source:** `plans/feature-brief-production-deploy-2026-06-04.md`, `plans/technical-design-production-deploy-2026-06-04.md`
-**Primary references:** `plans/PRD.md` §9, `plans/TRD.md` §12, `README.md` deploy runbook (when added)
-**Owner decisions (2026-06-04):** Option B hosting; proxy + session auth; SQLite local / Postgres prod only; empty prod; cold start OK; Android Chrome primary; backup runbook; PWA deferred to Stage 2.
-**Out of scope (Phase 11):** Strava/Health, MCP tools, multi-user OAuth, Capacitor, PWA, local SQLite→prod data migration script
+## Current Sprint — Stage 2: Polish (active)
+**Goal:** Production UX polish for daily phone use (layout, onboarding, navigation) on the live stack; PWA in optional batch.
+**Status (2026-06-05):** **Phase 11 complete** on `main`. **Stage 2 tickets approved for implementation** — start with **S2.1** on `feat/stage-2-polish` (or per-ticket branch per owner).
+**Production (live):** App `https://milestone-activity.netlify.app` · API `https://milestone-training-log.onrender.com` · DB Supabase Postgres (session pooler). Runbook: `docs/deploy.md`.
+**Deploy branch:** `main` (Render + Netlify auto-deploy from GitHub).
+**Ticket source:** `plans/tickets-stage-2-polish-2026-06-05.md` (S2.1–S2.9 required; S2.10 PWA optional; **O2.1** owner smoke)
+**Primary references:** `plans/PRD.md` §10, `DESIGN.md`, `docs/patterns.md`, `docs/deploy.md`
 
-**Roadmap after Phase 11:** Stage 2 polish (PWA + UX), Stage 3 integrations, Stage 4 MCP — see `plans/PRD.md` §10–12.
-
-**Archive:** Phase 0–10 tickets in `plans/archive/phase-0-10/`
+**Archive:** Phase 0–10 in `plans/archive/phase-0-10/` · Phase 11 in `plans/tickets-phase-11-production-2026-06-04.md` (archive to `plans/archive/phase-11/` when convenient)
 
 ---
 ## Definition of Done

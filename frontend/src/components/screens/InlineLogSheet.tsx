@@ -176,7 +176,7 @@ export function InlineLogSheet({
         role="dialog"
         aria-modal="true"
         aria-label={`Quick log \u2014 ${activity.name}`}
-        className="fixed inset-x-0 bottom-0 z-50 mx-auto max-h-[90dvh] max-w-[440px] overflow-y-auto rounded-t-2xl border-t border-border bg-bg-raised shadow-card"
+        className="fixed inset-x-0 bottom-0 z-50 mx-auto max-h-[90dvh] max-w-[440px] overflow-y-auto rounded-t-2xl border-t border-border bg-bg-raised shadow-card pb-safe-bottom"
       >
         <div className="flex justify-center pb-1 pt-3">
           <div className="h-1 w-10 rounded-full bg-border" aria-hidden="true" />

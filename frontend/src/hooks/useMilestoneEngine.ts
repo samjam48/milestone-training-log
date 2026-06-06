@@ -53,6 +53,7 @@ import {
   deleteRule as deleteRuleApi,
   createTrainingBlock as createTrainingBlockApi,
   createActivity,
+  createActivityClass,
   patchActivity,
   getDelayedTax,
 } from '../lib/api';
@@ -107,10 +108,19 @@ export interface IncidentDraft {
 }
 
 export interface NewActivityDraft {
+  /** Client-generated id from NewActivitySheet; used when persisting the activity. */
+  id?: ID;
   name: string;
   activityClassId: ID;
   type: ActivityType;
   defaultVolumeUnit?: VolumeUnit;
+}
+
+export interface NewActivityClassDraft {
+  name: string;
+  type: ActivityType;
+  description?: string;
+  defaultRecoveryWindowDays?: number;
 }
 
 export interface GoalDraft {
@@ -178,6 +188,7 @@ export interface MilestoneEngineResult {
   previousBlocks: TrainingBlock[];
   // F2.0 mutations
   submitNewActivity: (draft: NewActivityDraft) => void;
+  submitNewActivityClass: (draft: NewActivityClassDraft) => Promise<void>;
   updateActivity: (activityId: ID, patch: Partial<NewActivityDraft>) => void;
   deactivateActivity: (activityId: ID) => void;
   createGoal: (draft: GoalDraft) => void;
@@ -317,7 +328,7 @@ export function useMilestoneEngine(): MilestoneEngineResult {
   const submitNewActivityMutation = useMutation({
     mutationFn: (draft: NewActivityDraft) =>
       createActivity({
-        id: crypto.randomUUID(),
+        id: draft.id ?? crypto.randomUUID(),
         name: draft.name,
         activityClassId: draft.activityClassId,
         type: draft.type,
@@ -327,6 +338,21 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       void queryClient.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+
+  const submitNewActivityClassMutation = useMutation({
+    mutationFn: (draft: NewActivityClassDraft) =>
+      createActivityClass({
+        id: crypto.randomUUID(),
+        name: draft.name,
+        type: draft.type,
+        description: draft.description ?? '',
+        defaultRecoveryWindowDays: draft.defaultRecoveryWindowDays ?? 3,
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['activity-classes'] });
     },
   });
 
@@ -459,6 +485,10 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     submitNewActivityMutation.mutate(draft);
   }, [submitNewActivityMutation]);
 
+  const submitNewActivityClass = React.useCallback(async (draft: NewActivityClassDraft) => {
+    await submitNewActivityClassMutation.mutateAsync(draft);
+  }, [submitNewActivityClassMutation]);
+
   const updateActivity = React.useCallback((activityId: ID, patch: Partial<NewActivityDraft>) => {
     updateActivityMutation.mutate({ activityId, patch });
   }, [updateActivityMutation]);
@@ -535,6 +565,7 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     previousBlocks: (dashboard?.previousBlocks ?? []) as TrainingBlock[],
     // F2.0 mutations
     submitNewActivity,
+    submitNewActivityClass,
     updateActivity,
     deactivateActivity,
     createGoal,
