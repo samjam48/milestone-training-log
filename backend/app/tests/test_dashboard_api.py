@@ -44,6 +44,9 @@ EXPECTED_TOP_LEVEL_KEYS = {
     "has_checked_in_today",
     "class_statuses",
     "suggestions",
+    "suggestion_buckets",
+    "goal_rows",
+    "load_risk_summary",
     "weekly_progress",
     "daily_scores",
     "load_series",
@@ -449,3 +452,238 @@ async def test_get_dashboard_returns_200_after_prototype_seed_with_violations(
     ]
     assert violation_rule_ids
     assert all(rule_id == "rule-rest-foot" for rule_id in violation_rule_ids)
+
+
+# ---------------------------------------------------------------------------
+# S25.B7 — suggestion_buckets, goal_rows, load_risk_summary on GET /api/dashboard
+# ---------------------------------------------------------------------------
+
+
+def _bucket_ids(rows: list[dict[str, object]], bucket: str) -> set[str]:
+    return {str(row["id"]) for row in rows if row.get("bucket") == bucket}
+
+
+def _foot_class_bar(payload: dict[str, object]) -> dict[str, object]:
+    summary = payload["load_risk_summary"]
+    assert summary is not None
+    class_bars = summary["class_bars"]
+    return next(bar for bar in class_bars if bar["activity_class_id"] == "cls-foot")
+
+
+async def test_get_dashboard_includes_suggestion_buckets_goal_rows_load_risk_summary(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    """Dashboard response exposes B7 extension fields alongside legacy suggestions."""
+    seed_dashboard_mock_graph(app_with_test_database)
+
+    response = await client.get(DASHBOARD_URL, params={"as_of": AS_OF})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert set(payload.keys()) == EXPECTED_TOP_LEVEL_KEYS
+    assert isinstance(payload["suggestion_buckets"], list)
+    assert isinstance(payload["goal_rows"], list)
+    assert payload["load_risk_summary"] is not None
+    assert isinstance(payload["suggestions"], list)
+
+
+async def test_get_dashboard_suggestion_buckets_rows_include_bucket_scope_description(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    """Each suggestion_buckets row carries bucket, scope, activity_class_id, description."""
+    seed_dashboard_mock_graph(app_with_test_database)
+
+    response = await client.get(DASHBOARD_URL, params={"as_of": AS_OF})
+
+    assert response.status_code == 200
+    buckets = response.json()["suggestion_buckets"]
+    assert buckets
+    for row in buckets:
+        assert row["bucket"] in {"do", "rest", "done"}
+        assert row["scope"] in {"activity", "class"}
+        assert "activity_class_id" in row
+        assert "description" in row
+
+
+async def test_get_dashboard_load_risk_summary_week_days_and_class_bars(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    """load_risk_summary returns seven week_days and capped performance class bars."""
+    seed_dashboard_mock_graph(app_with_test_database)
+
+    response = await client.get(DASHBOARD_URL, params={"as_of": AS_OF})
+
+    assert response.status_code == 200
+    summary = response.json()["load_risk_summary"]
+    assert summary is not None
+    assert len(summary["week_days"]) == 7
+    assert summary["week_days"][-1]["date"] == AS_OF
+    assert all("flagged" in day for day in summary["week_days"])
+
+    class_ids = {bar["activity_class_id"] for bar in summary["class_bars"]}
+    assert "cls-foot" in class_ids
+    assert "cls-recovery" not in class_ids
+
+
+async def test_get_dashboard_load_risk_summary_null_without_active_block(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    """No active block → load_risk_summary is null; goal_rows still an array."""
+    seed_activity_class(
+        app_with_test_database,
+        class_id="cls-foot",
+        name="Foot Load",
+    )
+    seed_activity(
+        app_with_test_database,
+        activity_id="act-walk",
+        activity_class_id="cls-foot",
+        name="Walk",
+    )
+
+    response = await client.get(DASHBOARD_URL, params={"as_of": AS_OF})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["load_risk_summary"] is None
+    assert payload["goal_rows"] == []
+    assert payload["suggestion_buckets"] == []
+
+
+async def test_get_dashboard_goal_rows_empty_when_no_goals(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    """goal_rows is an empty array when the user has no goals."""
+    seed_dashboard_mock_graph(app_with_test_database)
+
+    response = await client.get(DASHBOARD_URL, params={"as_of": AS_OF})
+
+    assert response.status_code == 200
+    assert response.json()["goal_rows"] == []
+
+
+async def test_get_dashboard_goal_rows_includes_all_statuses_with_expected_fields(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    """goal_rows lists active, achieved, paused, and missed with dashboard row shape."""
+    seed_goal(
+        app_with_test_database,
+        goal_id="api-row-active",
+        title="Run 5k",
+        target_date=date(2026, 6, 15),
+        timeframe="monthly",
+        progress_value=2.0,
+        progress_target=5.0,
+        progress_unit="km",
+        status="active",
+    )
+    seed_goal(
+        app_with_test_database,
+        goal_id="api-row-achieved",
+        title="First 5k",
+        target_date=date(2026, 5, 1),
+        timeframe="monthly",
+        progress_value=5.0,
+        progress_target=5.0,
+        progress_unit="km",
+        status="achieved",
+    )
+    seed_goal(
+        app_with_test_database,
+        goal_id="api-row-paused",
+        title="Cycle 100k",
+        target_date=date(2026, 8, 1),
+        timeframe="monthly",
+        status="paused",
+    )
+    seed_goal(
+        app_with_test_database,
+        goal_id="api-row-missed",
+        title="Missed target",
+        target_date=date(2026, 4, 1),
+        timeframe="monthly",
+        status="missed",
+    )
+
+    response = await client.get(DASHBOARD_URL, params={"as_of": AS_OF})
+
+    assert response.status_code == 200
+    rows = response.json()["goal_rows"]
+    assert len(rows) == 4
+    row_ids = {row["goal_id"] for row in rows}
+    assert row_ids == {
+        "api-row-active",
+        "api-row-achieved",
+        "api-row-paused",
+        "api-row-missed",
+    }
+    for row in rows:
+        assert set(row.keys()) == {
+            "goal_id",
+            "title",
+            "status",
+            "activity_id",
+            "progress_value",
+            "progress_target",
+            "progress_unit",
+            "fill_ratio",
+            "is_qualitative",
+        }
+
+    active_row = next(row for row in rows if row["goal_id"] == "api-row-active")
+    assert active_row["fill_ratio"] == pytest.approx(0.4)
+    assert active_row["is_qualitative"] is False
+
+    qualitative_row = next(row for row in rows if row["goal_id"] == "api-row-paused")
+    assert qualitative_row["fill_ratio"] is None
+    assert qualitative_row["is_qualitative"] is True
+
+
+async def test_backdated_activity_log_updates_suggestion_buckets_and_load_risk_summary(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """POST log for a past date changes suggestion_buckets and load_risk_summary on refetch."""
+    freeze_server_today(monkeypatch)
+    seed_dashboard_mock_graph(app_with_test_database)
+
+    baseline = await client.get(DASHBOARD_URL, params={"as_of": AS_OF})
+    assert baseline.status_code == 200
+    baseline_payload = baseline.json()
+    baseline_buckets = baseline_payload["suggestion_buckets"]
+    baseline_summary = baseline_payload["load_risk_summary"]
+    assert baseline_summary is not None
+    baseline_foot_actual = _foot_class_bar(baseline_payload)["actual"]
+    assert "act-walk" not in _bucket_ids(baseline_buckets, "done")
+
+    backdated_date = (FROZEN_TODAY - timedelta(days=1)).isoformat()
+    create_response = await client.post(
+        "/api/activity-logs",
+        json={
+            "id": "log-backdated-walk",
+            "activity_id": "act-walk",
+            "logged_date": backdated_date,
+            "duration_minutes": 45,
+            "volume_value": 6.0,
+            "volume_unit": "km",
+            "rpe": 7,
+            "post_activity_feel": "hard",
+            "notes": "Backdated foot load",
+        },
+    )
+    assert create_response.status_code == 201
+
+    followup = await client.get(DASHBOARD_URL, params={"as_of": AS_OF})
+    assert followup.status_code == 200
+    followup_payload = followup.json()
+
+    assert followup_payload["suggestion_buckets"] != baseline_buckets
+    assert followup_payload["load_risk_summary"] != baseline_summary
+    assert _foot_class_bar(followup_payload)["actual"] > baseline_foot_actual
