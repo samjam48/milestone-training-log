@@ -39,6 +39,7 @@ export interface SettingsScreenProps {
   onNewBlock?: () => void;
   onViewBlock?: (blockId: ID) => void;
   onEditActivity?: (activity: Activity) => void;
+  onOpenNewActivity?: () => void;
   onUnauthenticated?: () => void;
 }
 
@@ -560,6 +561,7 @@ export function SettingsScreen({
   onNewBlock,
   onViewBlock,
   onEditActivity,
+  onOpenNewActivity,
   onUnauthenticated,
 }: SettingsScreenProps): React.ReactElement {
   const {
@@ -768,9 +770,20 @@ export function SettingsScreen({
 
         {/* ── Activities ── */}
         <section>
-          <p className="text-label uppercase font-medium text-ink-muted mb-3">
-            Activities
-          </p>
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <p className="text-label uppercase font-medium text-ink-muted">
+              Activities
+            </p>
+            {onOpenNewActivity != null && (
+              <button
+                type="button"
+                onClick={onOpenNewActivity}
+                className="shrink-0 h-8 px-2.5 rounded-md text-caption font-medium text-ink-muted bg-bg-sunken hover:bg-bg-overlay transition-colors duration-snap"
+              >
+                + New Activity
+              </button>
+            )}
+          </div>
           {grouped.length > 0 && (
             <Card pad="none">
               <div className="divide-y divide-border-subtle">

@@ -108,6 +108,8 @@ export interface IncidentDraft {
 }
 
 export interface NewActivityDraft {
+  /** Client-generated id from NewActivitySheet; used when persisting the activity. */
+  id?: ID;
   name: string;
   activityClassId: ID;
   type: ActivityType;
@@ -326,7 +328,7 @@ export function useMilestoneEngine(): MilestoneEngineResult {
   const submitNewActivityMutation = useMutation({
     mutationFn: (draft: NewActivityDraft) =>
       createActivity({
-        id: crypto.randomUUID(),
+        id: draft.id ?? crypto.randomUUID(),
         name: draft.name,
         activityClassId: draft.activityClassId,
         type: draft.type,

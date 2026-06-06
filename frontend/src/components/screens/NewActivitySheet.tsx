@@ -28,6 +28,7 @@ export interface NewActivitySheetProps {
   activityClasses: ActivityClass[];
   onCreate: (draft: NewActivityDraft & { id: string }) => void;
   onCreated?: (draft: NewActivityDraft & { id: string }) => void;
+  onAddActivityClass?: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -40,6 +41,7 @@ export function NewActivitySheet({
   activityClasses,
   onCreate,
   onCreated,
+  onAddActivityClass,
 }: NewActivitySheetProps) {
   const [name, setName] = React.useState('');
   const [classId, setClassId] = React.useState<string>(activityClasses[0]?.id ?? '');
@@ -144,7 +146,18 @@ export function NewActivitySheet({
             <div>
               <p className="text-body font-medium text-ink mb-2">Activity class</p>
               {activityClasses.length === 0 ? (
-                <p className="text-body text-ink-faint py-2">No activity classes</p>
+                <div className="flex flex-col gap-3 py-2">
+                  <p className="text-body text-ink-faint">No activity classes</p>
+                  {onAddActivityClass != null && (
+                    <button
+                      type="button"
+                      onClick={onAddActivityClass}
+                      className="h-11 rounded-md bg-bg-sunken border border-border text-body font-medium text-ink-muted transition-colors duration-snap hover:bg-bg-overlay"
+                    >
+                      Add activity class
+                    </button>
+                  )}
+                </div>
               ) : (
                 <div className="flex flex-col divide-y divide-border-subtle rounded-md border border-border overflow-hidden">
                   {activityClasses.map((cls) => {

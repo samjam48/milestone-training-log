@@ -236,6 +236,7 @@ interface SettingsScreenCallbackProps {
   onNewBlock?: () => void;
   onViewBlock?: (blockId: string) => void;
   onEditActivity?: (activity: Activity) => void;
+  onOpenNewActivity?: () => void;
 }
 
 const SettingsScreenWithCallbacks = SettingsScreen as unknown as (
@@ -1634,6 +1635,59 @@ describe('SettingsScreen — S2.6 create activity class', () => {
     expect(
       await screen.findByText(/activity class already exists/i),
     ).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// S2.7 — New Activity entry (Settings)
+// plans/tickets-stage-2-polish-2026-06-05.md
+// ---------------------------------------------------------------------------
+
+describe('SettingsScreen — S2.7 New Activity entry', () => {
+  it('renders + New Activity in the Activities section', () => {
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [CLASS_RUNNING],
+      activities: [ACTIVITY_RUNNING],
+      logs: [],
+    });
+
+    renderSettingsScreenWithCallbacks({ engine, onOpenNewActivity: vi.fn() });
+
+    const activitiesSection = getSectionByHeading(/^activities$/i);
+    expect(
+      within(activitiesSection).getByRole('button', { name: /\+ new activity/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('calls onOpenNewActivity when + New Activity is clicked', async () => {
+    const user = userEvent.setup();
+    const onOpenNewActivity = vi.fn();
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [CLASS_RUNNING],
+      activities: [],
+      logs: [],
+    });
+
+    renderSettingsScreenWithCallbacks({ engine, onOpenNewActivity });
+
+    await user.click(screen.getByRole('button', { name: /\+ new activity/i }));
+
+    expect(onOpenNewActivity).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows + New Activity even when there are no activities yet', () => {
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [CLASS_RUNNING],
+      activities: [],
+      logs: [],
+    });
+
+    renderSettingsScreenWithCallbacks({ engine, onOpenNewActivity: vi.fn() });
+
+    expect(screen.getByRole('button', { name: /\+ new activity/i })).toBeInTheDocument();
   });
 });
 

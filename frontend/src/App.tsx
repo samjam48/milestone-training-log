@@ -16,6 +16,7 @@ import {
   NewTrainingBlockScreen,
   ActivityManagerScreen,
   InlineLogSheet,
+  NewActivitySheet,
 } from './components/screens';
 import type { Activity, Goal } from './types';
 import { useMilestoneEngine, type MilestoneEngineResult } from './hooks/useMilestoneEngine';
@@ -24,12 +25,9 @@ import { useMilestoneNavigationHistory } from './hooks/useMilestoneNavigationHis
 type OverlayKey = 'check-in' | 'log-activity' | 'log-incident';
 type StackEntry = { screen: string; params: Record<string, unknown> };
 
-function resolveLogActivityPrefill(
-  prefillId: string | undefined,
-  activities: { id: string }[],
-): string | undefined {
+function resolveLogActivityPrefill(prefillId: string | undefined): string | undefined {
   if (prefillId == null || prefillId === '') return undefined;
-  return activities.some((a) => a.id === prefillId) ? prefillId : undefined;
+  return prefillId;
 }
 
 function ComingSoonPlaceholder(): React.ReactElement {
@@ -135,6 +133,7 @@ export function App(): React.ReactElement {
     string | undefined
   >(undefined);
   const [inlineLogActivity, setInlineLogActivity] = React.useState<Activity | null>(null);
+  const [newActivitySheetOpen, setNewActivitySheetOpen] = React.useState(false);
   const [screenStack, setScreenStack] = React.useState<StackEntry[]>([]);
 
   const pushScreen = (screen: string, params: Record<string, unknown> = {}): void =>
@@ -194,6 +193,14 @@ export function App(): React.ReactElement {
     setOverlay('log-activity');
   };
 
+  const openNewActivitySheet = (): void => setNewActivitySheetOpen(true);
+  const closeNewActivitySheet = (): void => setNewActivitySheetOpen(false);
+
+  const handleAddActivityClass = (): void => {
+    closeNewActivitySheet();
+    setActiveTab('settings');
+  };
+
   const closeInlineLog = (): void => setInlineLogActivity(null);
 
   let mainContent: React.ReactElement;
@@ -211,10 +218,7 @@ export function App(): React.ReactElement {
     mainContent = (
       <LogActivityScreen
         engine={engine}
-        initialActivityId={resolveLogActivityPrefill(
-          logActivityPrefillId,
-          engine.activities,
-        )}
+        initialActivityId={resolveLogActivityPrefill(logActivityPrefillId)}
         onBack={navigateBack}
         onComplete={navigateBack}
       />
@@ -242,6 +246,7 @@ export function App(): React.ReactElement {
         engine={engine}
         onOpenLogActivity={() => openLogActivity()}
         onOpenLogIncident={() => setOverlay('log-incident')}
+        onOpenNewActivity={openNewActivitySheet}
       />
     );
   } else if (activeTab === 'goals') {
@@ -261,6 +266,7 @@ export function App(): React.ReactElement {
         onNewBlock={() => pushScreen('new-training-block')}
         onViewBlock={(blockId) => pushScreen('block-review', { blockId })}
         onEditActivity={(activity) => pushScreen('activity-manager', { activity })}
+        onOpenNewActivity={openNewActivitySheet}
         onUnauthenticated={handleUnauthenticated}
       />
     );
@@ -287,12 +293,22 @@ export function App(): React.ReactElement {
         </div>
       )}
       {!shellBlocked && (
-        <InlineLogSheet
-          open={inlineLogActivity != null}
-          activity={inlineLogActivity}
-          engine={engine}
-          onClose={closeInlineLog}
-        />
+        <>
+          <InlineLogSheet
+            open={inlineLogActivity != null}
+            activity={inlineLogActivity}
+            engine={engine}
+            onClose={closeInlineLog}
+          />
+          <NewActivitySheet
+            open={newActivitySheetOpen}
+            onClose={closeNewActivitySheet}
+            activityClasses={engine.activityClasses}
+            onCreate={engine.submitNewActivity}
+            onCreated={(draft) => openLogActivity(draft.id)}
+            onAddActivityClass={handleAddActivityClass}
+          />
+        </>
       )}
       {/* Test affordance — allows exercising pushScreen with an unknown key */}
       <button

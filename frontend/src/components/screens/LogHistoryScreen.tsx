@@ -12,6 +12,7 @@ interface Props {
   engine: MilestoneEngineResult;
   onOpenLogActivity: () => void;
   onOpenLogIncident: () => void;
+  onOpenNewActivity?: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -104,7 +105,12 @@ function groupLogs(logs: ActivityLog[]): { monthKeys: string[]; byMonth: ByMonth
 // Screen
 // ---------------------------------------------------------------------------
 
-export const LogHistoryScreen: React.FC<Props> = ({ engine, onOpenLogActivity, onOpenLogIncident }) => {
+export const LogHistoryScreen: React.FC<Props> = ({
+  engine,
+  onOpenLogActivity,
+  onOpenLogIncident,
+  onOpenNewActivity,
+}) => {
   const { logs, activities } = engine;
   const activityMap = React.useMemo(
     () => new Map(activities.map(a => [a.id, a.name])),
@@ -182,22 +188,33 @@ export const LogHistoryScreen: React.FC<Props> = ({ engine, onOpenLogActivity, o
       {/* Bottom action bar */}
       <div
         data-testid="bottom-action-bar"
-        className="shrink-0 border-t border-border bg-bg-raised px-4 py-3 flex gap-3"
+        className="shrink-0 border-t border-border bg-bg-raised px-4 py-3 flex flex-col gap-2"
       >
-        <button
-          type="button"
-          onClick={onOpenLogActivity}
-          className="flex-1 h-11 rounded-md bg-ink text-ink-inverse text-body font-semibold transition-colors duration-snap active:bg-ink/80"
-        >
-          + Log Activity
-        </button>
-        <button
-          type="button"
-          onClick={onOpenLogIncident}
-          className="flex-1 h-11 rounded-md bg-danger/15 text-danger-fg text-body font-semibold border border-danger-border transition-colors duration-snap active:bg-danger/25"
-        >
-          + Log Incident
-        </button>
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={onOpenLogActivity}
+            className="flex-1 h-11 rounded-md bg-ink text-ink-inverse text-body font-semibold transition-colors duration-snap active:bg-ink/80"
+          >
+            + Log Activity
+          </button>
+          <button
+            type="button"
+            onClick={onOpenLogIncident}
+            className="flex-1 h-11 rounded-md bg-danger/15 text-danger-fg text-body font-semibold border border-danger-border transition-colors duration-snap active:bg-danger/25"
+          >
+            + Log Incident
+          </button>
+        </div>
+        {onOpenNewActivity != null && (
+          <button
+            type="button"
+            onClick={onOpenNewActivity}
+            className="w-full h-11 rounded-md bg-bg-raised border border-border text-body font-medium text-ink-muted transition-colors duration-snap hover:bg-bg-overlay"
+          >
+            + New Activity
+          </button>
+        )}
       </div>
     </div>
   );

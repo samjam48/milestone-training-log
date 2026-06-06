@@ -4,6 +4,7 @@
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { screen, cleanup, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders';
 import {
   BOTTOM_ACTION_BAR_TEST_ID,
@@ -11,8 +12,20 @@ import {
   expectTabScreenBottomActionBar,
 } from '../../test/bottomInsetLayout';
 import { AppShell } from '../ui/AppShell';
+import type { MilestoneEngineResult } from '../../hooks/useMilestoneEngine';
 import { createLogHistoryEngine, logActivityWalk } from '../../test/fixtures/c62Fixtures';
 import { LogHistoryScreen } from './LogHistoryScreen';
+
+interface LogHistoryScreenS27Props {
+  engine: MilestoneEngineResult;
+  onOpenLogActivity: () => void;
+  onOpenLogIncident: () => void;
+  onOpenNewActivity?: () => void;
+}
+
+const LogHistoryScreenS27 = LogHistoryScreen as unknown as (
+  props: LogHistoryScreenS27Props,
+) => JSX.Element;
 
 const VIEWPORT_HEIGHT = 520;
 
@@ -220,5 +233,86 @@ describe('LogHistoryScreen — S2.1 bottom action bar inset', () => {
     expectTabScreenBottomActionBar(actionBar);
     expect(scrollRegion.contains(actionBar)).toBe(false);
     expectTabBarInsetAboveTabScreenFooter(actionBar);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// S2.7 — Log tab "+ New Activity" CTA (plans/tickets-stage-2-polish-2026-06-05.md)
+// ---------------------------------------------------------------------------
+
+describe('LogHistoryScreen — S2.7 New Activity CTA', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  function renderLogHistoryWithNewActivity(
+    logCount: number,
+    onOpenNewActivity: ReturnType<typeof vi.fn> = vi.fn(),
+  ): void {
+    const engine = createLogHistoryEngine(logCount);
+    renderWithProviders(
+      <LogHistoryScreenS27
+        engine={engine}
+        onOpenLogActivity={vi.fn()}
+        onOpenLogIncident={vi.fn()}
+        onOpenNewActivity={onOpenNewActivity}
+      />,
+    );
+  }
+
+  it('renders + New Activity in the bottom action bar alongside existing log CTAs', () => {
+    renderLogHistoryWithNewActivity(0);
+
+    const actionBar = screen.getByTestId(BOTTOM_ACTION_BAR_TEST_ID);
+    expect(within(actionBar).getByRole('button', { name: '+ Log Activity' })).toBeInTheDocument();
+    expect(within(actionBar).getByRole('button', { name: '+ Log Incident' })).toBeInTheDocument();
+    expect(within(actionBar).getByRole('button', { name: '+ New Activity' })).toBeInTheDocument();
+  });
+
+  it('calls onOpenNewActivity when + New Activity is clicked', async () => {
+    const user = userEvent.setup();
+    const onOpenNewActivity = vi.fn();
+    renderLogHistoryWithNewActivity(0, onOpenNewActivity);
+
+    await user.click(screen.getByRole('button', { name: '+ New Activity' }));
+
+    expect(onOpenNewActivity).toHaveBeenCalledTimes(1);
+  });
+
+  it('styles + New Activity as secondary (not the primary ink CTA used by + Log Activity)', () => {
+    renderLogHistoryWithNewActivity(0);
+
+    const newActivityButton = screen.getByRole('button', { name: '+ New Activity' });
+    const logActivityButton = screen.getByRole('button', { name: '+ Log Activity' });
+
+    expect(logActivityButton.className).toMatch(/bg-ink/);
+    expect(newActivityButton.className).not.toMatch(/bg-ink text-ink-inverse/);
+  });
+
+  it('keeps the bottom action bar above the tab bar when + New Activity is present', () => {
+    const engine = createLogHistoryEngine(0);
+    renderWithProviders(
+      <AppShell withTabBar>
+        <div
+          style={{
+            height: '520px',
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
+          <LogHistoryScreenS27
+            engine={engine}
+            onOpenLogActivity={vi.fn()}
+            onOpenLogIncident={vi.fn()}
+            onOpenNewActivity={vi.fn()}
+          />
+        </div>
+      </AppShell>,
+    );
+
+    const actionBar = screen.getByTestId(BOTTOM_ACTION_BAR_TEST_ID);
+    expectTabBarInsetAboveTabScreenFooter(actionBar);
+    expect(within(actionBar).getByRole('button', { name: '+ New Activity' })).toBeInTheDocument();
   });
 });

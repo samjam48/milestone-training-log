@@ -1007,3 +1007,172 @@ describe('S2.3 — Browser history integration (Android system Back)', () => {
     expect(historySpies.pushState).not.toHaveBeenCalled();
   });
 });
+
+// ---------------------------------------------------------------------------
+// S2.7 — NewActivitySheet wiring (plans/tickets-stage-2-polish-2026-06-05.md)
+// ---------------------------------------------------------------------------
+
+const s27ActivityClass: ActivityClass = {
+  id: 'cls-s27-running',
+  userId: 'user-1',
+  name: 'Running',
+  type: 'performance',
+  defaultRecoveryWindowDays: 3,
+  createdAt: '2026-01-01T00:00:00Z',
+};
+
+function applyS27ActivityClassFixture(): void {
+  mockEngine.activityClasses = [s27ActivityClass];
+  mockEngine.activities = [];
+}
+
+function getNewActivityDialog(): HTMLElement {
+  return screen.getByRole('dialog', { name: /create new activity/i });
+}
+
+describe('App — S2.7 NewActivitySheet wiring', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetMockEngine();
+    applyS27ActivityClassFixture();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('mounts NewActivitySheet and opens it from the Log tab + New Activity CTA', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
+    await user.click(screen.getByRole('button', { name: '+ New Activity' }));
+
+    expect(getNewActivityDialog()).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'New Activity' })).toBeInTheDocument();
+  });
+
+  it('calls engine.submitNewActivity when the sheet form is submitted', async () => {
+    const user = userEvent.setup();
+    const submitNewActivity = vi.fn();
+    mockEngine.submitNewActivity = submitNewActivity;
+    renderWithProviders(<App />);
+
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
+    await user.click(screen.getByRole('button', { name: '+ New Activity' }));
+    await user.type(screen.getByRole('textbox', { name: /activity name/i }), 'Evening jog');
+    await user.click(screen.getByRole('button', { name: /^create$/i }));
+
+    expect(submitNewActivity).toHaveBeenCalledTimes(1);
+    expect(submitNewActivity).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'Evening jog',
+        activityClassId: s27ActivityClass.id,
+        type: 'performance',
+        defaultVolumeUnit: 'km',
+        id: expect.stringMatching(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+        ),
+      }),
+    );
+  });
+
+  it('closes the sheet on Cancel without calling submitNewActivity', async () => {
+    const user = userEvent.setup();
+    const submitNewActivity = vi.fn();
+    mockEngine.submitNewActivity = submitNewActivity;
+    renderWithProviders(<App />);
+
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
+    await user.click(screen.getByRole('button', { name: '+ New Activity' }));
+    await user.click(screen.getByRole('button', { name: /^cancel$/i }));
+
+    expect(submitNewActivity).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole('dialog', { name: /create new activity/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('opens the same NewActivitySheet from Settings Activities + New Activity', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Settings' }));
+    await user.click(screen.getByRole('button', { name: '+ New Activity' }));
+
+    expect(getNewActivityDialog()).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /settings/i })).toBeInTheDocument();
+  });
+
+  it('shows only one NewActivitySheet instance when opened from Log tab', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
+    await user.click(screen.getByRole('button', { name: '+ New Activity' }));
+
+    expect(screen.getAllByRole('dialog', { name: /create new activity/i })).toHaveLength(1);
+  });
+
+  it('shows empty-class copy when no activity classes exist', async () => {
+    const user = userEvent.setup();
+    mockEngine.activityClasses = [];
+    renderWithProviders(<App />);
+
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
+    await user.click(screen.getByRole('button', { name: '+ New Activity' }));
+
+    expect(screen.getByText(/no activity classes/i)).toBeInTheDocument();
+  });
+
+  it('routes toward class creation when activityClasses is empty via Add activity class', async () => {
+    const user = userEvent.setup();
+    mockEngine.activityClasses = [];
+    renderWithProviders(<App />);
+
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
+    await user.click(screen.getByRole('button', { name: '+ New Activity' }));
+    await user.click(screen.getByRole('button', { name: /add activity class/i }));
+
+    expect(screen.getByRole('heading', { name: /settings/i })).toBeInTheDocument();
+    expect(screen.getByText(/activity classes/i)).toBeInTheDocument();
+  });
+
+  it('opens log-activity overlay with the created activity pre-selected after sheet submit', async () => {
+    const user = userEvent.setup();
+
+    mockEngine.submitNewActivity = (draft) => {
+      // Mirrors broken engine: mutation persists a different id than the sheet draft.
+      mockEngine.activities = [
+        {
+          id: crypto.randomUUID(),
+          userId: 'user-1',
+          activityClassId: draft.activityClassId,
+          name: draft.name,
+          type: draft.type,
+          defaultVolumeUnit: draft.defaultVolumeUnit,
+          isActive: true,
+          createdAt: '2026-06-06T00:00:00Z',
+        },
+      ];
+    };
+
+    renderWithProviders(<App />);
+
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
+    await user.click(screen.getByRole('button', { name: '+ New Activity' }));
+    await user.type(screen.getByRole('textbox', { name: /activity name/i }), 'Evening jog');
+    await user.click(screen.getByRole('button', { name: /^create$/i }));
+
+    expect(
+      screen.queryByRole('dialog', { name: /create new activity/i }),
+    ).not.toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Log Activity' })).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('Evening jog')).toBeInTheDocument();
+    expect(screen.getByText('Session details')).toBeInTheDocument();
+  });
+});
