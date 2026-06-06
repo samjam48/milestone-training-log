@@ -1,8 +1,11 @@
 from datetime import UTC, datetime
 
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
-from app.models.activity import ActivityClass
+from app.models.activity import Activity, ActivityClass
+from app.models.block import Rule, WeeklyTarget
+from app.models.goal import Goal
+from app.models.log import ActivityLog
 from app.schemas.activity_classes import ActivityClassCreate, ActivityClassPatch
 from app.services.local_scope import LOCAL_USER_ID
 
@@ -13,6 +16,12 @@ class ActivityClassAlreadyExistsError(Exception):
 
 class ActivityClassNotFoundError(Exception):
     pass
+
+
+class ActivityClassDeleteBlockedError(Exception):
+    def __init__(self, detail: str) -> None:
+        self.detail = detail
+        super().__init__(detail)
 
 
 def list_activity_classes(session: Session) -> list[ActivityClass]:
@@ -58,6 +67,117 @@ def update_activity_class(
     session.commit()
     session.refresh(activity_class)
     return activity_class
+
+
+def delete_activity_class(session: Session, class_id: str) -> None:
+    activity_class = _get_local_activity_class(session, class_id)
+
+    activity_ids = list(
+        session.exec(
+            select(Activity.id).where(
+                Activity.user_id == LOCAL_USER_ID,
+                Activity.activity_class_id == class_id,
+            )
+        ).all()
+    )
+
+    if activity_ids and _has_logs_for_activities(session, activity_ids):
+        raise ActivityClassDeleteBlockedError(
+            "Cannot delete activity class while activities have logs"
+        )
+
+    if _has_goals_referencing_class(session, class_id, activity_ids):
+        raise ActivityClassDeleteBlockedError(
+            "Cannot delete activity class while goals reference it"
+        )
+
+    if _has_rules_referencing_class(session, class_id, activity_ids):
+        raise ActivityClassDeleteBlockedError(
+            "Cannot delete activity class while rules reference it"
+        )
+
+    if _has_weekly_targets_referencing_class(session, class_id):
+        raise ActivityClassDeleteBlockedError(
+            "Cannot delete activity class while weekly targets reference it"
+        )
+
+    for activity in session.exec(
+        select(Activity).where(
+            Activity.user_id == LOCAL_USER_ID,
+            Activity.activity_class_id == class_id,
+        )
+    ).all():
+        session.delete(activity)
+
+    session.delete(activity_class)
+    session.commit()
+
+
+def _has_logs_for_activities(session: Session, activity_ids: list[str]) -> bool:
+    statement = (
+        select(ActivityLog.id)
+        .where(
+            ActivityLog.user_id == LOCAL_USER_ID,
+            col(ActivityLog.activity_id).in_(activity_ids),
+        )
+        .limit(1)
+    )
+    return session.exec(statement).first() is not None
+
+
+def _has_goals_referencing_class(
+    session: Session,
+    class_id: str,
+    activity_ids: list[str],
+) -> bool:
+    class_statement = (
+        select(Goal.id)
+        .where(
+            Goal.user_id == LOCAL_USER_ID,
+            Goal.activity_class_id == class_id,
+        )
+        .limit(1)
+    )
+    if session.exec(class_statement).first() is not None:
+        return True
+
+    if not activity_ids:
+        return False
+
+    activity_statement = (
+        select(Goal.id)
+        .where(
+            Goal.user_id == LOCAL_USER_ID,
+            col(Goal.activity_id).in_(activity_ids),
+        )
+        .limit(1)
+    )
+    return session.exec(activity_statement).first() is not None
+
+
+def _has_rules_referencing_class(
+    session: Session,
+    class_id: str,
+    activity_ids: list[str],
+) -> bool:
+    class_statement = select(Rule.id).where(Rule.activity_class_id == class_id).limit(1)
+    if session.exec(class_statement).first() is not None:
+        return True
+
+    if not activity_ids:
+        return False
+
+    activity_statement = (
+        select(Rule.id).where(col(Rule.activity_id).in_(activity_ids)).limit(1)
+    )
+    return session.exec(activity_statement).first() is not None
+
+
+def _has_weekly_targets_referencing_class(session: Session, class_id: str) -> bool:
+    statement = (
+        select(WeeklyTarget.id).where(WeeklyTarget.activity_class_id == class_id).limit(1)
+    )
+    return session.exec(statement).first() is not None
 
 
 def _get_local_activity_class(session: Session, class_id: str) -> ActivityClass:

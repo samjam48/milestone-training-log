@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlmodel import Session
 
 from app.database import get_session
@@ -11,8 +11,10 @@ from app.schemas.activity_classes import (
 )
 from app.services.activity_classes import (
     ActivityClassAlreadyExistsError,
+    ActivityClassDeleteBlockedError,
     ActivityClassNotFoundError,
     create_activity_class,
+    delete_activity_class,
     list_activity_classes,
     update_activity_class,
 )
@@ -59,3 +61,20 @@ async def patch_activity_class(
             detail="Activity class not found",
         ) from exc
     return ActivityClassRead.model_validate(activity_class)
+
+
+@router.delete("/{class_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_activity_class_route(class_id: str, session: SessionDep) -> Response:
+    try:
+        delete_activity_class(session, class_id)
+    except ActivityClassNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Activity class not found",
+        ) from exc
+    except ActivityClassDeleteBlockedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=exc.detail,
+        ) from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
