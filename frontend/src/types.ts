@@ -201,6 +201,10 @@ export interface Goal extends Timestamped {
   timeframe: GoalTimeframe;
   /** null => cross-class goal. */
   activityClassId?: ID;
+  /** Linked activity for auto-tracked or activity-scoped goals. */
+  activityId?: ID;
+  /** When true, progress_value is recomputed from matching activity logs. */
+  autoTrackProgress?: boolean;
   /** Numeric progress (e.g. km walked). Optional for qualitative goals. */
   progressValue?: number;
   progressTarget?: number;

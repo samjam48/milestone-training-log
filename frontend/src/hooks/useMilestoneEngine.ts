@@ -130,6 +130,8 @@ export interface GoalDraft {
   status: GoalStatus;
   description?: string;
   activityClassId?: ID;
+  activityId?: ID;
+  autoTrackProgress?: boolean;
   progressValue?: number;
   progressTarget?: number;
   progressUnit?: VolumeUnit;

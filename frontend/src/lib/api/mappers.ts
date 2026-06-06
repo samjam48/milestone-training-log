@@ -413,6 +413,8 @@ export function mapGoalFromApi(raw: Record<string, unknown>): WithoutUserId<Goal
     targetDate: String(raw.target_date) as ISODate,
     timeframe: raw.timeframe as Goal['timeframe'],
     activityClassId: (raw.activity_class_id as string | null) ?? undefined,
+    activityId: (raw.activity_id as string | null) ?? undefined,
+    autoTrackProgress: raw.auto_track_progress === true,
     progressValue: (raw.progress_value as number | null) ?? undefined,
     progressTarget: (raw.progress_target as number | null) ?? undefined,
     progressUnit: (raw.progress_unit as VolumeUnit | null) ?? undefined,
