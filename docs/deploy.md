@@ -23,6 +23,20 @@ Owner checklists **O11.0**–**O11.2** are in [`plans/tickets-phase-11-productio
 - `frontend/netlify.toml` proxies `/api/*` to `milestone-training-log.onrender.com`.
 - Render free tier: expect cold-start delay after idle (see below).
 
+## Production setup — first use on production
+
+Production starts with an empty database after deploy (schema only). **Never run `scripts/seed.py` against Supabase** — use seed only against local SQLite during development.
+
+Open the [Netlify app URL](https://milestone-activity.netlify.app) and complete setup in this order:
+
+1. **Sign in** with the shared app password.
+2. **Activity classes** — Settings → **+ New class** (name, type, optional description).
+3. **+ New Activity** — Log tab (or Settings → Activities) to add an activity.
+4. **Training block** — Settings → **+ New Training Block**.
+5. **+ Log Activity** on the Log tab; **Morning check-in** on the Dashboard tab.
+
+Stage 2 polish context: [`plans/PRD.md` §10](../plans/PRD.md#10-stage-2--use-driven-polish).
+
 ## Environment matrix
 
 Local development uses SQLite; production uses Supabase Postgres. Do not point a production `DATABASE_URL` at SQLite.
