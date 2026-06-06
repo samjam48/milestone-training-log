@@ -397,11 +397,11 @@ describe('SettingsScreen — Active Block card', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 2. Weekly targets list
+// 2. Weekly targets list (P25.9: removed from block summary)
 // ---------------------------------------------------------------------------
 
 describe('SettingsScreen — Weekly Targets', () => {
-  it('renders weekly targets from active block', () => {
+  it('does not render weekly targets in the active block summary card', () => {
     const engine = makeEngine({
       block: ACTIVE_BLOCK,
       rules: [],
@@ -411,15 +411,13 @@ describe('SettingsScreen — Weekly Targets', () => {
 
     renderWithProviders(<SettingsScreen engine={engine} />);
 
-    // Class name resolved from activityClassId (scoped to block summary card)
     const blockSection = getSectionByHeading(/^training block$/i);
-    expect(within(blockSection).getByText(CLASS_RUNNING.name)).toBeInTheDocument();
-    // Target value and unit
-    expect(screen.getByText(/20/)).toBeInTheDocument();
-    expect(screen.getByText(/km/i)).toBeInTheDocument();
+    expect(within(blockSection).queryByText(/weekly targets/i)).not.toBeInTheDocument();
+    expect(within(blockSection).queryByText(/weekly goal/i)).not.toBeInTheDocument();
+    expect(within(blockSection).queryByText(/20/)).not.toBeInTheDocument();
   });
 
-  it('resolves activityClassId → class name in weekly targets', () => {
+  it('does not list weekly target class names in block summary even when targets exist', () => {
     const engine = makeEngine({
       block: ACTIVE_BLOCK,
       rules: [],
@@ -430,21 +428,23 @@ describe('SettingsScreen — Weekly Targets', () => {
     renderWithProviders(<SettingsScreen engine={engine} />);
 
     const blockSection = getSectionByHeading(/^training block$/i);
-    expect(within(blockSection).getByText('Running')).toBeInTheDocument();
+    expect(within(blockSection).queryByText('Running')).not.toBeInTheDocument();
+    expect(within(blockSection).queryByText(/weekly targets/i)).not.toBeInTheDocument();
   });
 
-  it('falls back to raw activityClassId when class is not found in weekly targets', () => {
+  it('does not fall back to raw activityClassId in block summary when class is unknown', () => {
     const engine = makeEngine({
       block: ACTIVE_BLOCK,
       rules: [],
       weeklyTargets: [WEEKLY_TARGET_UNKNOWN_CLASS],
-      activityClasses: [], // empty — class not found
+      activityClasses: [],
     });
 
     renderWithProviders(<SettingsScreen engine={engine} />);
 
-    // Falls back to raw id
-    expect(screen.getByText('cls-unknown-xyz')).toBeInTheDocument();
+    const blockSection = getSectionByHeading(/^training block$/i);
+    expect(within(blockSection).queryByText('cls-unknown-xyz')).not.toBeInTheDocument();
+    expect(within(blockSection).queryByText(/weekly targets/i)).not.toBeInTheDocument();
   });
 });
 
@@ -1735,17 +1735,18 @@ describe('SettingsScreen — edge cases', () => {
     }).not.toThrow();
   });
 
-  it('handles weekly target with unknown class — falls back to raw id', () => {
+  it('handles weekly target with unknown class without showing raw id in block summary', () => {
     const engine = makeEngine({
       block: ACTIVE_BLOCK,
       rules: [],
       weeklyTargets: [WEEKLY_TARGET_UNKNOWN_CLASS],
-      activityClasses: [], // class not found
+      activityClasses: [],
     });
 
     renderWithProviders(<SettingsScreen engine={engine} />);
 
-    expect(screen.getByText('cls-unknown-xyz')).toBeInTheDocument();
+    const blockSection = getSectionByHeading(/^training block$/i);
+    expect(within(blockSection).queryByText('cls-unknown-xyz')).not.toBeInTheDocument();
   });
 
   it('renders correctly with no active block and no previous blocks', () => {

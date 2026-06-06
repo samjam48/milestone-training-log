@@ -10,8 +10,6 @@ import type {
   Rule,
   RuleType,
   VolumeCapUnit,
-  VolumeUnit,
-  WeeklyTarget,
 } from '../../types';
 import {
   CLASS_ADD_RULE_TYPES,
@@ -43,8 +41,6 @@ const EXERCISE_RULE_TYPE_OPTIONS = EXERCISE_ADD_RULE_TYPES.map((value) => ({
   value,
   label: getRuleLabel(value),
 }));
-
-const WEEKLY_TARGET_UNITS: VolumeUnit[] = ['km', 'mi', 'm', 'minutes', 'sessions', 'reps', 'sets'];
 
 const RULE_DEFINITIONS: Record<RuleType, RuleDefinition> = {
   rest_between_class: {
@@ -123,13 +119,6 @@ function getExerciseRules(rules: Rule[], classId: string): Rule[] {
   return rules.filter(
     (rule) => rule.activityClassId === classId && isExerciseRule(rule),
   );
-}
-
-function getWeeklyTargetForClass(
-  weeklyTargets: WeeklyTarget[],
-  classId: string,
-): WeeklyTarget | undefined {
-  return weeklyTargets.find((target) => target.activityClassId === classId);
 }
 
 function clampThreshold(value: number, definition: RuleDefinition): number {
@@ -299,69 +288,6 @@ function RuleRow({
           </button>
         </div>
       ) : null}
-    </div>
-  );
-}
-
-interface WeeklyTargetEditorProps {
-  weeklyTarget: WeeklyTarget;
-  onPatch: (targetId: string, patch: { targetValue?: number; targetUnit?: VolumeUnit }) => void;
-}
-
-function WeeklyTargetEditor({
-  weeklyTarget,
-  onPatch,
-}: WeeklyTargetEditorProps): React.ReactElement {
-  const [draftValue, setDraftValue] = React.useState(String(weeklyTarget.targetValue));
-  const [draftUnit, setDraftUnit] = React.useState<VolumeUnit>(weeklyTarget.targetUnit);
-
-  React.useEffect(() => {
-    setDraftValue(String(weeklyTarget.targetValue));
-    setDraftUnit(weeklyTarget.targetUnit);
-  }, [weeklyTarget.targetValue, weeklyTarget.targetUnit]);
-
-  function commitValue(): void {
-    const parsedValue = Number(draftValue);
-    if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
-      setDraftValue(String(weeklyTarget.targetValue));
-      return;
-    }
-    if (parsedValue !== weeklyTarget.targetValue) {
-      onPatch(weeklyTarget.id, { targetValue: parsedValue });
-    }
-  }
-
-  function commitUnit(nextUnit: VolumeUnit): void {
-    setDraftUnit(nextUnit);
-    if (nextUnit !== weeklyTarget.targetUnit) {
-      onPatch(weeklyTarget.id, { targetUnit: nextUnit });
-    }
-  }
-
-  return (
-    <div className="flex items-center gap-2 px-4 py-3">
-      <input
-        type="number"
-        min={1}
-        step={1}
-        value={draftValue}
-        aria-label="Weekly goal"
-        onChange={(event) => setDraftValue(event.target.value)}
-        onBlur={commitValue}
-        className="w-20 rounded-md border border-border bg-bg-sunken px-2 py-1.5 text-center text-body-lg font-semibold tabular-nums text-ink outline-none"
-      />
-      <select
-        value={draftUnit}
-        aria-label="Weekly goal unit"
-        onChange={(event) => commitUnit(event.target.value as VolumeUnit)}
-        className="rounded-md border border-border bg-bg-sunken px-2 py-1.5 text-body text-ink"
-      >
-        {WEEKLY_TARGET_UNITS.map((unit) => (
-          <option key={unit} value={unit}>
-            {unit}
-          </option>
-        ))}
-      </select>
     </div>
   );
 }
@@ -559,7 +485,6 @@ interface ClassRulesSectionProps {
   activityClass: ActivityClass;
   classRules: Rule[];
   exerciseRules: Rule[];
-  weeklyTarget: WeeklyTarget | undefined;
   classActivities: Activity[];
   draftThresholds: Record<string, string>;
   addingClassCap: boolean;
@@ -570,8 +495,6 @@ interface ClassRulesSectionProps {
   onLimitUnitChange: (rule: Rule, limitUnit: VolumeCapUnit) => void;
   onToggleEnabled: (rule: Rule) => void;
   onDeleteRule: (ruleId: string) => void;
-  onPatchWeeklyTarget: (targetId: string, patch: { targetValue?: number; targetUnit?: VolumeUnit }) => void;
-  onCreateWeeklyTarget: (classId: string) => void;
   onAddClassCap: () => void;
   onCancelClassCap: () => void;
   onConfirmClassCap: (ruleType: RuleType, thresholdValue: number) => void;
@@ -591,7 +514,6 @@ function ClassRulesSection({
   activityClass,
   classRules,
   exerciseRules,
-  weeklyTarget,
   classActivities,
   draftThresholds,
   addingClassCap,
@@ -602,8 +524,6 @@ function ClassRulesSection({
   onLimitUnitChange,
   onToggleEnabled,
   onDeleteRule,
-  onPatchWeeklyTarget,
-  onCreateWeeklyTarget,
   onAddClassCap,
   onCancelClassCap,
   onConfirmClassCap,
@@ -613,9 +533,6 @@ function ClassRulesSection({
   activityNameById,
   ruleMutationError,
 }: ClassRulesSectionProps): React.ReactElement {
-  const showWeeklyGoal =
-    activityClass.type === 'performance' || weeklyTarget != null;
-
   return (
     <section
       data-testid={`class-rules-${activityClass.id}`}
@@ -668,31 +585,6 @@ function ClassRulesSection({
           ) : null}
         </Card>
       </div>
-
-      {showWeeklyGoal ? (
-        <div>
-          <h3 className="mb-1.5 text-label font-medium uppercase text-ink-faint">Weekly goal</h3>
-          <Card pad="none">
-            {weeklyTarget != null ? (
-              <WeeklyTargetEditor
-                weeklyTarget={weeklyTarget}
-                onPatch={onPatchWeeklyTarget}
-              />
-            ) : (
-              <div className="px-4 py-3">
-                <p className="mb-2 text-body-sm text-ink-muted">No weekly goal set.</p>
-                <button
-                  type="button"
-                  onClick={() => onCreateWeeklyTarget(activityClass.id)}
-                  className="text-body text-ink-muted transition-colors hover:text-ink"
-                >
-                  + Add weekly goal
-                </button>
-              </div>
-            )}
-          </Card>
-        </div>
-      ) : null}
 
       <div>
         <h3 className="mb-1.5 text-label font-medium uppercase text-ink-faint">Exercises</h3>
@@ -872,14 +764,6 @@ export function EditBlockRulesScreen({
     engine.updateRule(rule.id, { limitUnit });
   }
 
-  function handleCreateWeeklyTarget(classId: string): void {
-    engine.createWeeklyTarget({
-      activityClassId: classId,
-      targetValue: 10,
-      targetUnit: 'km',
-    });
-  }
-
   return (
     <section className="flex min-h-full flex-col bg-bg">
       <header className="flex shrink-0 items-center gap-3 border-b border-border px-4 pb-3">
@@ -911,7 +795,6 @@ export function EditBlockRulesScreen({
                   activityClass={activityClass}
                   classRules={getClassLevelRules(scopedRules, activityClass.id)}
                   exerciseRules={getExerciseRules(scopedRules, activityClass.id)}
-                  weeklyTarget={getWeeklyTargetForClass(engine.weeklyTargets, activityClass.id)}
                   classActivities={classActivities}
                   draftThresholds={draftThresholds}
                   addingClassCap={addingClassCapClassId === activityClass.id}
@@ -924,10 +807,6 @@ export function EditBlockRulesScreen({
                     engine.updateRule(rule.id, { enabled: !rule.enabled })
                   }
                   onDeleteRule={(ruleId) => engine.deleteRule(ruleId)}
-                  onPatchWeeklyTarget={(targetId, patch) =>
-                    engine.patchWeeklyTarget(targetId, patch)
-                  }
-                  onCreateWeeklyTarget={handleCreateWeeklyTarget}
                   onAddClassCap={() => {
                     setAddingExerciseRuleClassId(null);
                     classCapBaselineCountRef.current = getClassLevelRules(

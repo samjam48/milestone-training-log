@@ -28,7 +28,6 @@ import type {
   ID,
   Rule,
   VolumeUnit,
-  WeeklyTarget,
   TrainingBlock,
 } from '../../types';
 
@@ -66,7 +65,6 @@ function formatShortDate(iso: string): string {
 interface BlockSummaryCardProps {
   block: TrainingBlock;
   rules: Rule[];
-  weeklyTargets: WeeklyTarget[];
   activityClasses: ActivityClass[];
   /** Whether the Edit rules CTA should be rendered. */
   showEditRules: boolean;
@@ -77,7 +75,6 @@ interface BlockSummaryCardProps {
 function BlockSummaryCard({
   block,
   rules,
-  weeklyTargets,
   activityClasses,
   showEditRules,
   onEditRules,
@@ -113,31 +110,6 @@ function BlockSummaryCard({
           Active
         </span>
       </CardHeader>
-
-      {/* Weekly targets */}
-      {weeklyTargets.length > 0 && (
-        <div className="mb-4">
-          <p className="text-label uppercase font-medium text-ink-faint mb-2">Weekly Targets</p>
-          <ul className="flex flex-col gap-1.5">
-            {weeklyTargets.map((wt) => {
-              const cls = classMap.get(wt.activityClassId);
-              return (
-                <li
-                  key={wt.id}
-                  className="flex items-center justify-between gap-3 text-body"
-                >
-                  <span className="text-ink-muted truncate">
-                    {cls ? cls.name : wt.activityClassId}
-                  </span>
-                  <span className="font-medium tabular-nums text-ink shrink-0">
-                    {wt.targetValue} {wt.targetUnit}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
 
       {/* Recovery rules */}
       {visibleRecoveryRules.length > 0 && (
@@ -991,7 +963,6 @@ export function SettingsScreen({
   const {
     block,
     rules,
-    weeklyTargets,
     activityClasses,
     activities,
     logs,
@@ -1157,7 +1128,6 @@ export function SettingsScreen({
             <BlockSummaryCard
               block={block}
               rules={rules}
-              weeklyTargets={weeklyTargets}
               activityClasses={activityClasses}
               showEditRules={showEditRules}
               onEditRules={() => onEditRules?.()}

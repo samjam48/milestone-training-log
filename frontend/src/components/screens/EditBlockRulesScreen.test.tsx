@@ -669,7 +669,7 @@ describe('EditBlockRulesScreen — F10.9 loading and error polish', () => {
 // ---------------------------------------------------------------------------
 
 describe('EditBlockRulesScreen — S25.F5 class sections, weekly targets, exercise rules', () => {
-  it('shows Caps, Weekly goal, and Exercises subsections for performance classes', () => {
+  it('shows Caps and Exercises subsections for performance classes (P25.9: no weekly goal)', () => {
     const engine = makeEngine({
       block: ACTIVE_BLOCK,
       activityClasses: [CLASS_FOOT],
@@ -684,7 +684,7 @@ describe('EditBlockRulesScreen — S25.F5 class sections, weekly targets, exerci
 
     const footSection = screen.getByTestId(`class-rules-${CLASS_FOOT.id}`);
     expect(within(footSection).getByText('Caps')).toBeInTheDocument();
-    expect(within(footSection).getByText('Weekly goal')).toBeInTheDocument();
+    expect(within(footSection).queryByText('Weekly goal')).not.toBeInTheDocument();
     expect(within(footSection).getByText('Exercises')).toBeInTheDocument();
     expect(within(footSection).getByText('Walk')).toBeInTheDocument();
   });
@@ -708,13 +708,13 @@ describe('EditBlockRulesScreen — S25.F5 class sections, weekly targets, exerci
     ).toBeInTheDocument();
   });
 
-  it('hides Weekly goal for recovery classes unless a weekly target exists', () => {
+  it('does not render Weekly goal for any class (P25.9)', () => {
     const engine = makeEngine({
       block: ACTIVE_BLOCK,
       activityClasses: [CLASS_MOBILITY, CLASS_FOOT],
       activities: [],
       rules: [],
-      weeklyTargets: [],
+      weeklyTargets: [WEEKLY_TARGET_FOOT],
     });
 
     renderWithProviders(
@@ -725,7 +725,7 @@ describe('EditBlockRulesScreen — S25.F5 class sections, weekly targets, exerci
     expect(within(mobilitySection).queryByText('Weekly goal')).not.toBeInTheDocument();
 
     const footSection = screen.getByTestId(`class-rules-${CLASS_FOOT.id}`);
-    expect(within(footSection).getByText('Weekly goal')).toBeInTheDocument();
+    expect(within(footSection).queryByText('Weekly goal')).not.toBeInTheDocument();
   });
 
   it('does not render cross-class weekly_activity_count rule types in the UI', () => {
@@ -747,33 +747,6 @@ describe('EditBlockRulesScreen — S25.F5 class sections, weekly targets, exerci
     const footSection = screen.getByTestId(`class-rules-${CLASS_FOOT.id}`);
     const addCapButton = within(footSection).getByRole('button', { name: /add class cap/i });
     expect(addCapButton).toBeInTheDocument();
-  });
-
-  it('calls engine.patchWeeklyTarget when weekly goal value is edited', async () => {
-    const user = userEvent.setup();
-    const patchWeeklyTarget = vi.fn();
-    const engine = makeEngine({
-      block: ACTIVE_BLOCK,
-      activityClasses: [CLASS_FOOT],
-      activities: [ACTIVITY_WALK],
-      rules: [],
-      weeklyTargets: [WEEKLY_TARGET_FOOT],
-      patchWeeklyTarget,
-    });
-
-    renderWithProviders(
-      <EditBlockRulesScreen engine={engine} onBack={vi.fn()} />,
-    );
-
-    const footSection = screen.getByTestId(`class-rules-${CLASS_FOOT.id}`);
-    const weeklyInput = within(footSection).getByRole('spinbutton', { name: /weekly goal/i });
-    await user.clear(weeklyInput);
-    await user.type(weeklyInput, '12');
-    await user.tab();
-
-    expect(patchWeeklyTarget).toHaveBeenCalledWith(WEEKLY_TARGET_FOOT.id, {
-      targetValue: 12,
-    });
   });
 
   it('calls engine.createRule with activityClassId and activityId when adding an exercise rule', async () => {

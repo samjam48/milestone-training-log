@@ -109,6 +109,10 @@ Use this alongside:
 | `POST` | `/api/training-blocks/{block_id}/weekly-targets` | Create a weekly target for a performance class |
 | `PATCH` | `/api/weekly-targets/{target_id}` | Update a weekly target |
 
+**P25.9 UI note:** Edit Rules and Settings block summary no longer surface weekly targets. Aspirational targets belong on the Goals tab only. The `weekly_targets` table and API remain for now.
+
+**Dashboard `weekly_progress` (Last 7 days):** Still computed from `weekly_targets` rows on the active block via `compute_weekly_progress` (`GET /api/dashboard` and `GET /api/load/summary`). Display-only on the dashboard chart; no create/edit UI after P25.9. Aligning `weekly_progress` with Goals or retiring `weekly_targets` is tracked in `plans/BACKLOG.md`.
+
 ### Recovery Targets
 
 | Method | Path | Purpose |
