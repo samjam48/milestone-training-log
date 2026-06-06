@@ -187,6 +187,608 @@ def test_compute_class_statuses_ignores_logs_after_as_of() -> None:
 
 
 # ---------------------------------------------------------------------------
+# S25.B4 — effective_rules_for_activity + extended compute_class_statuses
+# ---------------------------------------------------------------------------
+
+
+def _make_rule(**overrides: Any) -> dict[str, Any]:
+    base: dict[str, Any] = {
+        "training_block_id": "blk-1",
+        "window_days": 7,
+        "enabled": True,
+        "created_at": "2026-04-07T06:00:00Z",
+    }
+    return {**base, **overrides}
+
+
+def _effective_rules_for_activity() -> Any:
+    assert hasattr(load_engine, "effective_rules_for_activity"), (
+        "effective_rules_for_activity not implemented"
+    )
+    return load_engine.effective_rules_for_activity
+
+
+def test_effective_rules_for_activity_prefers_exercise_cap_over_class_cap() -> None:
+    effective_rules_for_activity = _effective_rules_for_activity()
+
+    rules = [
+        _make_rule(
+            id="class-cap",
+            activity_class_id="cls-foot",
+            rule_type="weekly_load_cap",
+            threshold_value=120,
+        ),
+        _make_rule(
+            id="exercise-cap",
+            activity_class_id="cls-foot",
+            activity_id="act-walk",
+            rule_type="weekly_load_cap",
+            threshold_value=40,
+        ),
+    ]
+    effective = effective_rules_for_activity("act-walk", "cls-foot", rules)
+    cap_rules = [rule for rule in effective if rule["rule_type"] == "weekly_load_cap"]
+    assert len(cap_rules) == 1
+    assert cap_rules[0]["id"] == "exercise-cap"
+    assert cap_rules[0]["threshold_value"] == 40
+
+
+def test_effective_rules_for_activity_falls_back_to_class_cap_without_exercise_rule() -> None:
+    effective_rules_for_activity = _effective_rules_for_activity()
+
+    rules = [
+        _make_rule(
+            id="class-cap",
+            activity_class_id="cls-foot",
+            rule_type="weekly_load_cap",
+            threshold_value=120,
+        ),
+    ]
+    effective = effective_rules_for_activity("act-walk", "cls-foot", rules)
+    cap_rules = [rule for rule in effective if rule["rule_type"] == "weekly_load_cap"]
+    assert len(cap_rules) == 1
+    assert cap_rules[0]["id"] == "class-cap"
+
+
+def test_effective_rules_for_activity_no_cap_means_unlimited() -> None:
+    effective_rules_for_activity = _effective_rules_for_activity()
+
+    rules = [
+        _make_rule(
+            id="rest-only",
+            activity_class_id="cls-foot",
+            rule_type="rest_between_class",
+            threshold_value=3,
+            window_days=3,
+        ),
+    ]
+    effective = effective_rules_for_activity("act-walk", "cls-foot", rules)
+    cap_rule_types = {"weekly_load_cap", "daily_volume_cap", "weekly_volume_cap"}
+    assert not any(rule["rule_type"] in cap_rule_types for rule in effective)
+
+
+def test_effective_rules_for_activity_picks_strictest_exercise_cap_when_multiple() -> None:
+    """Strictest cap = lowest threshold for load-cap rules."""
+    effective_rules_for_activity = _effective_rules_for_activity()
+
+    rules = [
+        _make_rule(
+            id="class-cap",
+            activity_class_id="cls-foot",
+            rule_type="weekly_load_cap",
+            threshold_value=120,
+        ),
+        _make_rule(
+            id="exercise-cap-loose",
+            activity_class_id="cls-foot",
+            activity_id="act-walk",
+            rule_type="weekly_load_cap",
+            threshold_value=80,
+        ),
+        _make_rule(
+            id="exercise-cap-strict",
+            activity_class_id="cls-foot",
+            activity_id="act-walk",
+            rule_type="weekly_load_cap",
+            threshold_value=40,
+        ),
+    ]
+    effective = effective_rules_for_activity("act-walk", "cls-foot", rules)
+    cap_rules = [rule for rule in effective if rule["rule_type"] == "weekly_load_cap"]
+    assert len(cap_rules) == 1
+    assert cap_rules[0]["id"] == "exercise-cap-strict"
+    assert cap_rules[0]["threshold_value"] == 40
+
+
+def test_effective_rules_for_activity_picks_strictest_exercise_rest_when_multiple() -> None:
+    """Strictest rest = highest threshold (more rest days required)."""
+    effective_rules_for_activity = _effective_rules_for_activity()
+
+    rules = [
+        _make_rule(
+            id="rest-loose",
+            activity_class_id="cls-foot",
+            activity_id="act-walk",
+            rule_type="rest_between_class",
+            threshold_value=2,
+            window_days=2,
+        ),
+        _make_rule(
+            id="rest-strict",
+            activity_class_id="cls-foot",
+            activity_id="act-walk",
+            rule_type="rest_between_class",
+            threshold_value=5,
+            window_days=5,
+        ),
+    ]
+    effective = effective_rules_for_activity("act-walk", "cls-foot", rules)
+    rest_rules = [
+        rule for rule in effective if rule["rule_type"] == "rest_between_class"
+    ]
+    assert len(rest_rules) == 1
+    assert rest_rules[0]["id"] == "rest-strict"
+    assert rest_rules[0]["threshold_value"] == 5
+
+
+def test_effective_rules_for_activity_ignores_disabled_rules() -> None:
+    effective_rules_for_activity = _effective_rules_for_activity()
+
+    rules = [
+        _make_rule(
+            id="class-cap",
+            activity_class_id="cls-foot",
+            rule_type="weekly_load_cap",
+            threshold_value=120,
+            enabled=False,
+        ),
+        _make_rule(
+            id="exercise-cap",
+            activity_class_id="cls-foot",
+            activity_id="act-walk",
+            rule_type="weekly_load_cap",
+            threshold_value=40,
+            enabled=False,
+        ),
+    ]
+    effective = effective_rules_for_activity("act-walk", "cls-foot", rules)
+    cap_rules = [rule for rule in effective if rule["rule_type"] == "weekly_load_cap"]
+    assert cap_rules == []
+
+
+def test_effective_rules_for_activity_ignores_exercise_rules_for_other_activities() -> None:
+    effective_rules_for_activity = _effective_rules_for_activity()
+
+    rules = [
+        _make_rule(
+            id="bike-cap",
+            activity_class_id="cls-foot",
+            activity_id="act-bike",
+            rule_type="weekly_load_cap",
+            threshold_value=30,
+        ),
+        _make_rule(
+            id="class-cap",
+            activity_class_id="cls-foot",
+            rule_type="weekly_load_cap",
+            threshold_value=120,
+        ),
+    ]
+    effective = effective_rules_for_activity("act-walk", "cls-foot", rules)
+    cap_rules = [rule for rule in effective if rule["rule_type"] == "weekly_load_cap"]
+    assert len(cap_rules) == 1
+    assert cap_rules[0]["id"] == "class-cap"
+
+
+def test_effective_rules_for_activity_separates_volume_caps_by_limit_unit() -> None:
+    effective_rules_for_activity = _effective_rules_for_activity()
+
+    rules = [
+        _make_rule(
+            id="class-km",
+            activity_class_id="cls-foot",
+            rule_type="daily_volume_cap",
+            threshold_value=5,
+            limit_unit="km",
+            window_days=1,
+        ),
+        _make_rule(
+            id="exercise-km",
+            activity_class_id="cls-foot",
+            activity_id="act-walk",
+            rule_type="daily_volume_cap",
+            threshold_value=2,
+            limit_unit="km",
+            window_days=1,
+        ),
+        _make_rule(
+            id="exercise-min",
+            activity_class_id="cls-foot",
+            activity_id="act-bike",
+            rule_type="daily_volume_cap",
+            threshold_value=30,
+            limit_unit="minutes",
+            window_days=1,
+        ),
+    ]
+    walk_effective = effective_rules_for_activity("act-walk", "cls-foot", rules)
+    walk_km = [
+        rule
+        for rule in walk_effective
+        if rule["rule_type"] == "daily_volume_cap" and rule.get("limit_unit") == "km"
+    ]
+    assert len(walk_km) == 1
+    assert walk_km[0]["id"] == "exercise-km"
+
+
+def test_compute_class_statuses_uses_exercise_cap_when_stricter_than_class() -> None:
+    """log-25 walk load 4.5 in 7d window; exercise cap 4 should beat class cap 120."""
+    rules = [
+        rule
+        for rule in RULES
+        if rule["rule_type"] not in {"weekly_load_cap", "frequency_limit"}
+    ] + [
+        _make_rule(
+            id="rule-cap-foot-class",
+            activity_class_id="cls-foot",
+            rule_type="weekly_load_cap",
+            threshold_value=120,
+        ),
+        _make_rule(
+            id="rule-cap-walk",
+            activity_class_id="cls-foot",
+            activity_id="act-walk",
+            rule_type="weekly_load_cap",
+            threshold_value=4,
+        ),
+    ]
+    statuses = compute_class_statuses(
+        AS_OF, ACTIVITY_CLASSES, ACTIVITIES, LOGS, rules
+    )
+    foot = next(s for s in statuses if s["activity_class_id"] == "cls-foot")
+    assert foot["state"] == "danger"
+    assert "cap" in foot["reason"].lower()
+
+
+def test_compute_class_statuses_uses_class_cap_when_no_exercise_rule() -> None:
+    rules = [
+        rule for rule in RULES if rule["rule_type"] != "weekly_load_cap"
+    ] + [
+        _make_rule(
+            id="rule-cap-foot-low",
+            activity_class_id="cls-foot",
+            rule_type="weekly_load_cap",
+            threshold_value=4,
+        ),
+    ]
+    statuses = compute_class_statuses(
+        AS_OF, ACTIVITY_CLASSES, ACTIVITIES, LOGS, rules
+    )
+    foot = next(s for s in statuses if s["activity_class_id"] == "cls-foot")
+    assert foot["state"] == "danger"
+    assert foot["label"] == "Load Cap Hit"
+
+
+def test_compute_class_statuses_no_cap_means_no_cap_violation() -> None:
+    rules = [rule for rule in RULES if rule["rule_type"] != "weekly_load_cap"]
+    statuses = compute_class_statuses(
+        AS_OF, ACTIVITY_CLASSES, ACTIVITIES, LOGS, rules
+    )
+    foot = next(s for s in statuses if s["activity_class_id"] == "cls-foot")
+    assert foot["label"] != "Load Cap Hit"
+
+
+def test_compute_class_statuses_flags_frequency_with_effective_rules() -> None:
+    rules = [
+        rule for rule in RULES if rule["rule_type"] != "frequency_limit"
+    ] + [
+        _make_rule(
+            id="rule-freq-walk",
+            activity_class_id="cls-foot",
+            activity_id="act-walk",
+            rule_type="frequency_limit",
+            threshold_value=1,
+        ),
+    ]
+    statuses = compute_class_statuses(
+        AS_OF, ACTIVITY_CLASSES, ACTIVITIES, LOGS, rules
+    )
+    foot = next(s for s in statuses if s["activity_class_id"] == "cls-foot")
+    assert foot["state"] in {"caution", "danger"}
+    assert "frequen" in foot["reason"].lower()
+
+
+def test_compute_class_statuses_recovery_without_enabled_cap_rules_stays_safe() -> None:
+    recovery_classes = [
+        cls for cls in ACTIVITY_CLASSES if cls["id"] == "cls-recovery"
+    ]
+    recovery_activities = [
+        activity
+        for activity in ACTIVITIES
+        if activity["activity_class_id"] == "cls-recovery"
+    ]
+    recovery_logs = [
+        log
+        for log in LOGS
+        if log["activity_id"] in {"act-stretch", "act-pool"}
+    ]
+    rules = [rule for rule in RULES if rule.get("activity_class_id") != "cls-recovery"]
+    statuses = compute_class_statuses(
+        AS_OF,
+        recovery_classes,
+        recovery_activities,
+        recovery_logs,
+        rules,
+    )
+    recovery = statuses[0]
+    assert recovery["state"] == "safe"
+    assert recovery["label"] != "Load Cap Hit"
+    assert "load cap" not in recovery.get("reason", "").lower()
+
+
+def test_compute_class_statuses_excludes_inactive_activities_from_history() -> None:
+    inactive_walk = {**ACTIVITIES[0], "is_active": False}
+    activities = [inactive_walk, ACTIVITIES[1]]
+    walk_only_logs = [log for log in LOGS if log["activity_id"] == "act-walk"]
+    statuses = compute_class_statuses(
+        AS_OF, ACTIVITY_CLASSES, activities, walk_only_logs, RULES
+    )
+    foot = next(s for s in statuses if s["activity_class_id"] == "cls-foot")
+    assert foot["state"] == "safe"
+    assert "no prior" in foot["reason"].lower()
+
+
+def test_effective_rules_for_activity_picks_strictest_frequency_min_threshold() -> None:
+    """Strictest frequency = lowest session threshold."""
+    effective_rules_for_activity = _effective_rules_for_activity()
+
+    rules = [
+        _make_rule(
+            id="freq-loose",
+            activity_class_id="cls-foot",
+            activity_id="act-walk",
+            rule_type="frequency_limit",
+            threshold_value=3,
+        ),
+        _make_rule(
+            id="freq-strict",
+            activity_class_id="cls-foot",
+            activity_id="act-walk",
+            rule_type="frequency_limit",
+            threshold_value=1,
+        ),
+    ]
+    effective = effective_rules_for_activity("act-walk", "cls-foot", rules)
+    freq_rules = [
+        rule for rule in effective if rule["rule_type"] == "frequency_limit"
+    ]
+    assert len(freq_rules) == 1
+    assert freq_rules[0]["id"] == "freq-strict"
+    assert freq_rules[0]["threshold_value"] == 1
+
+
+def test_compute_class_statuses_class_load_cap_uses_aggregate_across_activities() -> None:
+    """Class cap must sum load from walk + bike, not per-activity only."""
+    logs = [
+        {
+            "id": "log-walk",
+            "activity_id": "act-walk",
+            "logged_date": "2026-05-22",
+            "volume_value": 1.5,
+            "rpe": 3,
+        },
+        {
+            "id": "log-bike",
+            "activity_id": "act-bike",
+            "logged_date": "2026-05-24",
+            "volume_value": 20,
+            "rpe": 5,
+        },
+    ]
+    rules = [
+        rule
+        for rule in RULES
+        if rule["rule_type"] not in {"weekly_load_cap", "frequency_limit"}
+    ] + [
+        _make_rule(
+            id="rule-cap-foot-aggregate",
+            activity_class_id="cls-foot",
+            rule_type="weekly_load_cap",
+            threshold_value=50,
+        ),
+    ]
+    statuses = compute_class_statuses(
+        AS_OF, ACTIVITY_CLASSES, ACTIVITIES, logs, rules
+    )
+    foot = next(s for s in statuses if s["activity_class_id"] == "cls-foot")
+    assert foot["state"] == "danger"
+    assert foot["label"] == "Load Cap Hit"
+    # walk 4.5 + bike 100 = 104.5 aggregate in 7-day window
+    assert "104" in foot["reason"] or "105" in foot["reason"]
+
+
+def test_compute_class_statuses_exercise_load_cap_stays_per_activity() -> None:
+    """Exercise cap ignores other activities' load in the same class."""
+    logs = [
+        {
+            "id": "log-walk-only",
+            "activity_id": "act-walk",
+            "logged_date": "2026-05-22",
+            "volume_value": 1.5,
+            "rpe": 3,
+        },
+        {
+            "id": "log-bike-heavy",
+            "activity_id": "act-bike",
+            "logged_date": "2026-05-23",
+            "volume_value": 50,
+            "rpe": 10,
+        },
+    ]
+    rules = [
+        rule
+        for rule in RULES
+        if rule["rule_type"] not in {"weekly_load_cap", "frequency_limit"}
+    ] + [
+        _make_rule(
+            id="rule-cap-foot-high",
+            activity_class_id="cls-foot",
+            rule_type="weekly_load_cap",
+            threshold_value=500,
+        ),
+        _make_rule(
+            id="rule-cap-walk-low",
+            activity_class_id="cls-foot",
+            activity_id="act-walk",
+            rule_type="weekly_load_cap",
+            threshold_value=4,
+        ),
+    ]
+    statuses = compute_class_statuses(
+        AS_OF, ACTIVITY_CLASSES, ACTIVITIES, logs, rules
+    )
+    foot = next(s for s in statuses if s["activity_class_id"] == "cls-foot")
+    assert foot["state"] == "danger"
+    assert "5" in foot["reason"] or "4" in foot["reason"]
+
+
+def test_compute_class_statuses_class_frequency_counts_all_activities() -> None:
+    """Class frequency limit counts sessions from every activity in the class."""
+    logs = [
+        {
+            "id": "log-walk",
+            "activity_id": "act-walk",
+            "logged_date": "2026-05-20",
+            "volume_value": 1.0,
+            "rpe": 3,
+        },
+        {
+            "id": "log-bike",
+            "activity_id": "act-bike",
+            "logged_date": "2026-05-23",
+            "volume_value": 10.0,
+            "rpe": 3,
+        },
+    ]
+    rules = [
+        rule
+        for rule in RULES
+        if rule["rule_type"] not in {"weekly_load_cap", "frequency_limit"}
+    ] + [
+        _make_rule(
+            id="rule-freq-foot-class",
+            activity_class_id="cls-foot",
+            rule_type="frequency_limit",
+            threshold_value=2,
+        ),
+    ]
+    statuses = compute_class_statuses(
+        AS_OF, ACTIVITY_CLASSES, ACTIVITIES, logs, rules
+    )
+    foot = next(s for s in statuses if s["activity_class_id"] == "cls-foot")
+    assert foot["state"] == "danger"
+    assert "frequen" in foot["reason"].lower()
+
+
+def test_compute_class_statuses_exercise_frequency_stays_per_activity() -> None:
+    """Exercise frequency counts only that activity; bike sessions do not count."""
+    logs = [
+        {
+            "id": "log-walk",
+            "activity_id": "act-walk",
+            "logged_date": "2026-05-22",
+            "volume_value": 1.5,
+            "rpe": 3,
+        },
+        {
+            "id": "log-bike",
+            "activity_id": "act-bike",
+            "logged_date": "2026-05-23",
+            "volume_value": 10.0,
+            "rpe": 3,
+        },
+    ]
+    rules = [
+        rule
+        for rule in RULES
+        if rule["rule_type"] not in {"weekly_load_cap", "frequency_limit"}
+    ] + [
+        _make_rule(
+            id="rule-freq-foot-class-loose",
+            activity_class_id="cls-foot",
+            rule_type="frequency_limit",
+            threshold_value=5,
+        ),
+        _make_rule(
+            id="rule-freq-walk-strict",
+            activity_class_id="cls-foot",
+            activity_id="act-walk",
+            rule_type="frequency_limit",
+            threshold_value=1,
+        ),
+    ]
+    statuses = compute_class_statuses(
+        AS_OF, ACTIVITY_CLASSES, ACTIVITIES, logs, rules
+    )
+    foot = next(s for s in statuses if s["activity_class_id"] == "cls-foot")
+    assert foot["state"] in {"caution", "danger"}
+    assert "frequen" in foot["reason"].lower()
+
+
+def test_compute_class_statuses_class_consecutive_across_activities() -> None:
+    """Class consecutive limit spans any activity on consecutive days."""
+    logs = [
+        {
+            "id": "log-walk",
+            "activity_id": "act-walk",
+            "logged_date": "2026-05-24",
+            "volume_value": 1.0,
+            "rpe": 3,
+        },
+        {
+            "id": "log-bike",
+            "activity_id": "act-bike",
+            "logged_date": AS_OF,
+            "volume_value": 10.0,
+            "rpe": 3,
+        },
+    ]
+    rules = [
+        rule
+        for rule in RULES
+        if rule["rule_type"]
+        not in {"weekly_load_cap", "frequency_limit", "consecutive_day_limit"}
+    ] + [
+        _make_rule(
+            id="rule-consecutive-foot-class",
+            activity_class_id="cls-foot",
+            rule_type="consecutive_day_limit",
+            threshold_value=2,
+        ),
+    ]
+    statuses = compute_class_statuses(
+        AS_OF, ACTIVITY_CLASSES, ACTIVITIES, logs, rules
+    )
+    foot = next(s for s in statuses if s["activity_class_id"] == "cls-foot")
+    assert foot["state"] == "danger"
+    assert "consecutive" in foot["reason"].lower()
+
+
+def test_check_violations_no_cap_rule_means_no_load_cap_violation() -> None:
+    rules = [rule for rule in RULES if rule["rule_type"] != "weekly_load_cap"]
+    violations = check_violations(
+        "act-walk",
+        volume_value=100.0,
+        rpe=10,
+        activities=ACTIVITIES,
+        logs=LOGS,
+        rules=rules,
+        as_of=AS_OF,
+    )
+    assert all(v["rule_type"] != "weekly_load_cap" for v in violations)
+
+
+# ---------------------------------------------------------------------------
 # compute_daily_safety_scores
 # ---------------------------------------------------------------------------
 
@@ -939,6 +1541,7 @@ def test_detect_delayed_tax_emits_flare_incident_symptom_marker() -> None:
         "compute_load_series",
         "check_violations",
         "detect_delayed_tax",
+        "effective_rules_for_activity",
     ],
 )
 def test_load_engine_exports_planned_symbols(name: str) -> None:
