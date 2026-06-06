@@ -8,7 +8,7 @@ from __future__ import annotations
 import importlib
 import inspect
 from datetime import date
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -1086,13 +1086,16 @@ def _call_load_risk_summary(
     rules: list[dict[str, Any]] | None = None,
     delayed_tax_hits: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    return _compute_load_risk_summary()(
-        as_of,
-        classes or ACTIVITY_CLASSES,
-        activities or ACTIVITIES,
-        logs if logs is not None else LOGS,
-        rules if rules is not None else RULES,
-        delayed_tax_hits or [],
+    return cast(
+        dict[str, Any],
+        _compute_load_risk_summary()(
+            as_of,
+            classes or ACTIVITY_CLASSES,
+            activities or ACTIVITIES,
+            logs if logs is not None else LOGS,
+            rules if rules is not None else RULES,
+            delayed_tax_hits or [],
+        ),
     )
 
 

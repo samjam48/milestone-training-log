@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from fastapi import FastAPI
@@ -909,7 +909,7 @@ async def _goal_progress_value(client: AsyncClient, goal_id: str) -> float | Non
     response = await client.get("/api/goals")
     assert response.status_code == 200
     goal = next(item for item in response.json() if item["id"] == goal_id)
-    return goal["progress_value"]
+    return cast(float | None, goal["progress_value"])
 
 
 async def test_create_activity_log_rejects_future_logged_date(

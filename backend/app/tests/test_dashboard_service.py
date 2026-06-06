@@ -9,14 +9,19 @@ import pytest
 from fastapi import FastAPI
 from sqlmodel import Session
 
+from app.models.goal import Goal
 from app.schemas.dashboard import DashboardRead
 from app.schemas.load import ActivityClassStatusRead
+from app.schemas.load_engine import LoadRiskSummary, Suggestion
+from app.services.daily_check_ins import list_daily_check_ins
 from app.services.dashboard import get_dashboard
+from app.services.flare_up_incidents import list_flare_up_incidents
+from app.services.goals import list_goals
 from app.services.load_engine import (
     compute_class_statuses,
     compute_clean_streak,
-    compute_load_series,
     compute_load_risk_summary,
+    compute_load_series,
     compute_suggestion_buckets,
     detect_delayed_tax,
     format_iso_date,
@@ -30,14 +35,10 @@ from app.services.load_queries import (
     rule_dict,
     weekly_target_dict,
 )
-from app.services.daily_check_ins import list_daily_check_ins
-from app.services.flare_up_incidents import list_flare_up_incidents
-from app.services.goals import list_goals
 from app.services.recovery_targets import list_recovery_targets
 from app.services.rules import list_rules
 from app.services.training_blocks import get_active_training_block
 from app.services.weekly_targets import list_weekly_targets
-from app.models.goal import Goal
 from app.tests.helpers.load_api_seed import seed_dashboard_mock_graph
 from app.tests.helpers.load_engine_fixtures import (
     ACTIVITIES,
@@ -541,7 +542,7 @@ def _goal_dicts(goals: list[Goal]) -> list[dict[str, object]]:
     ]
 
 
-def _expected_suggestion_buckets(session: Session, *, as_of: date) -> list[dict[str, object]]:
+def _expected_suggestion_buckets(session: Session, *, as_of: date) -> list[Suggestion]:
     from app.services.activities import list_activities
     from app.services.activity_classes import list_activity_classes
     from app.services.activity_logs import list_activity_logs
@@ -581,7 +582,7 @@ def _expected_suggestion_buckets(session: Session, *, as_of: date) -> list[dict[
     )
 
 
-def _expected_load_risk_summary(session: Session, *, as_of: date) -> dict[str, object]:
+def _expected_load_risk_summary(session: Session, *, as_of: date) -> LoadRiskSummary:
     from app.services.activities import list_activities
     from app.services.activity_classes import list_activity_classes
     from app.services.activity_logs import list_activity_logs

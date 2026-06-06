@@ -1,5 +1,10 @@
 import type { DailyCheckIn, FlareUpIncident } from '../types';
 
+type BodyPartCheckIn = Pick<
+  DailyCheckIn,
+  'checkInDate' | 'createdAt' | 'hasFlareUp' | 'flareUp'
+>;
+
 interface BodyPartSource {
   label: string;
   sortDate: string;
@@ -8,7 +13,7 @@ interface BodyPartSource {
 
 function collectSources(
   incidents: FlareUpIncident[],
-  checkIns: DailyCheckIn[],
+  checkIns: BodyPartCheckIn[],
 ): BodyPartSource[] {
   const sources: BodyPartSource[] = [];
 
@@ -43,7 +48,7 @@ function collectSources(
 /** Distinct trimmed body parts from incidents and check-in flares, recent-first. */
 export function buildBodyPartSuggestions(
   incidents: FlareUpIncident[],
-  checkIns: DailyCheckIn[],
+  checkIns: BodyPartCheckIn[],
 ): string[] {
   const byKey = new Map<string, string>();
   for (const { label } of collectSources(incidents, checkIns)) {

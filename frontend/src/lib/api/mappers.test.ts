@@ -265,7 +265,8 @@ describe('mapDashboardFromApi', () => {
   });
 
   it('maps missing goal_rows to an empty array', () => {
-    const { goal_rows: _goalRows, ...withoutGoalRows } = dashboardReadSnake;
+    const { goal_rows, ...withoutGoalRows } = dashboardReadSnake;
+    void goal_rows;
     const mapped = mapDashboardFromApi(withoutGoalRows) as ReturnType<
       typeof mapDashboardFromApi
     > & { goalRows: unknown[] };

@@ -28,8 +28,7 @@ from app.schemas.load import (
     SuggestionRead,
     WeeklyProgressRead,
 )
-from app.schemas.load_engine import Suggestion
-from app.schemas.load_engine import RuleDict
+from app.schemas.load_engine import RuleDict, Suggestion
 from app.schemas.training_blocks import TrainingBlockRead
 from app.services.activities import list_activities
 from app.services.activity_classes import list_activity_classes

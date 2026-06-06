@@ -16,6 +16,7 @@ from sqlmodel import Session, SQLModel, create_engine
 if TYPE_CHECKING:
     from app.models.block import Rule
     from app.models.checkin import FlareUpIncident
+    from app.models.goal import Goal
     from app.models.log import ActivityLog
 
 EXPECTED_MODEL_MODULES = {
@@ -546,8 +547,14 @@ def test_legacy_goal_and_rule_rows_default_stage_2_5_columns() -> None:
         session.add(rule)
         session.commit()
 
-        persisted_goal = session.get(model_classes["Goal"], "goal-legacy")
-        persisted_rule = session.get(model_classes["Rule"], "rule-legacy")
+        persisted_goal = cast(
+            "Goal | None",
+            session.get(model_classes["Goal"], "goal-legacy"),
+        )
+        persisted_rule = cast(
+            "Rule | None",
+            session.get(model_classes["Rule"], "rule-legacy"),
+        )
 
     assert persisted_goal is not None
     assert persisted_goal.activity_id is None
@@ -777,8 +784,14 @@ def test_sqlite_persistence_roundtrips_stage_2_5_activity_links() -> None:
         session.add(rule)
         session.commit()
 
-        persisted_goal = session.get(model_classes["Goal"], "goal-linked")
-        persisted_rule = session.get(model_classes["Rule"], "rule-linked")
+        persisted_goal = cast(
+            "Goal | None",
+            session.get(model_classes["Goal"], "goal-linked"),
+        )
+        persisted_rule = cast(
+            "Rule | None",
+            session.get(model_classes["Rule"], "rule-linked"),
+        )
 
     assert persisted_goal is not None
     assert persisted_goal.activity_id == "activity-linked"

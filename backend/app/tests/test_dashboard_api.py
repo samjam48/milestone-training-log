@@ -6,6 +6,7 @@ import time
 from collections.abc import AsyncIterator, Iterator
 from datetime import date, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi import FastAPI
@@ -458,18 +459,18 @@ async def test_get_dashboard_returns_200_after_prototype_seed_with_violations(
 # ---------------------------------------------------------------------------
 
 
-def _bucket_ids(rows: list[dict[str, object]], bucket: str) -> set[str]:
+def _bucket_ids(rows: list[dict[str, Any]], bucket: str) -> set[str]:
     return {str(row["id"]) for row in rows if row.get("bucket") == bucket}
 
 
-def _foot_class_bar(payload: dict[str, object]) -> dict[str, object]:
+def _foot_class_bar(payload: dict[str, Any]) -> dict[str, Any]:
     summary = payload["load_risk_summary"]
     assert summary is not None
     class_bars = summary["class_bars"]
     return next(bar for bar in class_bars if bar["activity_class_id"] == "cls-foot")
 
 
-def _foot_weekly_progress(payload: dict[str, object]) -> dict[str, object]:
+def _foot_weekly_progress(payload: dict[str, Any]) -> dict[str, Any]:
     return next(
         row for row in payload["weekly_progress"] if row["activity_class_id"] == "cls-foot"
     )
@@ -730,7 +731,7 @@ async def test_patch_logged_date_across_week_boundary_updates_dashboard_derivati
 
     followup_foot_actual = _foot_class_bar(followup_payload)["actual"]
 
-    # weekly_progress spans block start→as_of (both dates stay in range); load_risk uses 7-day window.
+    # weekly_progress spans block start→as_of; load_risk uses 7-day window.
     assert _foot_weekly_progress(followup_payload)["value"] == baseline_foot_progress["value"]
     assert followup_foot_actual < baseline_foot_actual
     assert followup_payload["load_risk_summary"] != baseline_summary

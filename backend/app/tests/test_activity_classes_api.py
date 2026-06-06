@@ -444,7 +444,8 @@ async def test_delete_activity_class_with_goal_reference_returns_conflict_and_pr
         app_with_test_database,
         goal_id="goal-walk",
         title="Walk goal",
-        **goal_reference,
+        activity_class_id=goal_reference.get("activity_class_id"),
+        activity_id=goal_reference.get("activity_id"),
     )
 
     response = await client.delete("/api/activity-classes/cls-foot-load")
@@ -509,7 +510,7 @@ async def test_delete_activity_class_with_rule_reference_returns_conflict_and_pr
     assert rules_response.json()[0]["id"] == "rule-cap"
 
 
-async def test_delete_activity_class_with_weekly_target_reference_returns_conflict_and_preserves_rows(
+async def test_delete_activity_class_with_weekly_target_ref_returns_conflict_preserves_rows(
     app_with_test_database: FastAPI,
     client: AsyncClient,
 ) -> None:
