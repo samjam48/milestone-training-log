@@ -132,14 +132,8 @@ describe('mapDashboardFromApi', () => {
     expect(mapped.incidents).toEqual([]);
     expect(mapped.hasCheckedInToday).toBe(false);
     expect(mapped.classStatuses).toEqual([]);
-    expect(mapped.suggestions).toEqual([]);
-    expect(mapped.weeklyProgress).toEqual([]);
-    expect(mapped.dailyScores).toHaveLength(1);
-    expect(mapped.loadSeries).toEqual([]);
-    expect(mapped.graphClassId).toBe('cls-foot');
-    expect(mapped.flareUpDates).toEqual([]);
-    expect(mapped.weekLoadThreshold).toBe(120);
-    expect(mapped.cleanStreak).toBe(2);
+    expect(mapped.suggestionBuckets).toEqual([]);
+    expect(mapped.loadRiskSummary).toBeNull();
     expect(mapped.recoveryStreaks).toEqual([
       {
         recoveryTargetId: recoveryStreakReadSnake.recovery_target_id,
@@ -151,11 +145,45 @@ describe('mapDashboardFromApi', () => {
         currentStreakDays: recoveryStreakReadSnake.current_streak_days,
       },
     ]);
-    expect(mapped.goals).toHaveLength(dashboardReadSnake.goals.length);
-    expect(mapped.goals[0]?.id).toBe(dashboardReadSnake.goals[0]!.id);
-    expect(mapped.goals[0]?.title).toBe(dashboardReadSnake.goals[0]!.title);
-    expect(mapped.previousBlocks).toHaveLength(dashboardReadSnake.previous_blocks.length);
-    expect(mapped.previousBlocks[0]?.id).toBe(dashboardReadSnake.previous_blocks[0]!.id);
+  });
+
+  it('maps suggestion_buckets and load_risk_summary from dashboard payload', () => {
+    const mapped = mapDashboardFromApi({
+      ...dashboardReadSnake,
+      suggestion_buckets: [
+        {
+          id: 'act-walk',
+          label: 'Walking',
+          state: 'safe',
+          reason: 'Ready',
+          bucket: 'do',
+          scope: 'activity',
+          activity_class_id: 'cls-foot',
+          description: null,
+        },
+      ],
+      load_risk_summary: {
+        week_days: [{ date: '2026-05-28', flagged: true }],
+        class_bars: [
+          {
+            activity_class_id: 'cls-foot',
+            class_name: 'Foot load',
+            actual: 4,
+            limit: 10,
+            unit: 'km',
+            exercises: [],
+          },
+        ],
+      },
+    });
+
+    expect(mapped.suggestionBuckets[0]).toMatchObject({
+      id: 'act-walk',
+      bucket: 'do',
+      scope: 'activity',
+    });
+    expect(mapped.loadRiskSummary?.weekDays).toHaveLength(1);
+    expect(mapped.loadRiskSummary?.classBars[0]?.className).toBe('Foot load');
   });
 
   it('maps block null to null (not undefined)', () => {

@@ -17,7 +17,7 @@ import {
   withSafeTopAncestor,
 } from '../../test/screenBackLayout';
 import type { DelayedTaxResponse } from '../../hooks/useMilestoneEngine';
-import type { ActivityClass, FlareUpIncident } from '../../types';
+import type { ActivityClass, DailyCheckIn, FlareUpIncident } from '../../types';
 import { LogIncidentScreen } from './LogIncidentScreen';
 
 const FOOT_PERFORMANCE_CLASS: ActivityClass = {
@@ -283,9 +283,13 @@ function getBodyPartCard(): HTMLElement {
   return card!;
 }
 
-function renderLogIncident(incidents: FlareUpIncident[] = []): void {
+function renderLogIncident(
+  incidents: FlareUpIncident[] = [],
+  checkIns: typeof mockEngine.checkIns = [],
+): void {
   resetMockEngine();
   mockEngine.incidents = incidents;
+  mockEngine.checkIns = checkIns;
   renderWithProviders(
     <LogIncidentScreen engine={mockEngine} onBack={vi.fn()} onComplete={vi.fn()} />,
   );
@@ -354,6 +358,70 @@ describe('LogIncidentScreen — S2.5 incident body part UX', () => {
         createdAt: '2026-05-10T10:00:00Z',
       }),
     ]);
+
+    const card = getBodyPartCard();
+    expect(within(card).getAllByRole('button', { name: /right toe/i })).toHaveLength(1);
+  });
+});
+
+function makeCheckIn(
+  overrides: Partial<DailyCheckIn> & Pick<DailyCheckIn, 'checkInDate'>,
+): DailyCheckIn {
+  return {
+    id: overrides.id ?? 'ci-test',
+    userId: overrides.userId ?? 'user-1',
+    checkInDate: overrides.checkInDate,
+    painLevel: overrides.painLevel ?? 5,
+    readinessLevel: overrides.readinessLevel ?? 5,
+    stiffnessLevel: overrides.stiffnessLevel ?? 5,
+    hasFlareUp: overrides.hasFlareUp ?? false,
+    flareUp: overrides.flareUp,
+    createdAt: overrides.createdAt ?? '2026-05-01T12:00:00Z',
+  };
+}
+
+describe('LogIncidentScreen — S25.F9 check-in body part chips', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('renders a suggestion chip from check-in flare history', () => {
+    renderLogIncident(
+      [],
+      [
+        makeCheckIn({
+          id: 'ci-heel',
+          checkInDate: '2026-05-15',
+          hasFlareUp: true,
+          flareUp: {
+            bodyPart: 'Left heel',
+            severity: 7,
+            likelyCauseActivityClassIds: [],
+          },
+        }),
+      ],
+    );
+
+    const card = getBodyPartCard();
+    expect(within(card).getByRole('button', { name: 'Left heel' })).toBeInTheDocument();
+  });
+
+  it('dedupes chips across incidents and check-ins', () => {
+    renderLogIncident(
+      [makeIncident({ id: 'inc-a', bodyPart: 'Right toe', incidentDate: '2026-05-20' })],
+      [
+        makeCheckIn({
+          id: 'ci-b',
+          checkInDate: '2026-05-10',
+          hasFlareUp: true,
+          flareUp: {
+            bodyPart: 'right toe',
+            severity: 6,
+            likelyCauseActivityClassIds: [],
+          },
+        }),
+      ],
+    );
 
     const card = getBodyPartCard();
     expect(within(card).getAllByRole('button', { name: /right toe/i })).toHaveLength(1);

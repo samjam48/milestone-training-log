@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import type { ActivityClass, Rule, TrainingBlock } from '../../types';
+import type { Activity, ActivityClass, Rule, TrainingBlock, WeeklyTarget } from '../../types';
 import type { MilestoneEngineResult, RuleDraft } from '../../hooks/useMilestoneEngine';
 import { renderWithProviders } from '../../test/renderWithProviders';
 import { mockEngine, resetMockEngine } from '../../test/mockEngine';
@@ -12,15 +12,6 @@ const CLASS_RUNNING: ActivityClass = {
   id: 'cls-running',
   userId: 'user-1',
   name: 'Running',
-  type: 'performance',
-  defaultRecoveryWindowDays: 2,
-  createdAt: '2026-01-01T00:00:00Z',
-};
-
-const CLASS_STRENGTH: ActivityClass = {
-  id: 'cls-strength',
-  userId: 'user-1',
-  name: 'Strength',
   type: 'performance',
   defaultRecoveryWindowDays: 2,
   createdAt: '2026-01-01T00:00:00Z',
@@ -48,17 +39,6 @@ const RULE_RUNNING_REST: Rule = {
   createdAt: '2026-06-01T00:00:00Z',
 };
 
-const RULE_STRENGTH_FREQ: Rule = {
-  id: 'rule-strength-freq',
-  trainingBlockId: ACTIVE_BLOCK.id,
-  activityClassId: CLASS_STRENGTH.id,
-  ruleType: 'frequency_limit',
-  thresholdValue: 3,
-  windowDays: 7,
-  enabled: true,
-  createdAt: '2026-06-01T00:00:00Z',
-};
-
 const RULE_RUNNING_FREQ: Rule = {
   id: 'rule-running-freq',
   trainingBlockId: ACTIVE_BLOCK.id,
@@ -70,14 +50,64 @@ const RULE_RUNNING_FREQ: Rule = {
   createdAt: '2026-06-01T00:00:00Z',
 };
 
-const RULE_ALL_CLASSES: Rule = {
-  id: 'rule-all-classes',
+const CLASS_FOOT: ActivityClass = {
+  id: 'cls-foot',
+  userId: 'user-1',
+  name: 'Foot load',
+  type: 'performance',
+  defaultRecoveryWindowDays: 2,
+  createdAt: '2026-01-01T00:00:00Z',
+};
+
+const CLASS_MOBILITY: ActivityClass = {
+  id: 'cls-mobility',
+  userId: 'user-1',
+  name: 'Mobility',
+  type: 'recovery',
+  defaultRecoveryWindowDays: 1,
+  createdAt: '2026-01-01T00:00:00Z',
+};
+
+const ACTIVITY_WALK: Activity = {
+  id: 'act-walk',
+  userId: 'user-1',
+  activityClassId: CLASS_FOOT.id,
+  name: 'Walk',
+  type: 'performance',
+  defaultVolumeUnit: 'km',
+  isActive: true,
+  createdAt: '2026-01-01T00:00:00Z',
+};
+
+const RULE_FOOT_FREQ: Rule = {
+  id: 'rule-foot-freq',
   trainingBlockId: ACTIVE_BLOCK.id,
-  activityClassId: null,
-  ruleType: 'weekly_activity_count',
-  thresholdValue: 4,
+  activityClassId: CLASS_FOOT.id,
+  ruleType: 'frequency_limit',
+  thresholdValue: 3,
   windowDays: 7,
   enabled: true,
+  createdAt: '2026-06-01T00:00:00Z',
+};
+
+const RULE_WALK_CAP: Rule = {
+  id: 'rule-walk-cap',
+  trainingBlockId: ACTIVE_BLOCK.id,
+  activityClassId: CLASS_FOOT.id,
+  activityId: ACTIVITY_WALK.id,
+  ruleType: 'frequency_limit',
+  thresholdValue: 2,
+  windowDays: 7,
+  enabled: true,
+  createdAt: '2026-06-01T00:00:00Z',
+};
+
+const WEEKLY_TARGET_FOOT: WeeklyTarget = {
+  id: 'wt-foot',
+  trainingBlockId: ACTIVE_BLOCK.id,
+  activityClassId: CLASS_FOOT.id,
+  targetValue: 10,
+  targetUnit: 'km',
   createdAt: '2026-06-01T00:00:00Z',
 };
 
@@ -100,29 +130,10 @@ afterEach(() => {
 });
 
 describe('EditBlockRulesScreen', () => {
-  it('groups rules by class and includes an All Classes group for null activityClassId rules', () => {
+  it('renders a section for each class with performance classes before recovery', () => {
     const engine = makeEngine({
       block: ACTIVE_BLOCK,
-      activityClasses: [CLASS_RUNNING, CLASS_STRENGTH],
-      rules: [RULE_RUNNING_REST, RULE_STRENGTH_FREQ, RULE_ALL_CLASSES],
-    });
-
-    renderWithProviders(
-      <EditBlockRulesScreen
-        engine={engine}
-        onBack={vi.fn()}
-      />,
-    );
-
-    expect(screen.getByText(/running/i)).toBeInTheDocument();
-    expect(screen.getByText(/strength/i)).toBeInTheDocument();
-    expect(screen.getByText(/all classes/i)).toBeInTheDocument();
-  });
-
-  it('shows the empty state when there are no rules', () => {
-    const engine = makeEngine({
-      block: ACTIVE_BLOCK,
-      activityClasses: [CLASS_RUNNING, CLASS_STRENGTH],
+      activityClasses: [CLASS_MOBILITY, CLASS_FOOT, CLASS_RUNNING],
       rules: [],
     });
 
@@ -133,7 +144,8 @@ describe('EditBlockRulesScreen', () => {
       />,
     );
 
-    expect(screen.getByText(/no rules configured for this block/i)).toBeInTheDocument();
+    const classHeadings = screen.getAllByRole('heading', { level: 2 }).map((el) => el.textContent);
+    expect(classHeadings).toEqual(['Foot load', 'Running', 'Mobility']);
   });
 
   it('calls onBack when the Back button is clicked', async () => {
@@ -352,11 +364,10 @@ describe('EditBlockRulesScreen', () => {
       />,
     );
 
-    const runningSection = screen.getByRole('heading', { level: 2, name: 'Running' }).closest('section');
+    const runningSection = screen.getByTestId(`class-rules-${CLASS_RUNNING.id}`);
 
-    expect(runningSection).not.toBeNull();
-    expect(runningSection?.querySelector('.divide-y.divide-border-subtle')).not.toBeNull();
-    expect(runningSection?.querySelectorAll('.rounded-lg.border.shadow-card').length).toBe(1);
+    expect(runningSection.querySelector('.divide-y.divide-border-subtle')).not.toBeNull();
+    expect(runningSection.querySelectorAll('.rounded-lg.border.shadow-card').length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText('Tune thresholds live for this rule group.')).not.toBeInTheDocument();
   });
 
@@ -376,7 +387,7 @@ describe('EditBlockRulesScreen', () => {
 
     expect(screen.getByText('Min rest between sessions')).toBeInTheDocument();
     expect(screen.getByText('Max sessions per week')).toBeInTheDocument();
-    expect(screen.getAllByText('Running')).toHaveLength(3);
+    expect(screen.getAllByText('Running').length).toBeGreaterThanOrEqual(1);
     expect(
       screen.queryByText('Minimum recovery time before this class repeats.'),
     ).not.toBeInTheDocument();
@@ -452,7 +463,7 @@ describe('EditBlockRulesScreen', () => {
 // ---------------------------------------------------------------------------
 
 describe('EditBlockRulesScreen — F10.10 add and delete rules', () => {
-  it('renders an Add rule control when rules exist', () => {
+  it('renders per-class add cap controls when rules exist', () => {
     const engine = makeEngine({
       block: ACTIVE_BLOCK,
       activityClasses: [CLASS_RUNNING],
@@ -463,10 +474,11 @@ describe('EditBlockRulesScreen — F10.10 add and delete rules', () => {
       <EditBlockRulesScreen engine={engine} onBack={vi.fn()} />,
     );
 
-    expect(screen.getByRole('button', { name: /add rule/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /add class cap/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /add exercise rule/i })).toBeInTheDocument();
   });
 
-  it('renders Add rule in the empty state when there are zero rules', () => {
+  it('renders per-class add controls when a class has zero rules', () => {
     const engine = makeEngine({
       block: ACTIVE_BLOCK,
       activityClasses: [CLASS_RUNNING],
@@ -477,8 +489,8 @@ describe('EditBlockRulesScreen — F10.10 add and delete rules', () => {
       <EditBlockRulesScreen engine={engine} onBack={vi.fn()} />,
     );
 
-    expect(screen.getByText(/no rules configured for this block/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /add rule/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /add class cap/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /add exercise rule/i })).toBeInTheDocument();
   });
 
   it('renders a delete control for each existing rule row', () => {
@@ -495,7 +507,7 @@ describe('EditBlockRulesScreen — F10.10 add and delete rules', () => {
     expect(screen.getAllByRole('button', { name: /delete/i })).toHaveLength(2);
   });
 
-  it('calls engine.createRule when a new rule is added and confirmed', async () => {
+  it('calls engine.createRule with activityClassId when a class cap is added and confirmed', async () => {
     const user = userEvent.setup();
     const createRule = vi.fn();
     const engine = makeEngine({
@@ -509,7 +521,7 @@ describe('EditBlockRulesScreen — F10.10 add and delete rules', () => {
       <EditBlockRulesScreen engine={engine} onBack={vi.fn()} />,
     );
 
-    await user.click(screen.getByRole('button', { name: /add rule/i }));
+    await user.click(screen.getByRole('button', { name: /add class cap/i }));
 
     const typeSelect =
       screen.queryByRole('combobox', { name: /rule type/i }) ??
@@ -520,12 +532,14 @@ describe('EditBlockRulesScreen — F10.10 add and delete rules', () => {
     await user.clear(thresholdInput);
     await user.type(thresholdInput, '2');
 
-    await user.click(screen.getByRole('button', { name: /save|confirm|add/i }));
+    await user.click(screen.getByRole('button', { name: /^save$/i }));
 
     expect(createRule).toHaveBeenCalledTimes(1);
     const [draft] = createRule.mock.calls[0] as [RuleDraft];
     expect(draft.ruleType).toBe('rest_between_class');
     expect(draft.thresholdValue).toBe(2);
+    expect(draft.activityClassId).toBe(CLASS_RUNNING.id);
+    expect(draft.activityId).toBeUndefined();
   });
 
   it('calls engine.deleteRule when delete is confirmed for a rule', async () => {
@@ -645,5 +659,157 @@ describe('EditBlockRulesScreen — F10.9 loading and error polish', () => {
     expect(root).not.toBeNull();
     expect(root).not.toHaveClass('h-screen', 'min-h-screen');
     expect(root?.getAttribute('style') ?? '').not.toMatch(/100vh/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// S25.F5 — Class sections, weekly targets, exercise rules
+// plans/tickets-stage-2-5-usage-logic-2026-06-06.md §S25.F5
+// ---------------------------------------------------------------------------
+
+describe('EditBlockRulesScreen — S25.F5 class sections, weekly targets, exercise rules', () => {
+  it('shows Caps, Weekly goal, and Exercises subsections for performance classes', () => {
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [CLASS_FOOT],
+      activities: [ACTIVITY_WALK],
+      rules: [RULE_FOOT_FREQ, RULE_WALK_CAP],
+      weeklyTargets: [WEEKLY_TARGET_FOOT],
+    });
+
+    renderWithProviders(
+      <EditBlockRulesScreen engine={engine} onBack={vi.fn()} />,
+    );
+
+    const footSection = screen.getByTestId(`class-rules-${CLASS_FOOT.id}`);
+    expect(within(footSection).getByText('Caps')).toBeInTheDocument();
+    expect(within(footSection).getByText('Weekly goal')).toBeInTheDocument();
+    expect(within(footSection).getByText('Exercises')).toBeInTheDocument();
+    expect(within(footSection).getByText('Walk')).toBeInTheDocument();
+  });
+
+  it('shows empty cap copy when a class has no class-level rules', () => {
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [CLASS_FOOT],
+      activities: [ACTIVITY_WALK],
+      rules: [RULE_WALK_CAP],
+      weeklyTargets: [],
+    });
+
+    renderWithProviders(
+      <EditBlockRulesScreen engine={engine} onBack={vi.fn()} />,
+    );
+
+    const footSection = screen.getByTestId(`class-rules-${CLASS_FOOT.id}`);
+    expect(
+      within(footSection).getByText(/no limits — unlimited for this class/i),
+    ).toBeInTheDocument();
+  });
+
+  it('hides Weekly goal for recovery classes unless a weekly target exists', () => {
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [CLASS_MOBILITY, CLASS_FOOT],
+      activities: [],
+      rules: [],
+      weeklyTargets: [],
+    });
+
+    renderWithProviders(
+      <EditBlockRulesScreen engine={engine} onBack={vi.fn()} />,
+    );
+
+    const mobilitySection = screen.getByTestId(`class-rules-${CLASS_MOBILITY.id}`);
+    expect(within(mobilitySection).queryByText('Weekly goal')).not.toBeInTheDocument();
+
+    const footSection = screen.getByTestId(`class-rules-${CLASS_FOOT.id}`);
+    expect(within(footSection).getByText('Weekly goal')).toBeInTheDocument();
+  });
+
+  it('does not render cross-class weekly_activity_count rule types in the UI', () => {
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [CLASS_FOOT],
+      activities: [],
+      rules: [],
+      weeklyTargets: [],
+    });
+
+    renderWithProviders(
+      <EditBlockRulesScreen engine={engine} onBack={vi.fn()} />,
+    );
+
+    expect(screen.queryByText(/all classes/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/weekly activity count/i)).not.toBeInTheDocument();
+
+    const footSection = screen.getByTestId(`class-rules-${CLASS_FOOT.id}`);
+    const addCapButton = within(footSection).getByRole('button', { name: /add class cap/i });
+    expect(addCapButton).toBeInTheDocument();
+  });
+
+  it('calls engine.patchWeeklyTarget when weekly goal value is edited', async () => {
+    const user = userEvent.setup();
+    const patchWeeklyTarget = vi.fn();
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [CLASS_FOOT],
+      activities: [ACTIVITY_WALK],
+      rules: [],
+      weeklyTargets: [WEEKLY_TARGET_FOOT],
+      patchWeeklyTarget,
+    });
+
+    renderWithProviders(
+      <EditBlockRulesScreen engine={engine} onBack={vi.fn()} />,
+    );
+
+    const footSection = screen.getByTestId(`class-rules-${CLASS_FOOT.id}`);
+    const weeklyInput = within(footSection).getByRole('spinbutton', { name: /weekly goal/i });
+    await user.clear(weeklyInput);
+    await user.type(weeklyInput, '12');
+    await user.tab();
+
+    expect(patchWeeklyTarget).toHaveBeenCalledWith(WEEKLY_TARGET_FOOT.id, {
+      targetValue: 12,
+    });
+  });
+
+  it('calls engine.createRule with activityClassId and activityId when adding an exercise rule', async () => {
+    const user = userEvent.setup();
+    const createRule = vi.fn();
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [CLASS_FOOT],
+      activities: [ACTIVITY_WALK],
+      rules: [],
+      createRule,
+    });
+
+    renderWithProviders(
+      <EditBlockRulesScreen engine={engine} onBack={vi.fn()} />,
+    );
+
+    const footSection = screen.getByTestId(`class-rules-${CLASS_FOOT.id}`);
+    await user.click(within(footSection).getByRole('button', { name: /add exercise rule/i }));
+
+    const activitySelect = within(footSection).getByRole('combobox', { name: /exercise/i });
+    await user.selectOptions(activitySelect, ACTIVITY_WALK.id);
+
+    const typeSelect = within(footSection).getByRole('combobox', { name: /rule type/i });
+    await user.selectOptions(typeSelect, 'frequency_limit');
+
+    const thresholdInput = within(footSection).getByRole('spinbutton', { name: /threshold/i });
+    await user.clear(thresholdInput);
+    await user.type(thresholdInput, '2');
+
+    await user.click(within(footSection).getByRole('button', { name: /save/i }));
+
+    expect(createRule).toHaveBeenCalledTimes(1);
+    const [draft] = createRule.mock.calls[0] as [RuleDraft];
+    expect(draft.activityClassId).toBe(CLASS_FOOT.id);
+    expect(draft.activityId).toBe(ACTIVITY_WALK.id);
+    expect(draft.ruleType).toBe('frequency_limit');
+    expect(draft.thresholdValue).toBe(2);
   });
 });

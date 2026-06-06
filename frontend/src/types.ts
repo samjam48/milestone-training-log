@@ -159,8 +159,10 @@ export type RuleType =
 export interface Rule extends Timestamped {
   id: ID;
   trainingBlockId: ID;
-  /** null => cross-class rule (e.g. weekly_activity_count). */
+  /** null => legacy cross-class rule (deprecated — not shown in UI). */
   activityClassId: ID | null;
+  /** When set, this rule applies to a single exercise within the class. */
+  activityId?: ID;
   ruleType: RuleType;
   thresholdValue: number;
   windowDays: number;                 // typically 7

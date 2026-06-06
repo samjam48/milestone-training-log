@@ -44,7 +44,6 @@ from app.services.load_engine import (
     compute_load_risk_summary,
     compute_load_series,
     compute_suggestion_buckets,
-    compute_suggestions,
     compute_weekly_progress,
     detect_delayed_tax,
     format_iso_date,
@@ -123,8 +122,6 @@ def get_dashboard(session: Session, *, as_of: date | None = None) -> DashboardRe
         log_dicts,
         rule_dicts,
     )
-    suggestions = compute_suggestions(class_statuses, activity_dicts, class_dicts)
-
     suggestion_buckets: list[Suggestion] = []
     load_risk_summary = None
     if block_start is not None:
@@ -233,7 +230,6 @@ def get_dashboard(session: Session, *, as_of: date | None = None) -> DashboardRe
         class_statuses=[
             ActivityClassStatusRead.model_validate(status) for status in class_statuses
         ],
-        suggestions=[SuggestionRead.model_validate(suggestion) for suggestion in suggestions],
         suggestion_buckets=[
             SuggestionRead.model_validate(suggestion) for suggestion in suggestion_buckets
         ],

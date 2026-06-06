@@ -15,6 +15,7 @@ import type {
   MilestoneEngineResult,
   NewActivityClassDraft,
   NewActivityDraft,
+  ActivityClassPatch,
 } from '../../hooks/useMilestoneEngine';
 import type {
   Activity,
@@ -551,6 +552,275 @@ function NewActivityClassForm({
 }
 
 // ---------------------------------------------------------------------------
+// EditActivityClassForm — rename + type
+// ---------------------------------------------------------------------------
+
+interface EditActivityClassFormProps {
+  activityClass: ActivityClass | null;
+  onClose: () => void;
+  onSubmit: (classId: ID, patch: ActivityClassPatch) => Promise<void>;
+}
+
+function EditActivityClassForm({
+  activityClass,
+  onClose,
+  onSubmit,
+}: EditActivityClassFormProps): React.ReactElement | null {
+  const [name, setName] = React.useState('');
+  const [type, setType] = React.useState<ActivityType>('performance');
+  const [apiError, setApiError] = React.useState<string | null>(null);
+  const [submitting, setSubmitting] = React.useState(false);
+
+  React.useEffect(() => {
+    if (activityClass != null) {
+      setName(activityClass.name);
+      setType(activityClass.type);
+      setApiError(null);
+      setSubmitting(false);
+    }
+  }, [activityClass]);
+
+  if (activityClass == null) return null;
+
+  const classId = activityClass.id;
+  const trimmedName = name.trim();
+  const canSave = trimmedName.length > 0 && !submitting;
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>): Promise<void> {
+    e.preventDefault();
+    if (!canSave) return;
+
+    setApiError(null);
+    setSubmitting(true);
+
+    try {
+      await onSubmit(classId, { name: trimmedName, type });
+      onClose();
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setApiError(err.message);
+      } else if (err instanceof Error) {
+        setApiError(err.message);
+      } else {
+        setApiError('Could not update activity class.');
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <>
+      <div
+        className="fixed inset-0 z-50 bg-black/60"
+        style={{ backdropFilter: 'blur(4px)' }}
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <div
+        className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-[440px] rounded-t-2xl bg-bg-raised border-t border-border pb-safe-bottom"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Edit activity class"
+      >
+        <div className="flex justify-center pt-3 pb-1">
+          <div className="h-1 w-10 rounded-full bg-border" aria-hidden="true" />
+        </div>
+
+        <form className="px-4 pb-8 pt-2" onSubmit={(e) => { void handleSubmit(e); }}>
+          <div className="flex items-center justify-between mb-5">
+            <h2 className="text-title font-bold text-ink">Edit Activity Class</h2>
+            <button
+              type="button"
+              onClick={onClose}
+              className="h-8 w-8 flex items-center justify-center rounded-full text-ink-muted hover:text-ink hover:bg-bg-overlay transition-colors duration-snap"
+              aria-label="Close"
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path
+                  d="M4 4l8 8M12 4l-8 8"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </button>
+          </div>
+
+          <div className="flex flex-col gap-4">
+            <label className="flex flex-col gap-1.5">
+              <span className="text-label font-medium text-ink-muted">Class name</span>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="h-11 rounded-md border border-border bg-bg px-3 text-body text-ink"
+                autoComplete="off"
+              />
+            </label>
+
+            <fieldset className="flex flex-col gap-2 border-0 p-0 m-0">
+              <legend className="text-label font-medium text-ink-muted mb-1">Type</legend>
+              <label className="flex items-center gap-2 text-body text-ink">
+                <input
+                  type="radio"
+                  name="editActivityClassType"
+                  value="performance"
+                  checked={type === 'performance'}
+                  onChange={() => setType('performance')}
+                />
+                Performance
+              </label>
+              <label className="flex items-center gap-2 text-body text-ink">
+                <input
+                  type="radio"
+                  name="editActivityClassType"
+                  value="recovery"
+                  checked={type === 'recovery'}
+                  onChange={() => setType('recovery')}
+                  aria-label="Recovery"
+                />
+                <span aria-hidden="true">Recovery</span>
+              </label>
+            </fieldset>
+
+            {apiError != null && (
+              <p className="text-body text-danger-fg" role="alert">
+                {apiError}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={!canSave}
+              className={cn(
+                'w-full h-11 rounded-md text-body font-medium transition-colors duration-snap',
+                canSave
+                  ? 'bg-ink text-ink-inverse hover:opacity-90'
+                  : 'bg-bg-sunken text-ink-faint cursor-not-allowed',
+              )}
+            >
+              Save
+            </button>
+          </div>
+        </form>
+      </div>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// DeleteActivityClassDialog — two-step confirm
+// ---------------------------------------------------------------------------
+
+interface DeleteActivityClassDialogProps {
+  activityClass: ActivityClass | null;
+  step: 1 | 2 | null;
+  activitiesToDelete: Activity[];
+  errorMessage: string | null;
+  submitting: boolean;
+  onCancel: () => void;
+  onConfirmStep1: () => void;
+  onConfirmStep2: () => void;
+}
+
+function DeleteActivityClassDialog({
+  activityClass,
+  step,
+  activitiesToDelete,
+  errorMessage,
+  submitting,
+  onCancel,
+  onConfirmStep1,
+  onConfirmStep2,
+}: DeleteActivityClassDialogProps): React.ReactElement | null {
+  if (activityClass == null || step == null) return null;
+
+  return (
+    <>
+      <div
+        className="fixed inset-0 z-50 bg-black/60"
+        style={{ backdropFilter: 'blur(4px)' }}
+        onClick={onCancel}
+        aria-hidden="true"
+      />
+      <div
+        className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-[440px] rounded-t-2xl bg-bg-raised border-t border-border pb-safe-bottom"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Delete activity class"
+      >
+        <div className="flex justify-center pt-3 pb-1">
+          <div className="h-1 w-10 rounded-full bg-border" aria-hidden="true" />
+        </div>
+
+        <div className="px-4 pb-8 pt-2">
+          {step === 1 ? (
+            <>
+              <h2 className="text-title font-bold text-ink mb-2">Delete class?</h2>
+              <p className="text-body text-ink-muted mb-5">
+                Are you sure you want to delete &ldquo;{activityClass.name}&rdquo;?
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={onCancel}
+                  className="flex-1 h-11 rounded-md bg-bg-sunken border border-border text-body font-medium text-ink-muted"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={onConfirmStep1}
+                  disabled={submitting}
+                  className="flex-1 h-11 rounded-md bg-danger text-body font-medium text-ink-inverse"
+                >
+                  Delete class
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <h2 className="text-title font-bold text-ink mb-2">Delete activities too?</h2>
+              <p className="text-body text-ink-muted mb-3">
+                These activities will be deleted if you continue:
+              </p>
+              <ul className="mb-4 list-disc pl-5 text-body text-ink">
+                {activitiesToDelete.map((activity) => (
+                  <li key={activity.id}>{activity.name}</li>
+                ))}
+              </ul>
+              {errorMessage != null && (
+                <p className="text-body text-danger-fg mb-3" role="alert">
+                  {errorMessage}
+                </p>
+              )}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={onCancel}
+                  className="flex-1 h-11 rounded-md bg-bg-sunken border border-border text-body font-medium text-ink-muted"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={onConfirmStep2}
+                  disabled={submitting}
+                  className="flex-1 h-11 rounded-md bg-danger text-body font-medium text-ink-inverse"
+                >
+                  Delete anyway
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // SettingsScreen
 // ---------------------------------------------------------------------------
 
@@ -575,6 +845,8 @@ export function SettingsScreen({
     deactivateActivity,
     updateActivity,
     submitNewActivityClass,
+    updateActivityClass,
+    deleteActivityClass,
   } = engine;
 
   const queryClient = useQueryClient();
@@ -583,6 +855,11 @@ export function SettingsScreen({
   const [resetState, setResetState] = React.useState<'idle' | 'confirming' | 'done'>('idle');
   const [pendingDeactivateId, setPendingDeactivateId] = React.useState<string | null>(null);
   const [showNewClassForm, setShowNewClassForm] = React.useState(false);
+  const [editingClass, setEditingClass] = React.useState<ActivityClass | null>(null);
+  const [deleteTarget, setDeleteTarget] = React.useState<ActivityClass | null>(null);
+  const [deleteStep, setDeleteStep] = React.useState<1 | 2 | null>(null);
+  const [deleteError, setDeleteError] = React.useState<string | null>(null);
+  const [deleteSubmitting, setDeleteSubmitting] = React.useState(false);
 
   function handleResetMockData(): void {
     if (resetState === 'idle') {
@@ -661,6 +938,51 @@ export function SettingsScreen({
   const showInactiveSection = inactiveSectionPinned || groupedInactive.length > 0;
 
   const showEditRules = hasBlock;
+
+  const deleteActivities = React.useMemo(() => {
+    if (deleteTarget == null) return [];
+    return activities.filter((activity) => activity.activityClassId === deleteTarget.id);
+  }, [activities, deleteTarget]);
+
+  function resetDeleteDialog(): void {
+    setDeleteTarget(null);
+    setDeleteStep(null);
+    setDeleteError(null);
+    setDeleteSubmitting(false);
+  }
+
+  async function performDeleteClass(classId: ID): Promise<void> {
+    setDeleteSubmitting(true);
+    setDeleteError(null);
+    try {
+      await deleteActivityClass(classId);
+      resetDeleteDialog();
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setDeleteError(err.message);
+      } else if (err instanceof Error) {
+        setDeleteError(err.message);
+      } else {
+        setDeleteError('Could not delete activity class.');
+      }
+    } finally {
+      setDeleteSubmitting(false);
+    }
+  }
+
+  function handleDeleteStep1Confirm(): void {
+    if (deleteTarget == null) return;
+    if (deleteActivities.length === 0) {
+      void performDeleteClass(deleteTarget.id);
+      return;
+    }
+    setDeleteStep(2);
+  }
+
+  function handleDeleteStep2Confirm(): void {
+    if (deleteTarget == null) return;
+    void performDeleteClass(deleteTarget.id);
+  }
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">
@@ -758,9 +1080,33 @@ export function SettingsScreen({
                 {activityClasses.map((cls) => (
                   <li
                     key={cls.id}
-                    className="px-4 py-3 text-body font-medium text-ink"
+                    className="flex items-center justify-between gap-3 px-4 py-3"
                   >
-                    {cls.name}
+                    <span className="text-body font-medium text-ink min-w-0 truncate">
+                      {cls.name}
+                    </span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        aria-label={`Edit ${cls.name}`}
+                        onClick={() => setEditingClass(cls)}
+                        className="h-8 px-2.5 rounded-md text-caption font-medium text-ink-muted bg-bg-sunken hover:bg-bg-overlay transition-colors duration-snap"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Delete ${cls.name}`}
+                        onClick={() => {
+                          setDeleteTarget(cls);
+                          setDeleteStep(1);
+                          setDeleteError(null);
+                        }}
+                        className="h-8 px-2.5 rounded-md text-caption font-medium text-danger-fg hover:bg-danger/10 transition-colors duration-snap"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -953,6 +1299,23 @@ export function SettingsScreen({
         open={showNewClassForm}
         onClose={() => setShowNewClassForm(false)}
         onSubmit={submitNewActivityClass}
+      />
+
+      <EditActivityClassForm
+        activityClass={editingClass}
+        onClose={() => setEditingClass(null)}
+        onSubmit={updateActivityClass}
+      />
+
+      <DeleteActivityClassDialog
+        activityClass={deleteTarget}
+        step={deleteStep}
+        activitiesToDelete={deleteActivities}
+        errorMessage={deleteError}
+        submitting={deleteSubmitting}
+        onCancel={resetDeleteDialog}
+        onConfirmStep1={handleDeleteStep1Confirm}
+        onConfirmStep2={handleDeleteStep2Confirm}
       />
     </div>
   );

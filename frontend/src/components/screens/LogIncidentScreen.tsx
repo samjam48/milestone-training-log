@@ -9,6 +9,7 @@
 
 import * as React from 'react';
 import { cn } from '../../lib/cn';
+import { buildBodyPartSuggestions } from '../../lib/bodyPartSuggestions';
 import { BackButton } from '../ui/BackButton';
 import { Card } from '../ui/Card';
 import { Slider } from '../ui/Slider';
@@ -22,21 +23,9 @@ interface Props {
   onComplete: () => void;
 }
 
-/** Distinct trimmed body parts from incident history, recent-first, case-insensitive dedupe. */
+/** @deprecated Use buildBodyPartSuggestions with check-ins from the engine. */
 export function buildIncidentBodyPartSuggestions(incidents: FlareUpIncident[]): string[] {
-  const byKey = new Map<string, string>();
-  const sorted = [...incidents].sort((a, b) => {
-    const byDate = b.incidentDate.localeCompare(a.incidentDate);
-    if (byDate !== 0) return byDate;
-    return b.createdAt.localeCompare(a.createdAt);
-  });
-  for (const incident of sorted) {
-    const label = incident.bodyPart.trim();
-    if (!label) continue;
-    const key = label.toLowerCase();
-    if (!byKey.has(key)) byKey.set(key, label);
-  }
-  return [...byKey.values()];
+  return buildBodyPartSuggestions(incidents, []);
 }
 
 function severityState(v: number) {
@@ -54,6 +43,7 @@ export const LogIncidentScreen: React.FC<Props> = ({ engine, onBack, onComplete 
     delayedTaxError,
     activityClasses,
     incidents,
+    checkIns,
     submitIncident,
   } = engine;
 
@@ -64,8 +54,8 @@ export const LogIncidentScreen: React.FC<Props> = ({ engine, onBack, onComplete 
   const [submitted,     setSubmitted]     = React.useState(false);
 
   const bodyPartSuggestions = React.useMemo(
-    () => buildIncidentBodyPartSuggestions(incidents),
-    [incidents],
+    () => buildBodyPartSuggestions(incidents, checkIns),
+    [incidents, checkIns],
   );
 
   const canSubmit = bodyPart.trim().length > 0;

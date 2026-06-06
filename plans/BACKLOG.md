@@ -52,17 +52,32 @@ Phase 10 ticket set that closed the last gaps.
 
 Tracked in `plans/PRD.md` §13. Android-first native shell + home-screen quick-entry widgets (log, check-in). iOS optional. Requires Capacitor (or equivalent) and notification backend if prefs toggles become real.
 
-## Stage 2.5 — Usage-driven logic & UX (approved 2026-06-06)
+## Stage 2.5 — Usage-driven logic & UX (complete on branch, 2026-06-06)
 
 **Planning:** `plans/feature-brief-stage-2-5-usage-logic-2026-06-06.md`, `plans/technical-design-stage-2-5-usage-logic-2026-06-06.md`
 
-Themes: goal editor + activity-linked auto-progress; log date + edit; block caps + weekly goals in Edit Rules (Option A); suggestion buckets; load-risk ↔ caps; activity class edit/delete; incident chips from check-ins.
+**Tickets:** `plans/tickets-stage-2-5-usage-logic-2026-06-06.md` (S25.B1–S25.D1 implemented; **O25.1** owner smoke pending).
 
-**Branch:** `feat/stage-2-5-usage-logic`. **Tickets:** `plans/tickets-stage-2-5-usage-logic-2026-06-06.md` (S25.B1–S25.D1, O25.1).
+**Branch:** `feat/stage-2-5-usage-logic`
+
+Delivered themes: activity-linked goal auto-progress; log date + edit; class/exercise caps + weekly goals in Edit Rules; suggestion buckets; load-risk ↔ caps; activity class edit/delete (Settings); incident/check-in body-part chips.
+
+| Item | Ticket | Status |
+| --- | --- | --- |
+| Goal editor sticky save + activity link + auto-track | S25.F1 | Done |
+| Goals dashboard card | S25.F2 | Done |
+| Log date picker (create) | S25.F3 | Done |
+| Edit log flow | S25.F4 | Done |
+| Edit Rules class sections + weekly targets + exercise rules | S25.F5 | Done |
+| Suggestion buckets (do/rest/done) | S25.F6 | Done |
+| Load risk summary UI | S25.F7 | Done |
+| Activity class edit/delete (Settings) | S25.F8 | Done |
+| Body-part chips from incidents + check-ins | S25.F9 | Done |
+| Cross-class rules removed | S25.B2 | Done |
+| Weekly volume target editor | S25.F5 | Done (was read-only) |
+| Activity class editor | S25.F8 | Done (was create-only) |
+| Incident chips from check-in history | S25.F9 | Done |
 
 ## Product gaps still open (not in the list above)
 
-- **Weekly volume target editor** — targets display on Settings active-block card; no create/edit UI (set at block creation only).
-- **Activity class editor** — create via Settings `NewActivityClassForm`; no edit/rename existing class.
 - **Settings preference toggles** — Notifications and Metric units are local React state only (prototype; no backend).
-- **Incident body-part chips from check-in history** — deferred in Stage 2 (S2.5 uses incident history only).

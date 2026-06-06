@@ -127,9 +127,9 @@ export const DashboardScreen: React.FC<Props> = ({
 }) => {
   const {
     todayDate, userName, hasCheckedInToday,
-    suggestions, weeklyProgress, classStatuses,
+    suggestionBuckets, weeklyProgress, classStatuses,
     loadSeries, graphClassId, flareUpDates, weekLoadThreshold, cleanStreak, recoveryStreaks,
-    block, activityClasses, activities, delayedTax,
+    block, activityClasses, activities, loadRiskSummary,
     goalRows,
   } = engine;
 
@@ -148,7 +148,7 @@ export const DashboardScreen: React.FC<Props> = ({
 
       {/* ── Suggested activities ── */}
       <SuggestedActivityCard
-        suggestions={suggestions}
+        suggestionBuckets={suggestionBuckets}
         onPick={(s) => {
           const activity = activities.find((candidate) => candidate.id === s.id);
           if (activity != null && onQuickLog != null) {
@@ -217,7 +217,7 @@ export const DashboardScreen: React.FC<Props> = ({
         subtitle="Rolling 7-day · full block"
       />
 
-      <LoadRiskSection delayedTax={delayedTax} activityClasses={activityClasses} />
+      <LoadRiskSection loadRiskSummary={loadRiskSummary} />
 
       {/* ── Block safety map ── */}
       <BlockSafetyMapSection engine={engine} />

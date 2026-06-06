@@ -215,7 +215,8 @@ export const dashboardReadSnake = {
   incidents: [] as unknown[],
   has_checked_in_today: false,
   class_statuses: [] as unknown[],
-  suggestions: [] as unknown[],
+  suggestion_buckets: [] as unknown[],
+  load_risk_summary: null as unknown | null,
   weekly_progress: [] as unknown[],
   daily_scores: [
     {

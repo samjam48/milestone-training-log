@@ -61,7 +61,7 @@ from `backend/` so `backend/pyproject.toml` is loaded.
 ---
 ## Current Sprint — Stage 2.5: Usage logic & block clarity (active)
 **Goal:** Close the gap between stored block rules, goals, and logs and daily-use behaviour: activity-linked goals with auto-progress, retroactive log dates, class/exercise caps in Edit Rules, smarter suggestion buckets, and cap-driven load risk.
-**Status (2026-06-06):** **Stage 2 polish complete** on `main`. **Stage 2.5 planning signed off** — start with **S25.B1** on `feat/stage-2-5-usage-logic` (or per-ticket branch per owner).
+**Status (2026-06-06):** **Stage 2.5 implementation complete** on `feat/stage-2-5-usage-logic` (S25.B1–S25.D1). Pending **O25.1** owner smoke before merge to `main`.
 **Production (live):** App `https://milestone-activity.netlify.app` · API `https://milestone-training-log.onrender.com` · DB Supabase Postgres (session pooler). Runbook: `docs/deploy.md`.
 **Deploy branch:** `main` (Render + Netlify auto-deploy from GitHub).
 **Ticket source:** `plans/tickets-stage-2-5-usage-logic-2026-06-06.md` (S25.B1–S25.D1 required; **O25.1** owner smoke)

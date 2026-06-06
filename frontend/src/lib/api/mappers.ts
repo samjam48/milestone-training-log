@@ -25,7 +25,11 @@ import type {
   WeeklyTarget,
 } from '../../types';
 import type { LoadPoint } from '../load';
-import type { Suggestion, WeeklyProgress } from '../engine';
+import type {
+  LoadRiskSummary,
+  Suggestion,
+  WeeklyProgress,
+} from '../engine';
 
 type WithoutUserId<T extends { userId: string }> = Omit<T, 'userId'>;
 
@@ -350,6 +354,7 @@ export function mapRuleFromApi(raw: Record<string, unknown>): Rule {
     id: String(raw.id),
     trainingBlockId: String(raw.training_block_id),
     activityClassId: (raw.activity_class_id as string | null) ?? null,
+    activityId: (raw.activity_id as string | null) ?? undefined,
     ruleType: raw.rule_type as RuleType,
     thresholdValue: Number(raw.threshold_value),
     windowDays: Number(raw.window_days),
@@ -470,6 +475,61 @@ function mapSuggestionFromApi(raw: Record<string, unknown>): Suggestion {
     reason: String(raw.reason),
     nextSafeDate: (raw.next_safe_date as ISODate | null) ?? undefined,
     lastDoneDate: (raw.last_done_date as ISODate | null) ?? undefined,
+    bucket: raw.bucket == null ? undefined : (raw.bucket as Suggestion['bucket']),
+    scope: raw.scope == null ? undefined : (raw.scope as Suggestion['scope']),
+    activityClassId:
+      raw.activity_class_id == null ? undefined : String(raw.activity_class_id),
+    description: raw.description == null ? undefined : String(raw.description),
+  };
+}
+
+function mapLoadRiskExerciseBarFromApi(raw: Record<string, unknown>) {
+  return {
+    activityId: String(raw.activity_id),
+    activityName: String(raw.activity_name),
+    actual: Number(raw.actual),
+    limit: Number(raw.limit),
+    unit: String(raw.unit),
+  };
+}
+
+function mapLoadRiskClassBarFromApi(raw: Record<string, unknown>) {
+  const exercises = raw.exercises;
+  return {
+    activityClassId: String(raw.activity_class_id),
+    className: String(raw.class_name),
+    actual: Number(raw.actual),
+    limit: Number(raw.limit),
+    unit: String(raw.unit),
+    exercises: Array.isArray(exercises)
+      ? exercises.map((item) =>
+          mapLoadRiskExerciseBarFromApi(isRecord(item) ? item : {}),
+        )
+      : [],
+  };
+}
+
+export function mapLoadRiskSummaryFromApi(
+  raw: Record<string, unknown> | null | undefined,
+): LoadRiskSummary | null {
+  if (raw == null) {
+    return null;
+  }
+  const weekDays = raw.week_days;
+  const classBars = raw.class_bars;
+  return {
+    weekDays: Array.isArray(weekDays)
+      ? weekDays.map((item) => {
+          const day = isRecord(item) ? item : {};
+          return {
+            date: String(day.date) as ISODate,
+            flagged: Boolean(day.flagged),
+          };
+        })
+      : [],
+    classBars: Array.isArray(classBars)
+      ? classBars.map((item) => mapLoadRiskClassBarFromApi(isRecord(item) ? item : {}))
+      : [],
   };
 }
 
@@ -528,7 +588,8 @@ export interface DashboardPayload {
   incidents: WithoutUserId<FlareUpIncident>[];
   hasCheckedInToday: boolean;
   classStatuses: ReturnType<typeof mapActivityClassStatusFromApi>[];
-  suggestions: Suggestion[];
+  suggestionBuckets: Suggestion[];
+  loadRiskSummary: LoadRiskSummary | null;
   weeklyProgress: WeeklyProgress[];
   dailyScores: ReturnType<typeof mapDailySafetyScoreFromApi>[];
   loadSeries: LoadPoint[];
@@ -559,7 +620,14 @@ export function mapDashboardFromApi(raw: Record<string, unknown>): DashboardPayl
     incidents: mapList(raw.incidents, mapFlareUpIncidentFromApi),
     hasCheckedInToday: Boolean(raw.has_checked_in_today),
     classStatuses: mapList(raw.class_statuses, mapActivityClassStatusFromApi),
-    suggestions: mapList(raw.suggestions, mapSuggestionFromApi),
+    suggestionBuckets: mapList(raw.suggestion_buckets, mapSuggestionFromApi),
+    loadRiskSummary: mapLoadRiskSummaryFromApi(
+      raw.load_risk_summary == null
+        ? null
+        : isRecord(raw.load_risk_summary)
+          ? raw.load_risk_summary
+          : {},
+    ),
     weeklyProgress: mapList(raw.weekly_progress, mapWeeklyProgressFromApi),
     dailyScores: mapList(raw.daily_scores, mapDailySafetyScoreFromApi),
     loadSeries: mapList(raw.load_series, mapLoadPointFromApi),

@@ -27,9 +27,11 @@ function createBaseline(): MilestoneEngineResult {
     activities: [],
     logs: [],
     incidents: [],
+    checkIns: [],
     hasCheckedInToday: false,
     classStatuses: [],
-    suggestions: [],
+    suggestionBuckets: [],
+    loadRiskSummary: null,
     weeklyProgress: [],
     dailyScores: [],
     loadSeries: [],
@@ -56,6 +58,8 @@ function createBaseline(): MilestoneEngineResult {
         defaultRecoveryWindowDays: draft.defaultRecoveryWindowDays ?? 3,
       });
     },
+    updateActivityClass: async () => undefined,
+    deleteActivityClass: async () => undefined,
     updateActivity: () => undefined,
     deactivateActivity: () => undefined,
     createGoal: () => undefined,
@@ -64,6 +68,8 @@ function createBaseline(): MilestoneEngineResult {
     createRule: () => undefined,
     updateRule: () => undefined,
     deleteRule: () => undefined,
+    createWeeklyTarget: () => undefined,
+    patchWeeklyTarget: () => undefined,
     createTrainingBlock: () => undefined,
     // H10.2 — app shell query status
     isInitialLoading: false,
@@ -127,6 +133,9 @@ export const c63SafeStretchSuggestion: Suggestion = {
   label: 'Stretching',
   state: 'safe',
   reason: 'Within recovery window.',
+  bucket: 'do',
+  scope: 'activity',
+  activityClassId: c63MobilityClass.id,
 };
 
 export const c63CautionYogaSuggestion: Suggestion = {
@@ -135,6 +144,9 @@ export const c63CautionYogaSuggestion: Suggestion = {
   state: 'caution',
   reason: 'Close to weekly cap.',
   nextSafeDate: '2026-05-30',
+  bucket: 'do',
+  scope: 'activity',
+  activityClassId: c63MobilityClass.id,
 };
 
 export const c63DangerSquatSuggestion: Suggestion = {
@@ -143,10 +155,13 @@ export const c63DangerSquatSuggestion: Suggestion = {
   state: 'danger',
   reason: 'Flare-up cooldown active.',
   nextSafeDate: '2026-06-02',
+  bucket: 'rest',
+  scope: 'activity',
+  activityClassId: 'cls-foot',
 };
 
 export interface C63DashboardFixtureOptions {
-  suggestions?: Suggestion[];
+  suggestionBuckets?: Suggestion[];
   activities?: Activity[];
 }
 
@@ -156,5 +171,6 @@ export function applyC63DashboardFixtures(
 ): void {
   mockEngine.activityClasses = [c63MobilityClass];
   mockEngine.activities = options.activities ?? [c63StretchActivity, c63YogaActivity];
-  mockEngine.suggestions = options.suggestions ?? [c63SafeStretchSuggestion];
+  mockEngine.suggestionBuckets =
+    options.suggestionBuckets ?? [c63SafeStretchSuggestion];
 }

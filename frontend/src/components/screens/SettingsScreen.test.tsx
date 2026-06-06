@@ -24,6 +24,7 @@ import type {
 } from '../../types';
 import type { NewActivityDraft } from '../../hooks/useMilestoneEngine';
 import { SettingsScreen } from './SettingsScreen';
+import { ApiError } from '../../lib/api/client';
 
 // Module-level mock for apiFetch used in F2.6 onClick wiring tests.
 // vi.hoisted ensures the variable is available when the hoisted vi.mock factory runs.
@@ -1774,5 +1775,144 @@ describe('SettingsScreen — edge cases', () => {
 
     expect(screen.getByText(/no active training block/i)).toBeInTheDocument();
     expect(screen.queryByText(/previous blocks/i)).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// S25.F8 — Activity class edit + delete
+// ---------------------------------------------------------------------------
+
+describe('SettingsScreen — S25.F8 activity class edit and delete', () => {
+  it('opens edit sheet and PATCHes rename and type on save', async () => {
+    const user = userEvent.setup();
+    const updateActivityClass = vi.fn().mockResolvedValue(undefined);
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [CLASS_RUNNING],
+      activities: [ACTIVITY_RUNNING],
+      logs: [],
+      updateActivityClass,
+    });
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    await user.click(screen.getByRole('button', { name: /edit running/i }));
+
+    expect(
+      screen.getByRole('dialog', { name: /edit activity class/i }),
+    ).toBeInTheDocument();
+
+    const nameInput = screen.getByLabelText(/class name/i);
+    await user.clear(nameInput);
+    await user.type(nameInput, 'Road Running');
+
+    await user.click(screen.getByRole('radio', { name: /^recovery$/i }));
+    await user.click(screen.getByRole('button', { name: /^save$/i }));
+
+    await waitFor(() => {
+      expect(updateActivityClass).toHaveBeenCalledWith(CLASS_RUNNING.id, {
+        name: 'Road Running',
+        type: 'recovery',
+      });
+    });
+  });
+
+  it('two-step delete lists activity names before DELETE', async () => {
+    const user = userEvent.setup();
+    const deleteActivityClass = vi.fn().mockResolvedValue(undefined);
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [CLASS_RUNNING],
+      activities: [ACTIVITY_RUNNING, ACTIVITY_INACTIVE],
+      logs: [],
+      deleteActivityClass,
+    });
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    await user.click(screen.getByRole('button', { name: /delete running/i }));
+    expect(screen.getByText(/delete class\?/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /^delete class$/i }));
+
+    const deleteDialog = screen.getByRole('dialog', { name: /delete activity class/i });
+    expect(within(deleteDialog).getByText(ACTIVITY_RUNNING.name)).toBeInTheDocument();
+    expect(within(deleteDialog).getByText(ACTIVITY_INACTIVE.name)).toBeInTheDocument();
+    expect(within(deleteDialog).getByText(/will be deleted/i)).toBeInTheDocument();
+    expect(deleteActivityClass).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: /^delete anyway$/i }));
+
+    await waitFor(() => {
+      expect(deleteActivityClass).toHaveBeenCalledWith(CLASS_RUNNING.id);
+    });
+  });
+
+  it('skips step two and DELETEs immediately when class has no activities', async () => {
+    const user = userEvent.setup();
+    const deleteActivityClass = vi.fn().mockResolvedValue(undefined);
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [CLASS_STRENGTH],
+      activities: [],
+      logs: [],
+      deleteActivityClass,
+    });
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    await user.click(screen.getByRole('button', { name: /delete strength/i }));
+    await user.click(screen.getByRole('button', { name: /^delete class$/i }));
+
+    await waitFor(() => {
+      expect(deleteActivityClass).toHaveBeenCalledWith(CLASS_STRENGTH.id);
+    });
+    expect(screen.queryByText(/will be deleted/i)).not.toBeInTheDocument();
+  });
+
+  it('shows API message on 409 when activities have logs', async () => {
+    const user = userEvent.setup();
+    const deleteActivityClass = vi.fn().mockRejectedValue(
+      new ApiError(409, 'Cannot delete class: Morning Run has logged sessions'),
+    );
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [CLASS_RUNNING],
+      activities: [ACTIVITY_RUNNING],
+      logs: [LOG_RECENT],
+      deleteActivityClass,
+    });
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    await user.click(screen.getByRole('button', { name: /delete running/i }));
+    await user.click(screen.getByRole('button', { name: /^delete class$/i }));
+    await user.click(screen.getByRole('button', { name: /^delete anyway$/i }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/cannot delete class: morning run has logged sessions/i),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it('does not call delete when user cancels at step one', async () => {
+    const user = userEvent.setup();
+    const deleteActivityClass = vi.fn();
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [CLASS_RUNNING],
+      activities: [ACTIVITY_RUNNING],
+      logs: [],
+      deleteActivityClass,
+    });
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    await user.click(screen.getByRole('button', { name: /delete running/i }));
+    await user.click(screen.getByRole('button', { name: /^cancel$/i }));
+
+    expect(deleteActivityClass).not.toHaveBeenCalled();
+    expect(screen.queryByText(/delete class\?/i)).not.toBeInTheDocument();
   });
 });

@@ -817,14 +817,14 @@ def test_get_dashboard_weekly_progress_unchanged_by_b7_extension(
     assert dashboard.weekly_progress[0].weekly_target_id == WEEKLY_TARGETS[0]["id"]
 
 
-def test_get_dashboard_legacy_suggestions_still_populated(
+def test_get_dashboard_omits_legacy_suggestions_field(
     app_with_test_database: FastAPI,
     session: Session,
 ) -> None:
-    """Legacy suggestions remain until S25.F6 removes the field."""
+    """S25.F6 removes legacy suggestions; clients use suggestion_buckets only."""
     seed_dashboard_mock_graph(app_with_test_database)
 
     dashboard = get_dashboard(session, as_of=FROZEN_AS_OF)
 
-    assert dashboard.suggestions
+    assert not hasattr(dashboard, "suggestions")
     assert dashboard.suggestion_buckets

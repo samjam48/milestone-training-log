@@ -67,6 +67,9 @@ const c63WalkSuggestion: Suggestion = {
   label: 'Walking',
   state: 'safe',
   reason: 'Within recovery window.',
+  bucket: 'do',
+  scope: 'activity',
+  activityClassId: 'cls-mobility',
 };
 
 const c63BandsActivity: Activity = {
@@ -85,6 +88,9 @@ const c63BandsSuggestion: Suggestion = {
   label: 'Bands',
   state: 'safe',
   reason: 'Within recovery window.',
+  bucket: 'do',
+  scope: 'activity',
+  activityClassId: 'cls-mobility',
 };
 
 describe('InlineLogSheet quick-log contract (F9.10)', () => {
@@ -92,7 +98,7 @@ describe('InlineLogSheet quick-log contract (F9.10)', () => {
     vi.clearAllMocks();
     resetMockEngine();
     applyC63DashboardFixtures({
-      suggestions: [c63SafeStretchSuggestion],
+      suggestionBuckets: [c63SafeStretchSuggestion],
       activities: [c63StretchActivity, c63YogaActivity],
     });
     mockEngine.submitLog = vi.fn();
@@ -144,7 +150,7 @@ describe('InlineLogSheet quick-log contract (F9.10)', () => {
     mockEngine.submitLog = submitLog;
 
     applyC63DashboardFixtures({
-      suggestions: [c63WalkSuggestion],
+      suggestionBuckets: [c63WalkSuggestion],
       activities: [c63WalkActivity],
     });
 
@@ -170,7 +176,7 @@ describe('InlineLogSheet quick-log contract (F9.10)', () => {
     mockEngine.submitLog = submitLog;
 
     applyC63DashboardFixtures({
-      suggestions: [c63BandsSuggestion],
+      suggestionBuckets: [c63BandsSuggestion],
       activities: [c63BandsActivity],
     });
 
@@ -214,7 +220,7 @@ describe('InlineLogSheet quick-log contract (F9.10)', () => {
   it('does not open the sheet when the suggestion cannot be resolved to an activity', async () => {
     const user = userEvent.setup();
     applyC63DashboardFixtures({
-      suggestions: [{ ...c63SafeStretchSuggestion, id: 'act-deleted' }],
+      suggestionBuckets: [{ ...c63SafeStretchSuggestion, id: 'act-deleted' }],
       activities: [c63YogaActivity],
     });
 

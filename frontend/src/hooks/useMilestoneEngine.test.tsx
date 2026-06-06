@@ -59,11 +59,16 @@ vi.mock('../lib/api', () => ({
   createRule: vi.fn(),
   patchRule: vi.fn(),
   deleteRule: vi.fn(),
+  createWeeklyTarget: vi.fn(),
+  patchWeeklyTarget: vi.fn(),
   createTrainingBlock: vi.fn(),
   createActivity: vi.fn(),
   createActivityClass: vi.fn(),
+  patchActivityClass: vi.fn(),
+  deleteActivityClass: vi.fn(),
   patchActivity: vi.fn(),
   listActivities: vi.fn(),
+  listDailyCheckIns: vi.fn(),
   getDelayedTax: vi.fn(),
 }));
 
@@ -83,11 +88,16 @@ import {
   createRule as createRuleApi,
   patchRule,
   deleteRule as deleteRuleApi,
+  createWeeklyTarget as createWeeklyTargetApi,
+  patchWeeklyTarget as patchWeeklyTargetApi,
   createTrainingBlock as createTrainingBlockApi,
   createActivity,
   createActivityClass,
+  patchActivityClass,
+  deleteActivityClass,
   patchActivity,
   listActivities,
+  listDailyCheckIns,
   getDelayedTax,
   createDailyCheckIn,
   createFlareUpIncident,
@@ -236,8 +246,32 @@ function setupDefaultApiMocks(): void {
     defaultRecoveryWindowDays: 3,
     createdAt: '2026-05-30T06:00:00Z',
   });
+  vi.mocked(patchActivityClass).mockResolvedValue({
+    id: 'cls-foot',
+    name: 'Foot Load Updated',
+    type: 'recovery',
+    defaultRecoveryWindowDays: 3,
+    createdAt: '2026-05-30T06:00:00Z',
+  });
+  vi.mocked(deleteActivityClass).mockResolvedValue(undefined);
   vi.mocked(patchActivity).mockResolvedValue(activityFixture);
   vi.mocked(listActivities).mockResolvedValue([]);
+  vi.mocked(listDailyCheckIns).mockResolvedValue([
+    {
+      id: 'ci-history',
+      checkInDate: '2026-05-20',
+      painLevel: 6,
+      readinessLevel: 4,
+      stiffnessLevel: 5,
+      hasFlareUp: true,
+      flareUp: {
+        bodyPart: 'Left heel',
+        severity: 6,
+        likelyCauseActivityClassIds: [],
+      },
+      createdAt: '2026-05-20T07:00:00Z',
+    },
+  ]);
   vi.mocked(getDelayedTax).mockResolvedValue(delayedTaxFixture);
   vi.mocked(createDailyCheckIn).mockResolvedValue({
     id: 'ci-test',
@@ -296,7 +330,8 @@ describe('useMilestoneEngine API rewire (F1.3)', () => {
     expect(result.current.incidents).toEqual(dashboardPayload.incidents);
     expect(result.current.hasCheckedInToday).toBe(dashboardPayload.hasCheckedInToday);
     expect(result.current.classStatuses).toEqual(dashboardPayload.classStatuses);
-    expect(result.current.suggestions).toEqual(dashboardPayload.suggestions);
+    expect(result.current.suggestionBuckets).toEqual(dashboardPayload.suggestionBuckets);
+    expect(result.current.loadRiskSummary).toEqual(dashboardPayload.loadRiskSummary);
     expect(result.current.weeklyProgress).toEqual(dashboardPayload.weeklyProgress);
     expect(result.current.dailyScores).toEqual(dashboardPayload.dailyScores);
     expect(result.current.loadSeries).toEqual(dashboardPayload.loadSeries);
@@ -985,6 +1020,69 @@ describe('useMilestoneEngine data plane (F2.0)', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // weekly target mutations (S25.F5)
+  // ---------------------------------------------------------------------------
+
+  it('patchWeeklyTarget calls patchWeeklyTargetApi and invalidates weeklyTargets and dashboard', async () => {
+    const { result, queryClient } = renderHookWithProviders(() => useMilestoneEngine());
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    await waitFor(() => {
+      expect(listWeeklyTargetsByBlock).toHaveBeenCalledTimes(1);
+    });
+
+    act(() => {
+      result.current.patchWeeklyTarget('wt-foot', { targetValue: 12 });
+    });
+
+    await waitFor(() => {
+      expect(patchWeeklyTargetApi).toHaveBeenCalledTimes(1);
+    });
+
+    const [targetId, patch] = vi.mocked(patchWeeklyTargetApi).mock.calls[0] ?? [];
+    expect(targetId).toBe('wt-foot');
+    expect(patch?.targetValue).toBe(12);
+
+    await waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['weekly-targets', ACTIVE_BLOCK_ID] });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['dashboard'] });
+    });
+  });
+
+  it('createWeeklyTarget calls createWeeklyTargetApi with blockId and invalidates weeklyTargets and dashboard', async () => {
+    const { result, queryClient } = renderHookWithProviders(() => useMilestoneEngine());
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    await waitFor(() => {
+      expect(listWeeklyTargetsByBlock).toHaveBeenCalledTimes(1);
+    });
+
+    act(() => {
+      result.current.createWeeklyTarget({
+        activityClassId: 'cls-foot',
+        targetValue: 10,
+        targetUnit: 'km',
+      });
+    });
+
+    await waitFor(() => {
+      expect(createWeeklyTargetApi).toHaveBeenCalledTimes(1);
+    });
+
+    const [calledBlockId, draft] = vi.mocked(createWeeklyTargetApi).mock.calls[0] ?? [];
+    expect(calledBlockId).toBe(ACTIVE_BLOCK_ID);
+    expect(draft?.id).toBe(MOCK_UUID);
+    expect(draft?.activityClassId).toBe('cls-foot');
+    expect(draft?.targetValue).toBe(10);
+    expect(draft?.targetUnit).toBe('km');
+
+    await waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['weekly-targets', ACTIVE_BLOCK_ID] });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['dashboard'] });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // createRule mutation
   // ---------------------------------------------------------------------------
 
@@ -1171,6 +1269,8 @@ describe('useMilestoneEngine data plane (F2.0)', () => {
     expect(typeof result.current.createRule).toBe('function');
     expect(typeof result.current.updateRule).toBe('function');
     expect(typeof result.current.deleteRule).toBe('function');
+    expect(typeof result.current.createWeeklyTarget).toBe('function');
+    expect(typeof result.current.patchWeeklyTarget).toBe('function');
     expect(typeof result.current.createTrainingBlock).toBe('function');
   });
 });
@@ -1557,5 +1657,100 @@ describe('useMilestoneEngine dashboard consolidation (H10.3)', () => {
     expect(result.current.previousBlocks).toEqual([]);
     expect(listGoals).not.toHaveBeenCalled();
     expect(listTrainingBlocks).not.toHaveBeenCalled();
+  });
+});
+
+describe('useMilestoneEngine — S25.F8/F9 check-ins and activity class mutations', () => {
+  beforeEach(() => {
+    vi.stubGlobal('crypto', { randomUUID: () => MOCK_UUID });
+    setupDefaultApiMocks();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  it('loads checkIns from listDailyCheckIns for the last 365 days', async () => {
+    const { result } = renderHookWithProviders(() => useMilestoneEngine());
+
+    await waitFor(() => {
+      expect(listDailyCheckIns).toHaveBeenCalledWith({
+        startDate: '2025-05-25',
+        endDate: dashboardPayload.todayDate,
+      });
+    });
+
+    expect(result.current.checkIns).toEqual([
+      expect.objectContaining({
+        hasFlareUp: true,
+        flareUp: expect.objectContaining({ bodyPart: 'Left heel' }),
+      }),
+    ]);
+  });
+
+  it('updateActivityClass PATCHes and invalidates dashboard + activity-classes', async () => {
+    const { result, queryClient } = renderHookWithProviders(() => useMilestoneEngine());
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    await waitFor(() => {
+      expect(result.current.todayDate).toBe(dashboardPayload.todayDate);
+    });
+
+    await act(async () => {
+      await result.current.updateActivityClass('cls-foot', {
+        name: 'Foot load',
+        type: 'recovery',
+      });
+    });
+
+    expect(patchActivityClass).toHaveBeenCalledWith('cls-foot', {
+      name: 'Foot load',
+      type: 'recovery',
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['dashboard'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['activity-classes'] });
+  });
+
+  it('deleteActivityClass DELETEs and invalidates dashboard, activity-classes, and activities', async () => {
+    const { result, queryClient } = renderHookWithProviders(() => useMilestoneEngine());
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    await waitFor(() => {
+      expect(result.current.todayDate).toBe(dashboardPayload.todayDate);
+    });
+
+    await act(async () => {
+      await result.current.deleteActivityClass('cls-foot');
+    });
+
+    expect(deleteActivityClass).toHaveBeenCalledWith('cls-foot');
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['dashboard'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['activity-classes'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['activities'] });
+  });
+
+  it('submitCheckIn invalidates daily-check-ins on success', async () => {
+    const { result, queryClient } = renderHookWithProviders(() => useMilestoneEngine());
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    await waitFor(() => {
+      expect(result.current.todayDate).toBe(dashboardPayload.todayDate);
+    });
+
+    act(() => {
+      result.current.submitCheckIn({
+        painLevel: 3,
+        readinessLevel: 6,
+        stiffnessLevel: 4,
+        hasFlareUp: false,
+      });
+    });
+
+    await waitFor(() => {
+      expect(createDailyCheckIn).toHaveBeenCalledTimes(1);
+    });
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['daily-check-ins'] });
   });
 });

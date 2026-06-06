@@ -172,7 +172,7 @@ describe('Dashboard suggestion → InlineLogSheet quick log (C6.3 / F9.10)', () 
   it('opens InlineLogSheet with the caution suggestion activity when CTA is tapped', async () => {
     const user = userEvent.setup();
     applyC63DashboardFixtures({
-      suggestions: [c63CautionYogaSuggestion],
+      suggestionBuckets: [c63CautionYogaSuggestion],
       activities: [c63StretchActivity, c63YogaActivity],
     });
     renderWithProviders(<App />);
@@ -217,7 +217,7 @@ describe('Dashboard suggestion → InlineLogSheet quick log (C6.3 / F9.10)', () 
   it('opens the second suggestion activity after closing the first quick-log sheet', async () => {
     const user = userEvent.setup();
     applyC63DashboardFixtures({
-      suggestions: [c63SafeStretchSuggestion, c63CautionYogaSuggestion],
+      suggestionBuckets: [c63SafeStretchSuggestion, c63CautionYogaSuggestion],
       activities: [c63StretchActivity, c63YogaActivity],
     });
     renderWithProviders(<App />);
@@ -236,7 +236,7 @@ describe('Dashboard suggestion → InlineLogSheet quick log (C6.3 / F9.10)', () 
   it('does not open quick log or Log Activity when suggestion id is not in activities', async () => {
     const user = userEvent.setup();
     applyC63DashboardFixtures({
-      suggestions: [{ ...c63SafeStretchSuggestion, id: 'act-deleted' }],
+      suggestionBuckets: [{ ...c63SafeStretchSuggestion, id: 'act-deleted' }],
       activities: [c63StretchActivity],
     });
     renderWithProviders(<App />);
@@ -249,7 +249,7 @@ describe('Dashboard suggestion → InlineLogSheet quick log (C6.3 / F9.10)', () 
 
   it('renders danger suggestions without a Log CTA on the dashboard', () => {
     applyC63DashboardFixtures({
-      suggestions: [c63DangerSquatSuggestion],
+      suggestionBuckets: [c63DangerSquatSuggestion],
       activities: [c63StretchActivity],
     });
     renderWithProviders(<App />);

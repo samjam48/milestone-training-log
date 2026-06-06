@@ -92,7 +92,6 @@ class DashboardRead(BaseModel):
     incidents: list[FlareUpIncidentRead]
     has_checked_in_today: bool
     class_statuses: list[ActivityClassStatusRead]
-    suggestions: list[SuggestionRead]
     suggestion_buckets: list[SuggestionRead]
     goal_rows: list[GoalDashboardRowRead]
     load_risk_summary: LoadRiskSummaryRead | None

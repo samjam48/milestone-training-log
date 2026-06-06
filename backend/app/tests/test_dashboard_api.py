@@ -43,7 +43,6 @@ EXPECTED_TOP_LEVEL_KEYS = {
     "incidents",
     "has_checked_in_today",
     "class_statuses",
-    "suggestions",
     "suggestion_buckets",
     "goal_rows",
     "load_risk_summary",
@@ -480,7 +479,7 @@ async def test_get_dashboard_includes_suggestion_buckets_goal_rows_load_risk_sum
     app_with_test_database: FastAPI,
     client: AsyncClient,
 ) -> None:
-    """Dashboard response exposes B7 extension fields alongside legacy suggestions."""
+    """Dashboard response exposes B7 extension fields without legacy suggestions."""
     seed_dashboard_mock_graph(app_with_test_database)
 
     response = await client.get(DASHBOARD_URL, params={"as_of": AS_OF})
@@ -491,7 +490,7 @@ async def test_get_dashboard_includes_suggestion_buckets_goal_rows_load_risk_sum
     assert isinstance(payload["suggestion_buckets"], list)
     assert isinstance(payload["goal_rows"], list)
     assert payload["load_risk_summary"] is not None
-    assert isinstance(payload["suggestions"], list)
+    assert "suggestions" not in payload
 
 
 async def test_get_dashboard_suggestion_buckets_rows_include_bucket_scope_description(

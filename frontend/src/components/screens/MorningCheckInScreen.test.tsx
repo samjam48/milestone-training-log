@@ -9,7 +9,7 @@ import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders';
 import { mockEngine, resetMockEngine } from '../../test/mockEngine';
 import type { DelayedTaxResponse } from '../../hooks/useMilestoneEngine';
-import type { ActivityClass } from '../../types';
+import type { ActivityClass, DailyCheckIn } from '../../types';
 import { MorningCheckInScreen } from './MorningCheckInScreen';
 
 const FOOT_PERFORMANCE_CLASS: ActivityClass = {
@@ -105,5 +105,91 @@ describe('MorningCheckInScreen — F10.4 delayed-tax attribution', () => {
     expect(mockEngine.submitCheckIn).toHaveBeenCalledWith(
       expect.objectContaining({ hasFlareUp: false }),
     );
+  });
+});
+
+function makeCheckIn(
+  overrides: Partial<DailyCheckIn> & Pick<DailyCheckIn, 'checkInDate'>,
+): DailyCheckIn {
+  return {
+    id: overrides.id ?? 'ci-test',
+    userId: overrides.userId ?? 'user-1',
+    checkInDate: overrides.checkInDate,
+    painLevel: overrides.painLevel ?? 5,
+    readinessLevel: overrides.readinessLevel ?? 5,
+    stiffnessLevel: overrides.stiffnessLevel ?? 5,
+    hasFlareUp: overrides.hasFlareUp ?? false,
+    flareUp: overrides.flareUp,
+    createdAt: overrides.createdAt ?? '2026-05-01T12:00:00Z',
+  };
+}
+
+describe('MorningCheckInScreen — S25.F9 body part chips', () => {
+  beforeEach(() => {
+    resetMockEngine();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('shows suggestion chip from check-in flare history when flare-up is yes', async () => {
+    const user = userEvent.setup();
+    mockEngine.checkIns = [
+      makeCheckIn({
+        id: 'ci-heel',
+        checkInDate: '2026-05-15',
+        hasFlareUp: true,
+        flareUp: {
+          bodyPart: 'Left heel',
+          severity: 7,
+          likelyCauseActivityClassIds: [],
+        },
+      }),
+    ];
+
+    renderWithProviders(
+      <MorningCheckInScreen engine={mockEngine} onBack={vi.fn()} onComplete={vi.fn()} />,
+    );
+
+    await user.click(screen.getByRole('radio', { name: 'Yes' }));
+    expect(screen.getByRole('button', { name: 'Left heel' })).toBeInTheDocument();
+  });
+
+  it('fills body part field when chip is tapped', async () => {
+    const user = userEvent.setup();
+    mockEngine.checkIns = [
+      makeCheckIn({
+        id: 'ci-heel',
+        checkInDate: '2026-05-15',
+        hasFlareUp: true,
+        flareUp: {
+          bodyPart: 'Left heel',
+          severity: 7,
+          likelyCauseActivityClassIds: [],
+        },
+      }),
+    ];
+
+    renderWithProviders(
+      <MorningCheckInScreen engine={mockEngine} onBack={vi.fn()} onComplete={vi.fn()} />,
+    );
+
+    await user.click(screen.getByRole('radio', { name: 'Yes' }));
+    await user.click(screen.getByRole('button', { name: 'Left heel' }));
+    expect(screen.getByLabelText(/body part affected/i)).toHaveValue('Left heel');
+  });
+
+  it('shows no chips when history is empty', async () => {
+    const user = userEvent.setup();
+    mockEngine.checkIns = [];
+    mockEngine.incidents = [];
+
+    renderWithProviders(
+      <MorningCheckInScreen engine={mockEngine} onBack={vi.fn()} onComplete={vi.fn()} />,
+    );
+
+    await user.click(screen.getByRole('radio', { name: 'Yes' }));
+    expect(screen.queryByRole('button', { name: /heel|toe|knee/i })).not.toBeInTheDocument();
   });
 });
