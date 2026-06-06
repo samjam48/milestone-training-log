@@ -14,7 +14,6 @@ import {
   EditBlockRulesScreen,
   BlockReviewScreen,
   NewTrainingBlockScreen,
-  ActivityManagerScreen,
   InlineLogSheet,
   NewActivitySheet,
 } from './components/screens';
@@ -122,18 +121,6 @@ function resolveStackScreen(
   if (entry.screen === 'new-training-block') {
     return (
       <NewTrainingBlockScreen
-        engine={engine}
-        onBack={onPop}
-        onComplete={onPop}
-      />
-    );
-  }
-  if (entry.screen === 'activity-manager') {
-    const activity = entry.params.activity as Activity | undefined;
-    if (activity == null) return <></>;
-    return (
-      <ActivityManagerScreen
-        activity={activity}
         engine={engine}
         onBack={onPop}
         onComplete={onPop}
@@ -299,7 +286,6 @@ export function App(): React.ReactElement {
         onReview={() => pushScreen('block-review')}
         onNewBlock={() => pushScreen('new-training-block')}
         onViewBlock={(blockId) => pushScreen('block-review', { blockId })}
-        onEditActivity={(activity) => pushScreen('activity-manager', { activity })}
         onOpenNewActivity={openNewActivitySheet}
         onUnauthenticated={handleUnauthenticated}
       />

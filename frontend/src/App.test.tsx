@@ -431,7 +431,7 @@ describe('Settings stack navigation (F9.4)', () => {
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
   });
 
-  it('pushing activity-manager via its hidden affordance renders the overlay, hides the tab bar, and pops back out', async () => {
+  it('opens edit activity as a centered modal without pushing a stack screen', async () => {
     const user = userEvent.setup();
     const activityClass: ActivityClass = {
       id: 'cls-performance',
@@ -458,15 +458,9 @@ describe('Settings stack navigation (F9.4)', () => {
     await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Settings' }));
     await user.click(screen.getByRole('button', { name: /edit morning run/i }));
 
-    expect(screen.getByTestId('stack-screen-overlay')).toBeInTheDocument();
-    expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /go back/i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /edit activity/i })).toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: /go back/i }));
-
     expect(screen.queryByTestId('stack-screen-overlay')).not.toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: /edit activity/i })).toBeInTheDocument();
   });
 
   it('still renders nothing for an unknown stack key without crashing', async () => {

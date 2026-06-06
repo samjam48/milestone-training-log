@@ -236,7 +236,6 @@ interface SettingsScreenCallbackProps {
   onReview?: () => void;
   onNewBlock?: () => void;
   onViewBlock?: (blockId: string) => void;
-  onEditActivity?: (activity: Activity) => void;
   onOpenNewActivity?: () => void;
 }
 
@@ -828,9 +827,8 @@ describe('SettingsScreen — stack action callbacks', () => {
     expect(onViewBlock).toHaveBeenCalledWith(PREVIOUS_BLOCK_1.id);
   });
 
-  it('calls onEditActivity with the activity when Edit is clicked', async () => {
+  it('opens the edit activity modal when Edit is clicked', async () => {
     const user = userEvent.setup();
-    const onEditActivity = vi.fn();
     const engine = makeEngine({
       block: ACTIVE_BLOCK,
       activityClasses: [CLASS_RUNNING],
@@ -838,12 +836,13 @@ describe('SettingsScreen — stack action callbacks', () => {
       logs: [],
     });
 
-    renderSettingsScreenWithCallbacks({ engine, onEditActivity });
+    renderSettingsScreenWithCallbacks({ engine });
 
     await user.click(screen.getByRole('button', { name: /edit morning run/i }));
 
-    expect(onEditActivity).toHaveBeenCalledTimes(1);
-    expect(onEditActivity).toHaveBeenCalledWith(ACTIVITY_RUNNING);
+    expect(
+      screen.getByRole('dialog', { name: /edit activity/i }),
+    ).toBeInTheDocument();
   });
 
   it('requires confirmation before calling engine.deactivateActivity from the activity list', async () => {
