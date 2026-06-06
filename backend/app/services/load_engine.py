@@ -13,13 +13,16 @@ from app.schemas.load_engine import (
     CheckInDict,
     DailySafetyScore,
     DelayedTaxHit,
+    GoalDict,
     IncidentDict,
     LoadPoint,
     LogDict,
+    RecoveryTargetDict,
     RuleDict,
     RuleViolationSnapshot,
     SafetyState,
     Suggestion,
+    SuggestionBucket,
     ViolationSeverity,
     WeeklyProgress,
     WeeklyTargetDict,
@@ -729,6 +732,257 @@ def compute_suggestions(
                 suggestion["last_done_date"] = status["last_done_date"]
         suggestions.append(suggestion)
     return suggestions
+
+
+# ---------------------------------------------------------------------------
+# compute_suggestion_buckets (S25.B5)
+# ---------------------------------------------------------------------------
+
+_STATE_SAFE_ORDER = {"safe": 0, "caution": 1, "danger": 2}
+_DESCRIPTION_MAX_LEN = 80
+
+
+def _goal_achieved_in_live_period(
+    goals: list[GoalDict],
+    activity_id: str,
+    as_of: str,
+) -> bool:
+    for goal in goals:
+        if goal.get("activity_id") != activity_id:
+            continue
+        if goal.get("status") != "achieved":
+            continue
+        target_date = goal.get("target_date")
+        if not target_date:
+            continue
+        if as_of <= target_date:
+            return True
+    return False
+
+
+def _recovery_target_met_on_day(
+    target: RecoveryTargetDict,
+    logs: list[LogDict],
+    as_of: str,
+) -> bool:
+    activity_id = target["activity_id"]
+    target_frequency = int(target["target_frequency"])
+    if target.get("frequency_unit") == "weekly":
+        week_start = add_days(as_of, -(parse_iso_date(as_of).weekday()))
+        count = sum(
+            1
+            for log in logs
+            if log["activity_id"] == activity_id
+            and week_start <= log["logged_date"] <= as_of
+        )
+        return count >= target_frequency
+
+    count = sum(
+        1
+        for log in logs
+        if log["activity_id"] == activity_id and log["logged_date"] == as_of
+    )
+    return count >= target_frequency
+
+
+def _recovery_daily_target_met(
+    activity_id: str,
+    class_id: str,
+    activity_classes: list[ActivityClassDict],
+    recovery_targets: list[RecoveryTargetDict],
+    logs: list[LogDict],
+    as_of: str,
+) -> bool:
+    class_map = {cls["id"]: cls for cls in activity_classes}
+    cls = class_map.get(class_id)
+    if cls is None or cls.get("type") != "recovery":
+        return False
+    for target in recovery_targets:
+        if target.get("activity_id") != activity_id:
+            continue
+        if _recovery_target_met_on_day(target, logs, as_of):
+            return True
+    return False
+
+
+def _truncate_description(text: str, max_len: int = _DESCRIPTION_MAX_LEN) -> str:
+    if len(text) <= max_len:
+        return text
+    return text[: max_len - 1] + "…"
+
+
+def _build_suggestion_row(
+    *,
+    activity: ActivityDict,
+    bucket: SuggestionBucket,
+    status: ActivityClassStatus | None,
+    cls: ActivityClassDict | None,
+    description: str | None = None,
+) -> Suggestion:
+    class_id = activity["activity_class_id"]
+    row: Suggestion = {
+        "id": activity["id"],
+        "label": activity["name"],
+        "state": status["state"] if status else "safe",
+        "reason": (
+            status["reason"]
+            if status
+            else (
+                f"Ready — {cls['name'] if cls else 'this class'} "
+                "has no active restrictions."
+            )
+        ),
+        "bucket": bucket,
+        "scope": "activity",
+        "activity_class_id": class_id,
+        "description": description,
+    }
+    if status:
+        if "next_safe_date" in status:
+            row["next_safe_date"] = status["next_safe_date"]
+        if "last_done_date" in status:
+            row["last_done_date"] = status["last_done_date"]
+    return row
+
+
+def _build_class_rest_row(
+    *,
+    class_id: str,
+    cls: ActivityClassDict,
+    status: ActivityClassStatus,
+    activity_names: list[str],
+) -> Suggestion:
+    names = ", ".join(activity_names)
+    row: Suggestion = {
+        "id": class_id,
+        "label": cls["name"],
+        "state": status["state"],
+        "reason": status["reason"],
+        "bucket": "rest",
+        "scope": "class",
+        "activity_class_id": class_id,
+        "description": _truncate_description(names),
+    }
+    if "next_safe_date" in status:
+        row["next_safe_date"] = status["next_safe_date"]
+    if "last_done_date" in status:
+        row["last_done_date"] = status["last_done_date"]
+    return row
+
+
+def compute_suggestion_buckets(
+    as_of: str,
+    activity_classes: list[ActivityClassDict],
+    activities: list[ActivityDict],
+    logs: list[LogDict],
+    rules: list[RuleDict],
+    recovery_targets: list[RecoveryTargetDict],
+    goals: list[GoalDict],
+    weekly_targets: list[WeeklyTargetDict],
+) -> list[Suggestion]:
+    del weekly_targets  # context only for callers; bucket logic does not use it
+
+    class_statuses = compute_class_statuses(
+        as_of, activity_classes, activities, logs, rules
+    )
+    status_map = {status["activity_class_id"]: status for status in class_statuses}
+    class_map = {cls["id"]: cls for cls in activity_classes}
+
+    done_rows: list[Suggestion] = []
+    do_rows: list[Suggestion] = []
+    rest_rows: list[Suggestion] = []
+    rest_by_class: dict[str, list[str]] = {}
+
+    for activity in activities:
+        if not activity.get("is_active", True):
+            continue
+
+        activity_id = activity["id"]
+        class_id = activity["activity_class_id"]
+        status = status_map.get(class_id)
+        cls = class_map.get(class_id)
+
+        logged_today = any(
+            log["activity_id"] == activity_id and log["logged_date"] == as_of
+            for log in logs
+        )
+        if logged_today:
+            done_rows.append(
+                _build_suggestion_row(
+                    activity=activity,
+                    bucket="done",
+                    status=status,
+                    cls=cls,
+                    description="Logged today.",
+                )
+            )
+            continue
+
+        if _goal_achieved_in_live_period(goals, activity_id, as_of):
+            continue
+
+        if _recovery_daily_target_met(
+            activity_id,
+            class_id,
+            activity_classes,
+            recovery_targets,
+            logs,
+            as_of,
+        ):
+            continue
+
+        if status is not None and status["state"] in {"caution", "danger"}:
+            rest_rows.append(
+                _build_suggestion_row(
+                    activity=activity,
+                    bucket="rest",
+                    status=status,
+                    cls=cls,
+                    description=status["reason"],
+                )
+            )
+            rest_by_class.setdefault(class_id, []).append(activity["name"])
+            continue
+
+        do_rows.append(
+            _build_suggestion_row(
+                activity=activity,
+                bucket="do",
+                status=status,
+                cls=cls,
+                description=None,
+            )
+        )
+
+    for class_id, names in rest_by_class.items():
+        if len(names) < 2:
+            continue
+        cls = class_map.get(class_id)
+        status = status_map.get(class_id)
+        if cls is None or status is None:
+            continue
+        rest_rows.append(
+            _build_class_rest_row(
+                class_id=class_id,
+                cls=cls,
+                status=status,
+                activity_names=names,
+            )
+        )
+
+    done_rows.sort(
+        key=lambda row: row.get("last_done_date") or "",
+        reverse=True,
+    )
+    do_rows.sort(key=lambda row: _STATE_SAFE_ORDER.get(row["state"], 99))
+    rest_rows.sort(
+        key=lambda row: (
+            -_STATE_SAFE_ORDER.get(row["state"], 0),
+            row.get("scope") != "class",
+        )
+    )
+
+    return done_rows + do_rows + rest_rows
 
 
 # ---------------------------------------------------------------------------

@@ -12,6 +12,7 @@ from typing import Any
 
 import pytest
 
+from app.schemas.load_engine import Suggestion
 from app.services import load_engine
 from app.services.load_engine import (
     DEFAULT_RPE,
@@ -21,6 +22,7 @@ from app.services.load_engine import (
     compute_clean_streak,
     compute_daily_safety_scores,
     compute_load_series,
+    compute_suggestion_buckets,
     compute_suggestions,
     compute_weekly_progress,
     daily_load,
@@ -854,6 +856,216 @@ def test_compute_suggestions_excludes_inactive_activities() -> None:
 
 
 # ---------------------------------------------------------------------------
+# S25.B5 — compute_suggestion_buckets
+# ---------------------------------------------------------------------------
+
+
+def _make_log(
+    activity_id: str,
+    logged_date: str,
+    *,
+    log_id: str | None = None,
+    volume_value: float = 1.0,
+    rpe: int = 3,
+) -> dict[str, Any]:
+    return {
+        "id": log_id or f"log-{activity_id}-{logged_date}",
+        "activity_id": activity_id,
+        "logged_date": logged_date,
+        "volume_value": volume_value,
+        "rpe": rpe,
+    }
+
+
+def _make_goal(
+    activity_id: str,
+    *,
+    goal_id: str = "goal-1",
+    status: str = "achieved",
+    progress_value: float = 10.0,
+    progress_target: float = 10.0,
+) -> dict[str, Any]:
+    return {
+        "id": goal_id,
+        "activity_id": activity_id,
+        "status": status,
+        "progress_value": progress_value,
+        "progress_target": progress_target,
+        "timeframe": "monthly",
+        "target_date": "2026-06-30",
+    }
+
+
+def _make_recovery_target(
+    activity_id: str,
+    *,
+    target_id: str | None = None,
+    target_frequency: int = 3,
+    frequency_unit: str = "daily",
+) -> dict[str, Any]:
+    return {
+        "id": target_id or f"rt-{activity_id}",
+        "training_block_id": "blk-1",
+        "activity_id": activity_id,
+        "target_frequency": target_frequency,
+        "frequency_unit": frequency_unit,
+        "current_streak_days": 0,
+    }
+
+
+def _bucket_ids(
+    buckets: list[Suggestion],
+    bucket: str,
+) -> set[str]:
+    return {row["id"] for row in buckets if row.get("bucket") == bucket}
+
+
+def _call_suggestion_buckets(
+    *,
+    as_of: str = AS_OF,
+    classes: list[dict[str, Any]] | None = None,
+    activities: list[dict[str, Any]] | None = None,
+    logs: list[dict[str, Any]] | None = None,
+    rules: list[dict[str, Any]] | None = None,
+    recovery_targets: list[dict[str, Any]] | None = None,
+    goals: list[dict[str, Any]] | None = None,
+    weekly_targets: list[dict[str, Any]] | None = None,
+) -> list[Suggestion]:
+    return compute_suggestion_buckets(
+        as_of,
+        classes or ACTIVITY_CLASSES,
+        activities or ACTIVITIES,
+        logs if logs is not None else LOGS,
+        rules if rules is not None else RULES,
+        recovery_targets or [],
+        goals or [],
+        weekly_targets if weekly_targets is not None else WEEKLY_TARGETS,
+    )
+
+
+def test_compute_suggestion_buckets_walk_logged_today_not_in_do() -> None:
+    """Activities logged on as_of belong in done, not do."""
+    as_of = "2026-05-25"
+    walk = next(activity for activity in ACTIVITIES if activity["id"] == "act-walk")
+    foot_class = next(cls for cls in ACTIVITY_CLASSES if cls["id"] == "cls-foot")
+    logs = [_make_log("act-walk", as_of)]
+
+    buckets = _call_suggestion_buckets(
+        as_of=as_of,
+        classes=[foot_class],
+        activities=[walk],
+        logs=logs,
+        rules=[],
+        weekly_targets=[],
+    )
+
+    assert "act-walk" in _bucket_ids(buckets, "done")
+    assert "act-walk" not in _bucket_ids(buckets, "do")
+    done_row = next(row for row in buckets if row["id"] == "act-walk")
+    assert done_row["bucket"] == "done"
+    assert done_row["scope"] == "activity"
+    assert done_row["activity_class_id"] == "cls-foot"
+
+
+def test_compute_suggestion_buckets_class_rest_blacklists_class() -> None:
+    """Class rest violation puts activities in rest, not do."""
+    as_of = "2026-05-25"
+    foot_activities = [
+        activity for activity in ACTIVITIES if activity["activity_class_id"] == "cls-foot"
+    ]
+    foot_class = next(cls for cls in ACTIVITY_CLASSES if cls["id"] == "cls-foot")
+    logs = [_make_log("act-walk", "2026-05-24")]
+    rules = [
+        _make_rule(
+            id="rule-rest-foot",
+            activity_class_id="cls-foot",
+            rule_type="rest_between_class",
+            threshold_value=3,
+            window_days=3,
+        ),
+    ]
+
+    buckets = _call_suggestion_buckets(
+        as_of=as_of,
+        classes=[foot_class],
+        activities=foot_activities,
+        logs=logs,
+        rules=rules,
+        weekly_targets=[],
+    )
+
+    do_ids = _bucket_ids(buckets, "do")
+    rest_ids = _bucket_ids(buckets, "rest")
+    assert "act-walk" not in do_ids
+    assert "act-bike" not in do_ids
+    assert {"act-walk", "act-bike"} & rest_ids
+    rest_rows = [row for row in buckets if row.get("bucket") == "rest"]
+    assert all(row.get("scope") in {"activity", "class"} for row in rest_rows)
+    assert all(row.get("activity_class_id") == "cls-foot" for row in rest_rows)
+    class_rows = [row for row in rest_rows if row.get("scope") == "class"]
+    if class_rows:
+        description = class_rows[0].get("description")
+        assert description
+        assert len(description) <= 80
+
+
+def test_compute_suggestion_buckets_achieved_goal_activity_skipped_from_do() -> None:
+    """Linked goal achieved in live period excludes activity from do."""
+    as_of = "2026-05-25"
+    bike = next(activity for activity in ACTIVITIES if activity["id"] == "act-bike")
+    foot_class = next(cls for cls in ACTIVITY_CLASSES if cls["id"] == "cls-foot")
+    goals = [_make_goal("act-bike", status="achieved")]
+
+    buckets = _call_suggestion_buckets(
+        as_of=as_of,
+        classes=[foot_class],
+        activities=[bike],
+        logs=[],
+        rules=[],
+        goals=goals,
+        weekly_targets=[],
+    )
+
+    assert "act-bike" not in _bucket_ids(buckets, "do")
+
+
+def test_compute_suggestion_buckets_recovery_target_unmet_still_in_do() -> None:
+    """Recovery activity with unmet daily target remains in do."""
+    as_of = "2026-05-25"
+    stretch = next(activity for activity in ACTIVITIES if activity["id"] == "act-stretch")
+    recovery_class = next(cls for cls in ACTIVITY_CLASSES if cls["id"] == "cls-recovery")
+    recovery_targets = [_make_recovery_target("act-stretch", target_frequency=3)]
+
+    buckets = _call_suggestion_buckets(
+        as_of=as_of,
+        classes=[recovery_class],
+        activities=[stretch],
+        logs=[],
+        rules=[],
+        recovery_targets=recovery_targets,
+        weekly_targets=[],
+    )
+
+    assert "act-stretch" in _bucket_ids(buckets, "do")
+    do_row = next(row for row in buckets if row["id"] == "act-stretch")
+    assert do_row["bucket"] == "do"
+    assert do_row["scope"] == "activity"
+    assert do_row["activity_class_id"] == "cls-recovery"
+
+
+def test_compute_suggestion_buckets_rows_include_bucket_scope_and_description_fields() -> None:
+    """Each suggestion row exposes bucket, scope, activity_class_id, and description."""
+    buckets = _call_suggestion_buckets()
+
+    assert buckets, "expected at least one suggestion bucket row"
+    for row in buckets:
+        assert row.get("bucket") in {"do", "rest", "done"}
+        assert row.get("scope") in {"activity", "class"}
+        assert "activity_class_id" in row
+        assert "description" in row
+
+
+# ---------------------------------------------------------------------------
 # compute_weekly_progress
 # ---------------------------------------------------------------------------
 
@@ -1536,6 +1748,7 @@ def test_detect_delayed_tax_emits_flare_incident_symptom_marker() -> None:
         "compute_class_statuses",
         "compute_daily_safety_scores",
         "compute_suggestions",
+        "compute_suggestion_buckets",
         "compute_weekly_progress",
         "compute_clean_streak",
         "compute_load_series",

@@ -20,6 +20,10 @@ class SuggestionRead(BaseModel):
     reason: str
     next_safe_date: str | None = None
     last_done_date: str | None = None
+    bucket: Literal["do", "rest", "done"] | None = None
+    scope: Literal["activity", "class"] | None = None
+    activity_class_id: str | None = None
+    description: str | None = None
 
 
 class WeeklyProgressRead(BaseModel):

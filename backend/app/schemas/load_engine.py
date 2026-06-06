@@ -41,6 +41,10 @@ class DailySafetyScore(TypedDict, total=False):
     pain_level: int | None
 
 
+SuggestionBucket = Literal["do", "rest", "done"]
+SuggestionScope = Literal["activity", "class"]
+
+
 class Suggestion(TypedDict, total=False):
     id: str
     label: str
@@ -48,6 +52,10 @@ class Suggestion(TypedDict, total=False):
     reason: str
     next_safe_date: str
     last_done_date: str
+    bucket: SuggestionBucket
+    scope: SuggestionScope
+    activity_class_id: str
+    description: str | None
 
 
 class WeeklyProgress(TypedDict):
@@ -92,3 +100,5 @@ RuleDict = dict[str, Any]
 CheckInDict = dict[str, Any]
 IncidentDict = dict[str, Any]
 WeeklyTargetDict = dict[str, Any]
+GoalDict = dict[str, Any]
+RecoveryTargetDict = dict[str, Any]
