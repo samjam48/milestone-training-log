@@ -35,8 +35,14 @@ See [`plans/milestone-architecture.md`](plans/milestone-architecture.md) for the
 # One-time setup: copy env to repo root (Docker Compose reads ./.env)
 cp backend/.env.example .env
 
+# One-time: create schema in the Docker volume (./data/milestone.db)
+docker compose run --rm backend alembic upgrade head
+
 # Start services with Docker Compose
 docker compose up backend
+
+# Optional: load local sample data (SQLite only — never against Supabase)
+docker compose run --rm backend python -m scripts.seed
 
 # Backend: http://localhost:8084 (Swagger UI: /docs)
 # Frontend: http://localhost:${FRONTEND_PORT:-5151} (set FRONTEND_PORT in repo-root .env)

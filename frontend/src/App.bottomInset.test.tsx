@@ -15,7 +15,28 @@ import {
   TAB_BAR_SAFE_BOTTOM_INSET,
 } from './test/bottomInsetLayout';
 import { mockEngine, resetMockEngine } from './test/mockEngine';
+import type { Activity, ActivityClass } from './types';
 import { App } from './App';
+
+const bottomInsetActivityClass: ActivityClass = {
+  id: 'cls-bottom-inset',
+  userId: 'user-1',
+  name: 'Running',
+  type: 'performance',
+  defaultRecoveryWindowDays: 3,
+  createdAt: '2026-04-07T06:00:00Z',
+};
+
+const bottomInsetActivity: Activity = {
+  id: 'act-bottom-inset',
+  userId: 'user-1',
+  activityClassId: bottomInsetActivityClass.id,
+  name: 'Morning Run',
+  type: 'performance',
+  defaultVolumeUnit: 'km',
+  isActive: true,
+  createdAt: '2026-04-07T06:00:00Z',
+};
 
 vi.mock('./lib/api/client', () => ({
   apiFetch: vi.fn().mockResolvedValue(undefined),
@@ -89,6 +110,8 @@ describe('App — S2.1 bottom inset layout', () => {
 
   it('log-activity overlay uses safe-bottom only on AppShell (no tabbar padding)', async () => {
     const user = userEvent.setup();
+    mockEngine.activityClasses = [bottomInsetActivityClass];
+    mockEngine.activities = [bottomInsetActivity];
     const { container } = renderWithProviders(<App />);
 
     await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
