@@ -316,3 +316,40 @@ describe('LogHistoryScreen — S2.7 New Activity CTA', () => {
     expect(within(actionBar).getByRole('button', { name: '+ New Activity' })).toBeInTheDocument();
   });
 });
+
+// ---------------------------------------------------------------------------
+// S2.8 — Optional empty-state activity hint (plans/tickets-stage-2-polish-2026-06-05.md)
+// ---------------------------------------------------------------------------
+
+describe('LogHistoryScreen — S2.8 empty state activity hint', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  function renderEmptyLogHistory(): void {
+    const engine = createLogHistoryEngine(0);
+    renderWithProviders(
+      <LogHistoryScreen
+        engine={engine}
+        onOpenLogActivity={vi.fn()}
+        onOpenLogIncident={vi.fn()}
+      />,
+    );
+  }
+
+  it('shows activity creation hint inside log-history-empty-state', () => {
+    renderEmptyLogHistory();
+
+    const emptyState = screen.getByTestId('log-history-empty-state');
+    expect(
+      within(emptyState).getByText(/create an activity to start logging/i),
+    ).toBeInTheDocument();
+  });
+
+  it('keeps existing "No sessions logged yet" copy when the hint is present', () => {
+    renderEmptyLogHistory();
+
+    const emptyState = screen.getByTestId('log-history-empty-state');
+    expect(within(emptyState).getByText(/no sessions logged yet/i)).toBeInTheDocument();
+  });
+});

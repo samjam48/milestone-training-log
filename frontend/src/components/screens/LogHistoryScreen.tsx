@@ -144,6 +144,7 @@ export const LogHistoryScreen: React.FC<Props> = ({
               </svg>
             </div>
             <p className="text-body text-ink-muted">No sessions logged yet.</p>
+            <p className="text-body text-ink-muted">Create an activity to start logging.</p>
           </div>
         ) : (
           <div className="flex flex-col gap-4">

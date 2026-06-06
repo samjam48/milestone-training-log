@@ -19,7 +19,11 @@ import {
   NewActivitySheet,
 } from './components/screens';
 import type { Activity, Goal } from './types';
-import { useMilestoneEngine, type MilestoneEngineResult } from './hooks/useMilestoneEngine';
+import {
+  useMilestoneEngine,
+  type MilestoneEngineResult,
+  type NewActivityDraft,
+} from './hooks/useMilestoneEngine';
 import { useMilestoneNavigationHistory } from './hooks/useMilestoneNavigationHistory';
 
 type OverlayKey = 'check-in' | 'log-activity' | 'log-incident';
@@ -28,6 +32,20 @@ type StackEntry = { screen: string; params: Record<string, unknown> };
 function resolveLogActivityPrefill(prefillId: string | undefined): string | undefined {
   if (prefillId == null || prefillId === '') return undefined;
   return prefillId;
+}
+
+function resolveCreatedActivityId(
+  draft: NewActivityDraft & { id: string },
+  activities: Activity[],
+): string {
+  const byId = activities.find(a => a.id === draft.id);
+  if (byId != null && byId.isActive) return byId.id;
+  const byMatch = activities.find(
+    a => a.name === draft.name
+      && a.activityClassId === draft.activityClassId
+      && a.isActive,
+  );
+  return byMatch?.id ?? draft.id;
 }
 
 function ComingSoonPlaceholder(): React.ReactElement {
@@ -221,6 +239,7 @@ export function App(): React.ReactElement {
         initialActivityId={resolveLogActivityPrefill(logActivityPrefillId)}
         onBack={navigateBack}
         onComplete={navigateBack}
+        onCreateActivity={openNewActivitySheet}
       />
     );
   } else if (overlay === 'log-incident') {
@@ -305,7 +324,9 @@ export function App(): React.ReactElement {
             onClose={closeNewActivitySheet}
             activityClasses={engine.activityClasses}
             onCreate={engine.submitNewActivity}
-            onCreated={(draft) => openLogActivity(draft.id)}
+            onCreated={(draft) => openLogActivity(
+              resolveCreatedActivityId(draft, engine.activities),
+            )}
             onAddActivityClass={handleAddActivityClass}
           />
         </>

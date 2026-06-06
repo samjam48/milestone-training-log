@@ -27,6 +27,7 @@ interface Props {
   initialActivityId?: string;
   onBack: () => void;
   onComplete: () => void;
+  onCreateActivity?: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -79,16 +80,28 @@ function groupActivities(classes: ActivityClass[], activities: Activity[]): Grou
   })).filter(g => g.acts.length > 0);
 }
 
+function resolveInitialActivityId(
+  initialActivityId: string | undefined,
+  activities: Activity[],
+): string {
+  if (initialActivityId == null || initialActivityId === '') return '';
+  const act = activities.find(a => a.id === initialActivityId);
+  if (act == null || !act.isActive) return '';
+  return initialActivityId;
+}
+
 // ---------------------------------------------------------------------------
 // Screen
 // ---------------------------------------------------------------------------
 
 export const LogActivityScreen: React.FC<Props> = ({
-  engine, initialActivityId, onBack, onComplete,
+  engine, initialActivityId, onBack, onComplete, onCreateActivity,
 }) => {
   const { activityClasses, activities, checkViolations, submitLog } = engine;
 
-  const [selectedId,  setSelectedId]  = React.useState<string>(initialActivityId ?? '');
+  const [selectedId,  setSelectedId]  = React.useState<string>(
+    () => resolveInitialActivityId(initialActivityId, activities),
+  );
   const [duration,    setDuration]    = React.useState(0);
   const [volume,      setVolume]      = React.useState(0);
   const [rpe,         setRpe]         = React.useState(5);
@@ -97,6 +110,7 @@ export const LogActivityScreen: React.FC<Props> = ({
   const [submitted,   setSubmitted]   = React.useState(false);
 
   const groups  = React.useMemo(() => groupActivities(activityClasses, activities), [activityClasses, activities]);
+  const hasActiveActivities = groups.length > 0;
   const selAct  = activities.find(a => a.id === selectedId);
 
   // Live violation check — updates on every relevant input change
@@ -144,6 +158,22 @@ export const LogActivityScreen: React.FC<Props> = ({
       </div>
 
       <div className="flex flex-1 min-h-0 flex-col gap-4 overflow-y-auto px-4 pb-4 mt-2">
+        {!hasActiveActivities ? (
+          <div
+            data-testid="log-activity-empty-state"
+            className="flex flex-col items-center justify-center gap-4 text-center mt-8 px-2"
+          >
+            <p className="text-title font-semibold text-ink">No activities yet</p>
+            <button
+              type="button"
+              onClick={onCreateActivity}
+              className="h-11 rounded-md bg-ink px-6 text-body font-semibold text-ink-inverse transition-colors duration-snap active:bg-ink/80"
+            >
+              Create activity
+            </button>
+          </div>
+        ) : (
+          <>
         {/* Activity picker */}
         <Card pad="md">
           <FieldLabel>What did you do?</FieldLabel>
@@ -214,8 +244,11 @@ export const LogActivityScreen: React.FC<Props> = ({
             </Card>
           </>
         )}
+          </>
+        )}
       </div>
 
+      {hasActiveActivities && (
       <div className="shrink-0 border-t border-border bg-bg px-4 py-3 pb-safe-bottom">
         <button type="submit" disabled={!canSubmit}
           className={cn('h-12 w-full rounded-md text-body-lg font-semibold transition-colors duration-snap',
@@ -226,6 +259,7 @@ export const LogActivityScreen: React.FC<Props> = ({
           {violations.length > 0 ? 'Log anyway' : 'Log session'}
         </button>
       </div>
+      )}
     </form>
   );
 };

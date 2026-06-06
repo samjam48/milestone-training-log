@@ -1176,3 +1176,42 @@ describe('App — S2.7 NewActivitySheet wiring', () => {
     expect(screen.getByText('Session details')).toBeInTheDocument();
   });
 });
+
+// ---------------------------------------------------------------------------
+// S2.8 — Log Activity empty state (plans/tickets-stage-2-polish-2026-06-05.md)
+// ---------------------------------------------------------------------------
+
+describe('App — S2.8 Log Activity empty state', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetMockEngine();
+    applyS27ActivityClassFixture();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('shows empty state when opening log-activity with no active activities', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
+    await user.click(screen.getByRole('button', { name: '+ Log Activity' }));
+
+    expect(screen.getByTestId('log-activity-empty-state')).toBeInTheDocument();
+    expect(screen.getByText(/no activities yet/i)).toBeInTheDocument();
+  });
+
+  it('opens NewActivitySheet from Log Activity Create activity CTA', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
+    await user.click(screen.getByRole('button', { name: '+ Log Activity' }));
+    await user.click(screen.getByRole('button', { name: /create activity/i }));
+
+    expect(getNewActivityDialog()).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'New Activity' })).toBeInTheDocument();
+  });
+});
