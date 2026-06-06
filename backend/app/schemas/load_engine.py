@@ -93,6 +93,33 @@ class DelayedTaxHit(TypedDict, total=False):
     contributor_hit_type: HitType
 
 
+class LoadRiskDay(TypedDict):
+    date: str
+    flagged: bool
+
+
+class LoadRiskExerciseBar(TypedDict):
+    activity_id: str
+    activity_name: str
+    actual: float
+    limit: float
+    unit: str
+
+
+class LoadRiskClassBar(TypedDict):
+    activity_class_id: str
+    class_name: str
+    actual: float
+    limit: float
+    unit: str
+    exercises: list[LoadRiskExerciseBar]
+
+
+class LoadRiskSummary(TypedDict):
+    week_days: list[LoadRiskDay]
+    class_bars: list[LoadRiskClassBar]
+
+
 LogDict = dict[str, Any]
 ActivityDict = dict[str, Any]
 ActivityClassDict = dict[str, Any]

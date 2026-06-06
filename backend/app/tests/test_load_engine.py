@@ -1066,6 +1066,183 @@ def test_compute_suggestion_buckets_rows_include_bucket_scope_and_description_fi
 
 
 # ---------------------------------------------------------------------------
+# S25.B6 — compute_load_risk_summary
+# ---------------------------------------------------------------------------
+
+
+def _compute_load_risk_summary() -> Any:
+    assert hasattr(load_engine, "compute_load_risk_summary"), (
+        "compute_load_risk_summary not implemented"
+    )
+    return load_engine.compute_load_risk_summary
+
+
+def _call_load_risk_summary(
+    *,
+    as_of: str = AS_OF,
+    classes: list[dict[str, Any]] | None = None,
+    activities: list[dict[str, Any]] | None = None,
+    logs: list[dict[str, Any]] | None = None,
+    rules: list[dict[str, Any]] | None = None,
+    delayed_tax_hits: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    return _compute_load_risk_summary()(
+        as_of,
+        classes or ACTIVITY_CLASSES,
+        activities or ACTIVITIES,
+        logs if logs is not None else LOGS,
+        rules if rules is not None else RULES,
+        delayed_tax_hits or [],
+    )
+
+
+def _foot_load_cap_rules_only(*, threshold: float = 120.0) -> list[dict[str, Any]]:
+    """Foot class capped by weekly load only — no volume or frequency rules."""
+    return [
+        _make_rule(
+            id="rule-cap-foot",
+            activity_class_id="cls-foot",
+            rule_type="weekly_load_cap",
+            threshold_value=threshold,
+        ),
+    ]
+
+
+def _week_day_flags(summary: dict[str, Any]) -> dict[str, bool]:
+    return {row["date"]: row["flagged"] for row in summary["week_days"]}
+
+
+def _class_bar(summary: dict[str, Any], class_id: str) -> dict[str, Any]:
+    return next(
+        bar for bar in summary["class_bars"] if bar["activity_class_id"] == class_id
+    )
+
+
+def test_compute_load_risk_summary_week_days_span_seven_days_ending_as_of() -> None:
+    """week_days lists the last 7 calendar days ending as_of, oldest first."""
+    summary = _call_load_risk_summary(
+        rules=_foot_load_cap_rules_only(),
+        delayed_tax_hits=[],
+    )
+
+    assert [row["date"] for row in summary["week_days"]] == each_day(
+        "2026-05-19",
+        AS_OF,
+    )
+    assert all("flagged" in row for row in summary["week_days"])
+
+
+def test_compute_load_risk_summary_omits_uncapped_recovery_class() -> None:
+    """Recovery classes with zero enabled cap rules are excluded from class_bars."""
+    rules = _foot_load_cap_rules_only()
+    summary = _call_load_risk_summary(rules=rules, delayed_tax_hits=[])
+
+    class_ids = {bar["activity_class_id"] for bar in summary["class_bars"]}
+    assert "cls-foot" in class_ids
+    assert "cls-recovery" not in class_ids
+
+
+def test_compute_load_risk_summary_class_bar_actual_and_limit_for_load_cap() -> None:
+    """Class bar reports rolling load actual vs weekly load cap limit."""
+    as_of = "2026-05-25"
+    logs = [_make_log("act-walk", "2026-05-22", volume_value=1.5, rpe=3)]
+    rules = _foot_load_cap_rules_only(threshold=120.0)
+
+    summary = _call_load_risk_summary(
+        as_of=as_of,
+        logs=logs,
+        rules=rules,
+        delayed_tax_hits=[],
+    )
+    foot = _class_bar(summary, "cls-foot")
+
+    assert foot["class_name"] == "High-Intensity Foot Load"
+    assert foot["actual"] == pytest.approx(4.5)
+    assert foot["limit"] == pytest.approx(120.0)
+    assert foot["unit"] == "load"
+
+
+def test_compute_load_risk_summary_exercise_bar_uses_exercise_cap_override() -> None:
+    """Exercise rows use exercise cap when present; otherwise inherit class cap."""
+    as_of = "2026-05-25"
+    walk = next(activity for activity in ACTIVITIES if activity["id"] == "act-walk")
+    foot_class = next(cls for cls in ACTIVITY_CLASSES if cls["id"] == "cls-foot")
+    logs = [_make_log("act-walk", "2026-05-22", volume_value=1.5, rpe=3)]
+    rules = _foot_load_cap_rules_only(threshold=120.0) + [
+        _make_rule(
+            id="rule-cap-walk",
+            activity_class_id="cls-foot",
+            activity_id="act-walk",
+            rule_type="weekly_load_cap",
+            threshold_value=40,
+        ),
+    ]
+
+    summary = _call_load_risk_summary(
+        as_of=as_of,
+        classes=[foot_class],
+        activities=[walk],
+        logs=logs,
+        rules=rules,
+        delayed_tax_hits=[],
+    )
+    foot = _class_bar(summary, "cls-foot")
+    walk_row = next(
+        row for row in foot["exercises"] if row["activity_id"] == "act-walk"
+    )
+
+    assert walk_row["activity_name"] == "Morning Walk"
+    assert walk_row["actual"] == pytest.approx(4.5)
+    assert walk_row["limit"] == pytest.approx(40.0)
+    assert walk_row["unit"] == "load"
+
+
+def test_compute_load_risk_summary_flags_day_on_cap_breach() -> None:
+    """week_days.flagged is true when rolling cap is breached as of that day."""
+    as_of = "2026-05-25"
+    logs = [_make_log("act-walk", "2026-05-22", volume_value=1.5, rpe=3)]
+    rules = _foot_load_cap_rules_only(threshold=4.0)
+
+    summary = _call_load_risk_summary(
+        as_of=as_of,
+        logs=logs,
+        rules=rules,
+        delayed_tax_hits=[],
+    )
+    flags = _week_day_flags(summary)
+
+    assert flags["2026-05-22"] is True
+    assert flags["2026-05-19"] is False
+
+
+def test_compute_load_risk_summary_flags_day_on_delayed_tax_elevated_load() -> None:
+    """Delayed-tax elevated_load contributing_date flags day even without cap breach."""
+    as_of = "2026-05-25"
+    rules = [rule for rule in RULES if rule["rule_type"] != "weekly_load_cap"]
+    delayed_tax_hits = [
+        {
+            "hit_type": "elevated_load",
+            "activity_class_id": "cls-foot",
+            "contributing_date": "2026-05-22",
+            "daily_load": 4.5,
+            "baseline_median_daily_load": 0.0,
+            "message": "Elevated load on 2026-05-22: 4.5 (baseline median 0.0)",
+        }
+    ]
+
+    summary = _call_load_risk_summary(
+        as_of=as_of,
+        logs=[],
+        rules=rules,
+        delayed_tax_hits=delayed_tax_hits,
+    )
+    flags = _week_day_flags(summary)
+
+    assert flags["2026-05-22"] is True
+    assert flags["2026-05-19"] is False
+
+
+# ---------------------------------------------------------------------------
 # compute_weekly_progress
 # ---------------------------------------------------------------------------
 
@@ -1749,6 +1926,7 @@ def test_detect_delayed_tax_emits_flare_incident_symptom_marker() -> None:
         "compute_daily_safety_scores",
         "compute_suggestions",
         "compute_suggestion_buckets",
+        "compute_load_risk_summary",
         "compute_weekly_progress",
         "compute_clean_streak",
         "compute_load_series",
