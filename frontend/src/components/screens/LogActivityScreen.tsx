@@ -18,7 +18,7 @@ import { Card } from '../ui/Card';
 import { Slider } from '../ui/Slider';
 import { SegmentedControl } from '../ui/SegmentedControl';
 import { RuleViolationBanner } from '../composites/RuleViolationBanner';
-import { DatePickerModal, formatLogDateLabel } from '../ui/DatePickerModal';
+import { DatePickerPopover } from '../ui/DatePickerPopover';
 import type { MilestoneEngineResult, LogDraft, LogPatch } from '../../hooks/useMilestoneEngine';
 import type { Activity, ActivityClass, ISODate, RPE, PostActivityFeel, SafetyState } from '../../types';
 
@@ -160,7 +160,6 @@ export const LogActivityScreen: React.FC<Props> = ({
     () => editingLog?.notes ?? '',
   );
   const [submitted,   setSubmitted]   = React.useState(false);
-  const [datePickerOpen, setDatePickerOpen] = React.useState(false);
 
   const groups  = React.useMemo(() => groupActivities(activityClasses, activities), [activityClasses, activities]);
   const hasActiveActivities = groups.length > 0;
@@ -269,20 +268,12 @@ export const LogActivityScreen: React.FC<Props> = ({
           <>
             <Card pad="md">
               <FieldLabel>Date</FieldLabel>
-              <button
-                type="button"
-                data-testid="log-date-field"
-                onClick={() => setDatePickerOpen(true)}
-                className={cn(
-                  'flex w-full items-center justify-between rounded-md border border-border bg-bg-sunken',
-                  'px-3 py-2.5 text-left transition-colors duration-snap hover:bg-bg-overlay',
-                )}
-              >
-                <span className="text-body font-medium text-ink">
-                  {formatLogDateLabel(loggedDate, todayDate)}
-                </span>
-                <span className="text-caption text-ink-muted">Change</span>
-              </button>
+              <DatePickerPopover
+                value={loggedDate}
+                maxDate={todayDate}
+                todayDate={todayDate}
+                onChange={setLoggedDate}
+              />
             </Card>
 
             <Card pad="md">
@@ -345,13 +336,6 @@ export const LogActivityScreen: React.FC<Props> = ({
       </div>
       )}
 
-      <DatePickerModal
-        open={datePickerOpen}
-        value={loggedDate}
-        maxDate={todayDate}
-        onClose={() => setDatePickerOpen(false)}
-        onChange={setLoggedDate}
-      />
     </form>
   );
 };
