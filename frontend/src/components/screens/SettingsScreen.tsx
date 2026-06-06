@@ -9,6 +9,7 @@ import * as React from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '../../lib/cn';
 import { Card, CardHeader, CardTitle, CardMeta } from '../ui/Card';
+import { CenteredModal } from '../ui/CenteredModal';
 import { ReviewMilestoneBadge } from '../ui/ReviewMilestoneBadge';
 import { apiFetch, ApiError } from '../../lib/api/client';
 import type {
@@ -431,44 +432,28 @@ function NewActivityClassForm({
   }
 
   return (
-    <>
-      <div
-        className="fixed inset-0 z-50 bg-black/60"
-        style={{ backdropFilter: 'blur(4px)' }}
-        onClick={onClose}
-        aria-hidden="true"
-      />
-      <div
-        className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-[440px] rounded-t-2xl bg-bg-raised border-t border-border pb-safe-bottom"
-        role="dialog"
-        aria-modal="true"
-        aria-label="New activity class"
-      >
-        <div className="flex justify-center pt-3 pb-1">
-          <div className="h-1 w-10 rounded-full bg-border" aria-hidden="true" />
+    <CenteredModal open={open} onClose={onClose} ariaLabel="New activity class">
+      <form onSubmit={(e) => { void handleSubmit(e); }}>
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-title font-bold text-ink">New Activity Class</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-8 w-8 flex items-center justify-center rounded-full text-ink-muted hover:text-ink hover:bg-bg-overlay transition-colors duration-snap"
+            aria-label="Close"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path
+                d="M4 4l8 8M12 4l-8 8"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
         </div>
 
-        <form className="px-4 pb-8 pt-2" onSubmit={(e) => { void handleSubmit(e); }}>
-          <div className="flex items-center justify-between mb-5">
-            <h2 className="text-title font-bold text-ink">New Activity Class</h2>
-            <button
-              type="button"
-              onClick={onClose}
-              className="h-8 w-8 flex items-center justify-center rounded-full text-ink-muted hover:text-ink hover:bg-bg-overlay transition-colors duration-snap"
-              aria-label="Close"
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <path
-                  d="M4 4l8 8M12 4l-8 8"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-              </svg>
-            </button>
-          </div>
-
-          <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4">
             <label className="flex flex-col gap-1.5">
               <span className="text-label font-medium text-ink-muted">Class name</span>
               <input
@@ -532,22 +517,21 @@ function NewActivityClassForm({
               </p>
             )}
 
-            <button
-              type="submit"
-              disabled={!canCreate}
-              className={cn(
-                'w-full h-11 rounded-md text-body font-medium transition-colors duration-snap',
-                canCreate
-                  ? 'bg-ink text-ink-inverse hover:opacity-90'
-                  : 'bg-bg-sunken text-ink-faint cursor-not-allowed',
-              )}
-            >
-              Create class
-            </button>
-          </div>
-        </form>
-      </div>
-    </>
+          <button
+            type="submit"
+            disabled={!canCreate}
+            className={cn(
+              'w-full h-11 rounded-md text-body font-medium transition-colors duration-snap',
+              canCreate
+                ? 'bg-ink text-ink-inverse hover:opacity-90'
+                : 'bg-bg-sunken text-ink-faint cursor-not-allowed',
+            )}
+          >
+            Create class
+          </button>
+        </div>
+      </form>
+    </CenteredModal>
   );
 }
 
@@ -610,44 +594,28 @@ function EditActivityClassForm({
   }
 
   return (
-    <>
-      <div
-        className="fixed inset-0 z-50 bg-black/60"
-        style={{ backdropFilter: 'blur(4px)' }}
-        onClick={onClose}
-        aria-hidden="true"
-      />
-      <div
-        className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-[440px] rounded-t-2xl bg-bg-raised border-t border-border pb-safe-bottom"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Edit activity class"
-      >
-        <div className="flex justify-center pt-3 pb-1">
-          <div className="h-1 w-10 rounded-full bg-border" aria-hidden="true" />
+    <CenteredModal open ariaLabel="Edit activity class" onClose={onClose}>
+      <form onSubmit={(e) => { void handleSubmit(e); }}>
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-title font-bold text-ink">Edit Activity Class</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-8 w-8 flex items-center justify-center rounded-full text-ink-muted hover:text-ink hover:bg-bg-overlay transition-colors duration-snap"
+            aria-label="Close"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path
+                d="M4 4l8 8M12 4l-8 8"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
         </div>
 
-        <form className="px-4 pb-8 pt-2" onSubmit={(e) => { void handleSubmit(e); }}>
-          <div className="flex items-center justify-between mb-5">
-            <h2 className="text-title font-bold text-ink">Edit Activity Class</h2>
-            <button
-              type="button"
-              onClick={onClose}
-              className="h-8 w-8 flex items-center justify-center rounded-full text-ink-muted hover:text-ink hover:bg-bg-overlay transition-colors duration-snap"
-              aria-label="Close"
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <path
-                  d="M4 4l8 8M12 4l-8 8"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-              </svg>
-            </button>
-          </div>
-
-          <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4">
             <label className="flex flex-col gap-1.5">
               <span className="text-label font-medium text-ink-muted">Class name</span>
               <input
@@ -690,22 +658,21 @@ function EditActivityClassForm({
               </p>
             )}
 
-            <button
-              type="submit"
-              disabled={!canSave}
-              className={cn(
-                'w-full h-11 rounded-md text-body font-medium transition-colors duration-snap',
-                canSave
-                  ? 'bg-ink text-ink-inverse hover:opacity-90'
-                  : 'bg-bg-sunken text-ink-faint cursor-not-allowed',
-              )}
-            >
-              Save
-            </button>
-          </div>
-        </form>
-      </div>
-    </>
+          <button
+            type="submit"
+            disabled={!canSave}
+            className={cn(
+              'w-full h-11 rounded-md text-body font-medium transition-colors duration-snap',
+              canSave
+                ? 'bg-ink text-ink-inverse hover:opacity-90'
+                : 'bg-bg-sunken text-ink-faint cursor-not-allowed',
+            )}
+          >
+            Save
+          </button>
+        </div>
+      </form>
+    </CenteredModal>
   );
 }
 
@@ -737,25 +704,12 @@ function DeleteActivityClassDialog({
   if (activityClass == null || step == null) return null;
 
   return (
-    <>
-      <div
-        className="fixed inset-0 z-50 bg-black/60"
-        style={{ backdropFilter: 'blur(4px)' }}
-        onClick={onCancel}
-        aria-hidden="true"
-      />
-      <div
-        className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-[440px] rounded-t-2xl bg-bg-raised border-t border-border pb-safe-bottom"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Delete activity class"
-      >
-        <div className="flex justify-center pt-3 pb-1">
-          <div className="h-1 w-10 rounded-full bg-border" aria-hidden="true" />
-        </div>
-
-        <div className="px-4 pb-8 pt-2">
-          {step === 1 ? (
+    <CenteredModal
+      open
+      onClose={onCancel}
+      ariaLabel="Delete activity class"
+    >
+      {step === 1 ? (
             <>
               <h2 className="text-title font-bold text-ink mb-2">Delete class?</h2>
               <p className="text-body text-ink-muted mb-5">
@@ -812,11 +766,9 @@ function DeleteActivityClassDialog({
                   Delete anyway
                 </button>
               </div>
-            </>
-          )}
-        </div>
-      </div>
-    </>
+        </>
+      )}
+    </CenteredModal>
   );
 }
 
