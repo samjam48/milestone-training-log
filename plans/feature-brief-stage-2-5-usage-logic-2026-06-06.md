@@ -39,7 +39,7 @@ After Stage 2.5, as the owner using the app daily:
 | 3c | Weekly targets | Remain separate table; **editable in Edit Rules** (owner decision Q4-A) |
 | 4 | Suggestions engine | Three buckets: `do`, `rest`, `done`; hide done-today from `do`; class rest blacklists class; exercise caps; recovery targets; skip activities for achieved in-period goals |
 | 5 | Load risk card | Week strip = cap breach OR delayed-tax flag; class bars = actual vs cap; expand for per-exercise bars; exclude recovery/no-impact classes with no caps |
-| 6 | Activity class editor | PATCH rename/type; DELETE only when class has no activities with logs |
+| 6 | Activity class editor | PATCH rename/type; DELETE with double confirm; cascade unlogged activities; 409 when any activity has logs |
 | 7 | Incident chips | Suggestion chips from flare `body_part` on check-ins and incidents |
 
 ---
@@ -74,7 +74,7 @@ After Stage 2.5, as the owner using the app daily:
 
 1. Goals tab → New/Edit → pick **activity** → optional numeric target + unit → **Track automatically** off by default → sticky bottom Save.
 2. Dashboard → Goals card shows each goal: bar if numeric, pill if qualitative; achieved goals stay visible.
-3. Logging updates auto-tracked goals when units match; PB-style goals stay manual.
+3. Logging updates auto-tracked goals when units match; when target is reached, status becomes **achieved** automatically. PB-style goals (auto-track off) stay manual.
 
 ### Log / edit
 
@@ -119,7 +119,7 @@ After Stage 2.5, as the owner using the app daily:
 
 | Risk | Mitigation |
 | --- | --- |
-| Dashboard payload growth | Add structured `load_risk_summary` + `suggestion_buckets`; keep old fields during transition if needed |
+| Dashboard payload growth | Add structured `load_risk_summary` + `suggestion_buckets`; remove legacy `suggestions` on branch (C4) |
 | Retroactive log edits shift many derivations | Single recompute path after log CRUD; integration tests with backdated logs |
 | Rule precedence bugs | Explicit merge helper: effective cap = min(class, exercise) per metric |
 | Existing cross-class rules in prod | Migration or one-time cleanup script; engine ignores `weekly_activity_count` |
@@ -138,6 +138,10 @@ After Stage 2.5, as the owner using the app daily:
 | Q5 | Exercise rule precedence over class |
 | Q6 | Edit button per log row in Log History |
 | Goals | Link to **activity** (G2-A), auto-update volume (G3), opt-in auto-track (G4) |
+| C1 | `InlineLogSheet` quick-log stays **today-only** (no date picker) |
+| C2 | Delete class: **409** if any activity has logs; if activities exist with **no logs**, cascade-delete activities after double confirmation (F8) |
+| C3 | Auto-tracked numeric goals: set `status` to **achieved** when `progress_value >= progress_target` |
+| C4 | Remove legacy dashboard `suggestions` field in **same feature branch** as `suggestion_buckets` (F6) |
 | Suggestions | Done-today list OK; “You’re done” only when Do empty |
 
 ---
@@ -161,6 +165,6 @@ None blocking — owner signed off 2026-06-06.
 
 ## Next step
 
-Planner turns `plans/technical-design-stage-2-5-usage-logic-2026-06-06.md` into ordered tickets on branch `feat/stage-2-5-usage-logic`.
+Implement per `plans/tickets-stage-2-5-usage-logic-2026-06-06.md` on branch `feat/stage-2-5-usage-logic` (start **S25.B1**).
 
 **Final status:** `SIGNED OFF`

@@ -59,15 +59,16 @@ from `backend/` so `backend/pyproject.toml` is loaded.
 
 `make lint` and `make test` should wrap the canonical commands once the repo bootstrap is in place.
 ---
-## Current Sprint — Stage 2: Polish (active)
-**Goal:** Production UX polish for daily phone use (layout, onboarding, navigation) on the live stack; PWA in optional batch.
-**Status (2026-06-05):** **Phase 11 complete** on `main`. **Stage 2 tickets approved for implementation** — start with **S2.1** on `feat/stage-2-polish` (or per-ticket branch per owner).
+## Current Sprint — Stage 2.5: Usage logic & block clarity (active)
+**Goal:** Close the gap between stored block rules, goals, and logs and daily-use behaviour: activity-linked goals with auto-progress, retroactive log dates, class/exercise caps in Edit Rules, smarter suggestion buckets, and cap-driven load risk.
+**Status (2026-06-06):** **Stage 2 polish complete** on `main`. **Stage 2.5 planning signed off** — start with **S25.B1** on `feat/stage-2-5-usage-logic` (or per-ticket branch per owner).
 **Production (live):** App `https://milestone-activity.netlify.app` · API `https://milestone-training-log.onrender.com` · DB Supabase Postgres (session pooler). Runbook: `docs/deploy.md`.
 **Deploy branch:** `main` (Render + Netlify auto-deploy from GitHub).
-**Ticket source:** `plans/tickets-stage-2-polish-2026-06-05.md` (S2.1–S2.9 required; S2.10 PWA optional; **O2.1** owner smoke)
-**Primary references:** `plans/PRD.md` §10, `DESIGN.md`, `docs/patterns.md`, `docs/deploy.md`
+**Ticket source:** `plans/tickets-stage-2-5-usage-logic-2026-06-06.md` (S25.B1–S25.D1 required; **O25.1** owner smoke)
+**Planning:** `plans/feature-brief-stage-2-5-usage-logic-2026-06-06.md`, `plans/technical-design-stage-2-5-usage-logic-2026-06-06.md`
+**Primary references:** `DESIGN.md`, `docs/patterns.md`, `docs/api-map.md`, `docs/database-schema.md`
 
-**Archive:** Phase 0–10 in `plans/archive/phase-0-10/` · Phase 11 in `plans/tickets-phase-11-production-2026-06-04.md` (archive to `plans/archive/phase-11/` when convenient)
+**Archive:** Stage 2 polish in `plans/tickets-stage-2-polish-2026-06-05.md` · Phase 0–10 in `plans/archive/phase-0-10/` · Phase 11 in `plans/tickets-phase-11-production-2026-06-04.md`
 
 ---
 ## Definition of Done

@@ -62,8 +62,9 @@ Keep `weekly_targets` for aspirational per-class weekly goals. UI unified in Edi
 
 Add service + route `DELETE /api/activity-classes/{id}`:
 
-- Allowed only if no `activity_logs` exist for any activity in the class.
-- Return `409` with clear message if blocked.
+- Return `409` if any activity in the class has `activity_logs`.
+- If the class has activities but **none** have logs: **cascade-delete** those activities, then delete the class (single service transaction).
+- Frontend (**S25.F8**): two-step confirmation — (1) Delete class → Cancel / Delete; (2) if unlogged activities exist, list activity names and warn they will be deleted → Cancel / Delete.
 
 PATCH already exists for rename/type.
 
@@ -155,7 +156,7 @@ class DashboardRead:  # additions
     load_risk_summary: LoadRiskSummaryRead | None
 ```
 
-**Deprecation:** `suggestions` flat list may remain populated as `bucket == "do"` only for one release, or removed in same PR — planner to pick single cut.
+**Deprecation (owner C4):** Remove legacy `suggestions` from `DashboardRead` on this feature branch when **S25.F6** ships; clients use `suggestion_buckets` only.
 
 **`weekly_progress`:** Retained for “Last 7 days” aspirational bars from `weekly_targets` until UI consolidation decision in implementation.
 
@@ -221,7 +222,8 @@ def recompute_auto_tracked_goals(session: Session, *, activity_ids: set[str]) ->
 For each goal with `auto_track_progress` and matching `activity_id`:
 
 - Sum `volume_value` for logs where `volume_unit == goal.progress_unit` and `logged_date` within goal period (monthly/quarterly window ending `target_date`).
-- PATCH `progress_value` only (never auto-change `status` to achieved — owner marks achieved manually for qualitative; numeric may auto-suggest but status change optional — **default: do not auto-set achieved**).
+- Update `progress_value` from the sum.
+- When `auto_track_progress` is true and `progress_value >= progress_target`, set `status` to **`achieved`** (owner C3). Qualitative / manual goals unchanged.
 
 ### 4.4 Load risk summary (`services/dashboard.py` + `load_engine.py`)
 
@@ -350,4 +352,4 @@ No separate `plans/decision-*.md` — choices captured in feature brief owner ta
 
 ---
 
-**Final status:** `SIGNED OFF` — ready for planner tickets on `feat/stage-2-5-usage-logic`.
+**Final status:** `SIGNED OFF` — tickets in `plans/tickets-stage-2-5-usage-logic-2026-06-06.md`; owner confirmations C1–C4 locked 2026-06-06.

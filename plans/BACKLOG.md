@@ -58,7 +58,7 @@ Tracked in `plans/PRD.md` §13. Android-first native shell + home-screen quick-e
 
 Themes: goal editor + activity-linked auto-progress; log date + edit; block caps + weekly goals in Edit Rules (Option A); suggestion buckets; load-risk ↔ caps; activity class edit/delete; incident chips from check-ins.
 
-**Branch:** `feat/stage-2-5-usage-logic` (when implementation starts). Ticket file pending planner.
+**Branch:** `feat/stage-2-5-usage-logic`. **Tickets:** `plans/tickets-stage-2-5-usage-logic-2026-06-06.md` (S25.B1–S25.D1, O25.1).
 
 ## Product gaps still open (not in the list above)
 
