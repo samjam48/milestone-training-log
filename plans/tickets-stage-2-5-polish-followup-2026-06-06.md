@@ -9,7 +9,7 @@
 | Item | Value |
 | --- | --- |
 | **Ticket file** | `plans/tickets-stage-2-5-polish-followup-2026-06-06.md` |
-| **Ticket count** | 6 (P25.2–P25.7) |
+| **Ticket count** | 8 (P25.2–P25.9) |
 | **Unresolved** | None |
 
 ---
@@ -151,6 +151,47 @@ These three spacing rules are **distinct in the engine** but read similarly in t
 
 ---
 
+## P25.8 — Edit Rules: surface API errors on rule create
+
+**Type:** frontend + hook  
+**Depends on:** none (can ship with P25.6/P25.7)  
+**Blocks:** none  
+**Source:** S25.F5 review **D1** (owner: implement)
+
+### Acceptance criteria
+
+- `createRule` / `updateRule` failures (e.g. duplicate rule **409**, validation **422**) show **inline error** on `EditBlockRulesScreen` add-rule forms.
+- Hook exposes mutation error state (or callback) without business logic in the screen beyond display.
+- Error clears when user dismisses form or retries.
+- Tests: mocked API failure → message visible; success clears error.
+
+---
+
+## P25.9 — Remove weekly goal from Edit Rules
+
+**Type:** frontend (+ docs)  
+**Depends on:** none  
+**Blocks:** none  
+**Source:** S25.F5 review **D2** (owner: remove — goals belong on Goals tab only)
+
+### Problem
+
+Edit Rules “Weekly goal” duplicates the Goals feature and one-click-creates a meaningless default (10 km). Class-level aspirational targets should not be edited alongside recovery constraints.
+
+### Acceptance criteria
+
+- Remove **Weekly goal** subsection from `EditBlockRulesScreen` (no `createWeeklyTarget` / `patchWeeklyTarget` in that screen).
+- Remove “+ Add weekly goal” one-click default behaviour.
+- Settings block summary / Edit Rules entry copy does not imply weekly goals are configured in rules.
+- **Dashboard `weekly_progress`** (“Last 7 days”): document current behaviour if `weekly_targets` rows remain in DB (display-only or follow-up to align with Goals — see BACKLOG).
+- Tests: Edit Rules renders no weekly goal section; no regression on class caps / exercise rules.
+
+### Out of scope (BACKLOG)
+
+- Migrating `weekly_targets` data into `goals` or redesigning dashboard weekly chart to use goals.
+
+---
+
 ## P25.5 — Date picker: compact popover
 
 **Type:** frontend  
@@ -175,8 +216,10 @@ These three spacing rules are **distinct in the engine** but read similarly in t
 3. **P25.5** — date popover  
 4. **P25.6** — rule labels & pickers  
 5. **P25.7** — exercise volume caps + deprecate load points  
+6. **P25.8** — Edit Rules API error surfacing (D1)  
+7. **P25.9** — remove weekly goal from Edit Rules (D2)  
 
-*(UI polish first while rule design is stable; P25.6–P25.7 can swap earlier if you prefer rules before modals.)*
+*(UI polish first while rule design is stable; P25.6–P25.7 can swap earlier if you prefer rules before modals. P25.8–P25.9 can run with P25.6–P25.7.)*
 
 ---
 
@@ -188,6 +231,8 @@ These three spacing rules are **distinct in the engine** but read similarly in t
 | Confusing rule names (rest vs frequency vs consecutive) | P25.6 |
 | Modals bottom-aligned | P25.2, P25.3, P25.4 |
 | Date picker too large | P25.5 |
+| Duplicate rule errors not shown | P25.8 |
+| Weekly goal in Edit Rules (remove) | P25.9 |
 
 ---
 
@@ -201,3 +246,6 @@ These three spacing rules are **distinct in the engine** but read similarly in t
 | R4 | Rule engine merge | **Rename and clarify only** — keep `rest_between_class`, `frequency_limit`, `consecutive_day_limit` as separate types |
 | R5 | Modals | Centered on all screens; edit activity modal **without** deactivate |
 | R6 | Date picker | Compact popover anchored to field on all phones |
+| D1 | Duplicate rule API errors (S25.F5) | **Implement** inline error surfacing → P25.8 |
+| D2 | Weekly goal in Edit Rules (S25.F5) | **Remove** — goals live on Goals tab only → P25.9 |
+| D3 | Optimistic save on log PATCH/create (S25.F4) | **Accept for MVP** — backlog follow-up |

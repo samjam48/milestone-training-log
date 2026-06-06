@@ -92,6 +92,33 @@ Owner decisions **locked and signed off** 2026-06-06: exercise daily + weekly vo
 | Edit activity → centered modal (no deactivate) | P25.3 | Ready (after P25.2) |
 | New activity → centered modal | P25.4 | Ready (after P25.2) |
 | Date picker → compact popover | P25.5 | Ready |
+| Edit Rules: surface API errors on rule create | P25.8 | Ready (D1) |
+| Remove weekly goal from Edit Rules | P25.9 | Ready (D2) |
+
+## Stage 2.5 review decisions (2026-06-06)
+
+| # | Issue | Decision |
+| --- | --- | --- |
+| D1 | F5 duplicate rule API errors not shown | **Implement** — ticket **P25.8** |
+| D2 | F5 weekly goal one-click in Edit Rules | **Remove** weekly goal from Edit Rules; use Goals tab → **P25.9** |
+| D3 | F3/F4 optimistic save pops on API failure | **Accept for MVP** — defer fix (see technical debt below) |
+
+## Stage 2.5 technical debt (non-blocking, from review)
+
+Recorded after S25 batch review; not in polish ticket scope unless noted.
+
+| Item | Source | Note |
+| --- | --- | --- |
+| `check_violations` uses class-level rules, not `effective_rules_for_activity` | S25.B4 | Dashboard class status vs log-time violations may diverge when exercise rules exist |
+| Class delete: `recovery_targets` / `flare_incidents` FKs not guarded | S25.B8 | May **500** instead of **409**; add guards or document cascade |
+| `fill_ratio` not server-clamped to 0..1 | S25.B7 | UI caps bar at 100%; API may return &gt;1 when over-achieved |
+| Postgres migration gate | S25.B1 | Run `make test-postgres` before prod deploy |
+| `docs/api-map.md` rules section stale rule-type count | S25.B2 | Dashboard section updated in D1; rules table may still say “five types” |
+| Exercise-scoped rule **409** on class delete untested | S25.B8 | Implemented; only class-level rule test exists |
+| eslint `react-refresh/only-export-components` warnings (3) | lint | Pre-existing in UI files |
+| Log create/edit optimistic pop on mutation failure | S25.F4 (D3) | Gate stack pop on `updateLog` / `submitLog` success |
+| Dashboard `weekly_progress` vs Goals after P25.9 | P25.9 follow-up | Align or retire `weekly_targets` once Edit Rules weekly goal removed |
+| `weekly_targets` API / table lifecycle | P25.9 follow-up | Decide keep for dashboard chart only, migrate to goals, or deprecate |
 
 ## Product gaps still open (not in the list above)
 
