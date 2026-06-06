@@ -41,6 +41,7 @@ function createBaseline(): MilestoneEngineResult {
     delayedTaxError: false,
     // F2.0 read fields
     goals: [],
+    goalRows: [],
     rules: [],
     weeklyTargets: [],
     previousBlocks: [],

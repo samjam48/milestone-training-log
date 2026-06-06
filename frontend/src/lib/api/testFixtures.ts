@@ -125,6 +125,43 @@ export const dashboardGoalReadSnake = {
   updated_at: '2026-04-07T06:00:00Z',
 };
 
+/** Dashboard goal summary row (S25.B7 / GoalDashboardRowRead). */
+export const goalDashboardRowNumericSnake = {
+  goal_id: 'goal-row-active',
+  title: 'Walk 40 km',
+  status: 'active',
+  activity_id: 'act-walk',
+  progress_value: 12,
+  progress_target: 30,
+  progress_unit: 'km',
+  fill_ratio: 0.4,
+  is_qualitative: false,
+};
+
+export const goalDashboardRowQualitativeSnake = {
+  goal_id: 'goal-row-qual',
+  title: 'Pain-free stairs',
+  status: 'active',
+  activity_id: null as string | null,
+  progress_value: null as number | null,
+  progress_target: null as number | null,
+  progress_unit: null as string | null,
+  fill_ratio: null as number | null,
+  is_qualitative: true,
+};
+
+export const goalDashboardRowAchievedSnake = {
+  goal_id: 'goal-row-achieved',
+  title: 'Complete rehab block',
+  status: 'achieved',
+  activity_id: 'act-walk',
+  progress_value: 30,
+  progress_target: 30,
+  progress_unit: 'km',
+  fill_ratio: 1,
+  is_qualitative: false,
+};
+
 /** Completed block in dashboard previous_blocks (B9.1) — active block omitted server-side. */
 export const dashboardPreviousBlockReadSnake = {
   id: 'blk-0',
@@ -196,6 +233,11 @@ export const dashboardReadSnake = {
   clean_streak: 2,
   recovery_streaks: [recoveryStreakReadSnake],
   goals: [dashboardGoalReadSnake],
+  goal_rows: [
+    goalDashboardRowNumericSnake,
+    goalDashboardRowQualitativeSnake,
+    goalDashboardRowAchievedSnake,
+  ],
   previous_blocks: [dashboardPreviousBlockReadSnake],
 };
 

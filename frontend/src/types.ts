@@ -212,6 +212,19 @@ export interface Goal extends Timestamped {
   status: GoalStatus;
 }
 
+/** Dashboard summary row for GoalsCard (S25.B7 / GoalDashboardRowRead). */
+export interface GoalDashboardRow {
+  goalId: string;
+  title: string;
+  status: GoalStatus;
+  activityId: string | null;
+  progressValue: number | null;
+  progressTarget: number | null;
+  progressUnit: string | null;
+  fillRatio: number | null;
+  isQualitative: boolean;
+}
+
 // -----------------------------------------------------------------------------
 // Computed / derived shapes (not stored — produced by the rules engine)
 // -----------------------------------------------------------------------------

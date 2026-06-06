@@ -5,6 +5,7 @@
  * F10.2 — Dashboard clean streak relabel (plans/tickets-phase-10-polish-2026-06-04.md).
  * Load-risk panel removed from dashboard (owner feedback 2026-06-04); delayed tax kept on incident/check-in flows.
  * F10.5 — Load graph title from engine.graphClassId (plans/tickets-phase-10-polish-2026-06-04.md).
+ * S25.F2 — Goals dashboard card (plans/tickets-stage-2-5-usage-logic-2026-06-06.md).
  *
  * Mocking strategy (mirrors BlockReviewScreen.test.tsx):
  *   - CalendarHeatmap: stubbed to a simple div — tests verify screen wiring, not heatmap internals
@@ -17,9 +18,21 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { screen, cleanup, within } from '@testing-library/react';
 import { renderWithProviders } from '../../test/renderWithProviders';
 import { mockEngine, resetMockEngine } from '../../test/mockEngine';
-import type { DelayedTaxResponse } from '../../hooks/useMilestoneEngine';
+import type { DelayedTaxResponse, MilestoneEngineResult } from '../../hooks/useMilestoneEngine';
 import type { ActivityClass, TrainingBlock, DailySafetyScore, RecoveryStreak } from '../../types';
+import {
+  goalDashboardRowAchieved,
+  goalDashboardRowNumeric,
+  goalDashboardRowQualitative,
+  type GoalDashboardRow,
+} from '../../test/goalDashboardRowFixtures';
 import { DashboardScreen } from './DashboardScreen';
+
+type EngineWithGoalRows = MilestoneEngineResult & { goalRows: GoalDashboardRow[] };
+
+function assignGoalRows(rows: GoalDashboardRow[]): void {
+  (mockEngine as EngineWithGoalRows).goalRows = rows;
+}
 
 vi.mock('../../components/composites/CalendarHeatmap', () => ({
   CalendarHeatmap: ({ startDate, endDate }: { startDate: string; endDate: string }) => (
@@ -565,6 +578,89 @@ describe('DashboardScreen — Load risk visual panel (engine.delayedTax)', () =>
     expect(
       screen.getByText(/No elevated load or rest-debt flags in the last 7 days/i),
     ).toBeInTheDocument();
+  });
+});
+
+describe('DashboardScreen — S25.F2 Goals card', () => {
+  function setupDashboardWithGoalRows(goalRows: GoalDashboardRow[]): void {
+    mockEngine.block = ACTIVE_BLOCK;
+    mockEngine.dailyScores = DAILY_SCORES;
+    mockEngine.previousBlocks = [];
+    mockEngine.hasCheckedInToday = true;
+    assignGoalRows(goalRows);
+  }
+
+  it('renders GoalsCard below Last 7 days when engine.goalRows has entries', () => {
+    setupDashboardWithGoalRows([
+      goalDashboardRowNumeric,
+      goalDashboardRowQualitative,
+      goalDashboardRowAchieved,
+    ]);
+    useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
+
+    renderDashboard();
+
+    const weeklyLabel = screen.getByText('Last 7 days');
+    const goalsCard = screen.getByTestId('goals-card');
+    assertAppearsAfter(weeklyLabel, goalsCard);
+
+    expect(screen.getByText(goalDashboardRowNumeric.title)).toBeInTheDocument();
+    expect(screen.getByText(goalDashboardRowQualitative.title)).toBeInTheDocument();
+    expect(screen.getByText(goalDashboardRowAchieved.title)).toBeInTheDocument();
+  });
+
+  it('hides GoalsCard when engine.goalRows is empty', () => {
+    setupDashboardWithGoalRows([goalDashboardRowNumeric]);
+    useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
+
+    const view = renderDashboard();
+    expect(screen.getByTestId('goals-card')).toBeInTheDocument();
+
+    assignGoalRows([]);
+    view.rerender(
+      <DashboardScreen
+        engine={mockEngine}
+        onOpenCheckIn={vi.fn()}
+        onOpenLogActivity={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByTestId('goals-card')).not.toBeInTheDocument();
+    expect(screen.queryByText('Goals')).not.toBeInTheDocument();
+  });
+
+  it('shows numeric fill bar width from fill_ratio on dashboard rows', () => {
+    setupDashboardWithGoalRows([goalDashboardRowNumeric]);
+    useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
+
+    renderDashboard();
+
+    const row = screen.getByTestId(`goals-card-row-${goalDashboardRowNumeric.goalId}`);
+    const bar = within(row).getByRole('progressbar');
+    const fill = bar.querySelector<HTMLElement>('[style*="width"]');
+    expect(fill?.style.width).toBe('40%');
+  });
+
+  it('shows qualitative status pill instead of a progress bar', () => {
+    setupDashboardWithGoalRows([goalDashboardRowQualitative]);
+    useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
+
+    renderDashboard();
+
+    const row = screen.getByTestId(`goals-card-row-${goalDashboardRowQualitative.goalId}`);
+    expect(within(row).getByTestId('goals-card-status-pill')).toHaveTextContent(/active/i);
+    expect(within(row).queryByRole('progressbar')).not.toBeInTheDocument();
+  });
+
+  it('renders achieved goals with subdued row styling', () => {
+    setupDashboardWithGoalRows([goalDashboardRowAchieved]);
+    useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
+
+    renderDashboard();
+
+    const row = screen.getByTestId(`goals-card-row-${goalDashboardRowAchieved.goalId}`);
+    expect(row).toHaveAttribute('data-achieved', 'true');
+    expect(row.className).toMatch(/opacity-|text-ink-muted|text-ink-faint/);
   });
 });
 

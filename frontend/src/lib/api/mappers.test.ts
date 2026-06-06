@@ -13,6 +13,9 @@ import {
   dailyCheckInReadSnakeNoFlareUp,
   dashboardReadSnake,
   dashboardReadSnakeNoBlock,
+  goalDashboardRowAchievedSnake,
+  goalDashboardRowNumericSnake,
+  goalDashboardRowQualitativeSnake,
   recoveryStreakReadSnake,
   fastApiDetailErrorBody,
   fastApiValidationErrorBody,
@@ -177,6 +180,69 @@ describe('mapDashboardFromApi', () => {
 
     expect(mapped.todayDate).toBe('2026-05-25');
     expect(mapped.dailyScores[0]?.date).toBe('2026-05-25');
+  });
+
+  it('maps goal_rows to camelCase goalRows with fillRatio and isQualitative', () => {
+    const mapped = mapDashboardFromApi(dashboardReadSnake) as ReturnType<
+      typeof mapDashboardFromApi
+    > & {
+      goalRows: Array<{
+        goalId: string;
+        title: string;
+        status: string;
+        activityId: string | null;
+        progressValue: number | null;
+        progressTarget: number | null;
+        progressUnit: string | null;
+        fillRatio: number | null;
+        isQualitative: boolean;
+      }>;
+    };
+
+    expect(mapped.goalRows).toEqual([
+      {
+        goalId: goalDashboardRowNumericSnake.goal_id,
+        title: goalDashboardRowNumericSnake.title,
+        status: goalDashboardRowNumericSnake.status,
+        activityId: goalDashboardRowNumericSnake.activity_id,
+        progressValue: goalDashboardRowNumericSnake.progress_value,
+        progressTarget: goalDashboardRowNumericSnake.progress_target,
+        progressUnit: goalDashboardRowNumericSnake.progress_unit,
+        fillRatio: goalDashboardRowNumericSnake.fill_ratio,
+        isQualitative: goalDashboardRowNumericSnake.is_qualitative,
+      },
+      {
+        goalId: goalDashboardRowQualitativeSnake.goal_id,
+        title: goalDashboardRowQualitativeSnake.title,
+        status: goalDashboardRowQualitativeSnake.status,
+        activityId: goalDashboardRowQualitativeSnake.activity_id,
+        progressValue: goalDashboardRowQualitativeSnake.progress_value,
+        progressTarget: goalDashboardRowQualitativeSnake.progress_target,
+        progressUnit: goalDashboardRowQualitativeSnake.progress_unit,
+        fillRatio: goalDashboardRowQualitativeSnake.fill_ratio,
+        isQualitative: goalDashboardRowQualitativeSnake.is_qualitative,
+      },
+      {
+        goalId: goalDashboardRowAchievedSnake.goal_id,
+        title: goalDashboardRowAchievedSnake.title,
+        status: goalDashboardRowAchievedSnake.status,
+        activityId: goalDashboardRowAchievedSnake.activity_id,
+        progressValue: goalDashboardRowAchievedSnake.progress_value,
+        progressTarget: goalDashboardRowAchievedSnake.progress_target,
+        progressUnit: goalDashboardRowAchievedSnake.progress_unit,
+        fillRatio: goalDashboardRowAchievedSnake.fill_ratio,
+        isQualitative: goalDashboardRowAchievedSnake.is_qualitative,
+      },
+    ]);
+  });
+
+  it('maps missing goal_rows to an empty array', () => {
+    const { goal_rows: _goalRows, ...withoutGoalRows } = dashboardReadSnake;
+    const mapped = mapDashboardFromApi(withoutGoalRows) as ReturnType<
+      typeof mapDashboardFromApi
+    > & { goalRows: unknown[] };
+
+    expect(mapped.goalRows).toEqual([]);
   });
 });
 

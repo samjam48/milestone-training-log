@@ -17,6 +17,7 @@ import type {
   DailySafetyScore,
   FlareUpIncident,
   Goal,
+  GoalDashboardRow,
   GoalStatus,
   GoalTimeframe,
   ID,
@@ -185,6 +186,7 @@ export interface MilestoneEngineResult {
   delayedTaxError: boolean;
   // F2.0 read fields
   goals: Omit<Goal, 'userId'>[];
+  goalRows: GoalDashboardRow[];
   rules: Rule[];
   weeklyTargets: WeeklyTarget[];
   previousBlocks: TrainingBlock[];
@@ -562,6 +564,7 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     delayedTaxError: delayedTaxQuery.isError,
     // F2.0 read fields
     goals: (dashboard?.goals ?? []) as Omit<Goal, 'userId'>[],
+    goalRows: dashboard?.goalRows ?? [],
     rules: (rulesQuery.data ?? []) as Rule[],
     weeklyTargets: (weeklyTargetsQuery.data ?? []) as WeeklyTarget[],
     previousBlocks: (dashboard?.previousBlocks ?? []) as TrainingBlock[],

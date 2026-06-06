@@ -11,6 +11,7 @@ import { SuggestedActivityCard } from '../composites/SuggestedActivityCard';
 import { WeeklyLoadGraph } from '../composites/WeeklyLoadGraph';
 import { BlockSafetyMapSection } from '../composites/BlockSafetyMapSection';
 import { LoadRiskSection } from '../composites/LoadRiskSection';
+import { GoalsCard } from '../composites/GoalsCard';
 import type { MilestoneEngineResult } from '../../hooks/useMilestoneEngine';
 import type { Activity, ActivityClass, RecoveryStreak, SafetyState } from '../../types';
 
@@ -129,6 +130,7 @@ export const DashboardScreen: React.FC<Props> = ({
     suggestions, weeklyProgress, classStatuses,
     loadSeries, graphClassId, flareUpDates, weekLoadThreshold, cleanStreak, recoveryStreaks,
     block, activityClasses, activities, delayedTax,
+    goalRows,
   } = engine;
 
   const weeklyLoadGraphTitle = loadGraphTitle(graphClassId, activityClasses);
@@ -176,6 +178,8 @@ export const DashboardScreen: React.FC<Props> = ({
           </div>
         </Card>
       </div>
+
+      <GoalsCard goalRows={goalRows} />
 
       {/* ── Recovery streaks ── */}
       {block.id ? (

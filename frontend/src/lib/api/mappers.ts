@@ -8,6 +8,8 @@ import type {
   DailyCheckIn,
   FlareUpIncident,
   Goal,
+  GoalDashboardRow,
+  GoalStatus,
   ISODate,
   ISODateTime,
   PostActivityFeel,
@@ -427,6 +429,20 @@ export function mapGoalCreateBody(draft: Record<string, unknown>): Record<string
   return mapKeysToSnake(draft, { omitUndefined: true });
 }
 
+export function mapGoalDashboardRowFromApi(raw: Record<string, unknown>): GoalDashboardRow {
+  return {
+    goalId: String(raw.goal_id),
+    title: String(raw.title),
+    status: raw.status as GoalStatus,
+    activityId: raw.activity_id == null ? null : String(raw.activity_id),
+    progressValue: raw.progress_value == null ? null : Number(raw.progress_value),
+    progressTarget: raw.progress_target == null ? null : Number(raw.progress_target),
+    progressUnit: raw.progress_unit == null ? null : String(raw.progress_unit),
+    fillRatio: raw.fill_ratio == null ? null : Number(raw.fill_ratio),
+    isQualitative: Boolean(raw.is_qualitative),
+  };
+}
+
 export function mapGoalPatchBody(draft: Record<string, unknown>): Record<string, unknown> {
   return mapKeysToSnake(draft, { omitUndefined: true });
 }
@@ -522,6 +538,7 @@ export interface DashboardPayload {
   cleanStreak: number;
   recoveryStreaks: RecoveryStreak[];
   goals: WithoutUserId<Goal>[];
+  goalRows: GoalDashboardRow[];
   previousBlocks: WithoutUserId<TrainingBlock>[];
 }
 
@@ -555,6 +572,7 @@ export function mapDashboardFromApi(raw: Record<string, unknown>): DashboardPayl
     cleanStreak: Number(raw.clean_streak),
     recoveryStreaks: mapList(raw.recovery_streaks, mapRecoveryStreakFromApi),
     goals: mapList(raw.goals, mapGoalFromApi),
+    goalRows: mapList(raw.goal_rows, mapGoalDashboardRowFromApi),
     previousBlocks: mapList(raw.previous_blocks, mapTrainingBlockFromApi),
   };
 }
