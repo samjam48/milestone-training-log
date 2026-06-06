@@ -68,6 +68,8 @@ function createBaseline(): MilestoneEngineResult {
     createRule: () => undefined,
     updateRule: () => undefined,
     deleteRule: () => undefined,
+    ruleMutationError: null,
+    clearRuleMutationError: () => undefined,
     createWeeklyTarget: () => undefined,
     patchWeeklyTarget: () => undefined,
     createTrainingBlock: () => undefined,

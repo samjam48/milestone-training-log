@@ -37,7 +37,7 @@ import type {
 } from '../types';
 import type { LoadRiskSummary, WeeklyProgress, Suggestion } from '../lib/engine';
 import type { LoadPoint } from '../lib/load';
-import { isUnauthorizedError } from '../lib/api/client';
+import { ApiError, isUnauthorizedError } from '../lib/api/client';
 import { addDays } from '../lib/load';
 import {
   getDashboard,
@@ -244,6 +244,9 @@ export interface MilestoneEngineResult {
   createRule: (draft: RuleDraft) => void;
   updateRule: (ruleId: ID, patch: RulePatch) => void;
   deleteRule: (ruleId: ID) => void;
+  /** Inline error from the latest createRule / updateRule failure; null when none. */
+  ruleMutationError: string | null;
+  clearRuleMutationError: () => void;
   createWeeklyTarget: (draft: WeeklyTargetDraft) => void;
   patchWeeklyTarget: (targetId: ID, patch: WeeklyTargetPatch) => void;
   createTrainingBlock: (draft: BlockDraft) => void;
@@ -271,8 +274,20 @@ export interface MilestoneEngineResult {
 // Hook
 // ---------------------------------------------------------------------------
 
+function ruleMutationErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    return error.message;
+  }
+  return 'Failed to save rule';
+}
+
 export function useMilestoneEngine(): MilestoneEngineResult {
   const queryClient = useQueryClient();
+  const [ruleMutationError, setRuleMutationError] = React.useState<string | null>(null);
+
+  const clearRuleMutationError = React.useCallback(() => {
+    setRuleMutationError(null);
+  }, []);
 
   const dashboardQuery = useQuery({
     queryKey: ['dashboard'],
@@ -504,16 +519,30 @@ export function useMilestoneEngine(): MilestoneEngineResult {
         id: crypto.randomUUID(),
         ...draft,
       }),
+    onMutate: () => {
+      setRuleMutationError(null);
+    },
     onSuccess: () => {
+      setRuleMutationError(null);
       void queryClient.invalidateQueries({ queryKey: ['rules', blockId ?? ''] });
+    },
+    onError: (error) => {
+      setRuleMutationError(ruleMutationErrorMessage(error));
     },
   });
 
   const updateRuleMutation = useMutation({
     mutationFn: ({ ruleId, patch }: { ruleId: ID; patch: RulePatch }) =>
       patchRule(ruleId, patch as Record<string, unknown>),
+    onMutate: () => {
+      setRuleMutationError(null);
+    },
     onSuccess: () => {
+      setRuleMutationError(null);
       void queryClient.invalidateQueries({ queryKey: ['rules', blockId ?? ''] });
+    },
+    onError: (error) => {
+      setRuleMutationError(ruleMutationErrorMessage(error));
     },
   });
 
@@ -726,6 +755,8 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     createRule,
     updateRule,
     deleteRule,
+    ruleMutationError,
+    clearRuleMutationError,
     createWeeklyTarget,
     patchWeeklyTarget,
     createTrainingBlock,

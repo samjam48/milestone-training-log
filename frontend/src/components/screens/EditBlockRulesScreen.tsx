@@ -379,6 +379,19 @@ interface AddRuleFormProps {
     limitUnit?: VolumeCapUnit,
   ) => void;
   onCancel: () => void;
+  mutationError?: string | null;
+}
+
+function RuleMutationAlert({
+  message,
+}: {
+  message: string;
+}): React.ReactElement {
+  return (
+    <p role="alert" className="text-body-sm text-danger-fg">
+      {message}
+    </p>
+  );
 }
 
 function AddRuleForm({
@@ -389,6 +402,7 @@ function AddRuleForm({
   onActivityChange,
   onSave,
   onCancel,
+  mutationError = null,
 }: AddRuleFormProps): React.ReactElement {
   const [ruleType, setRuleType] = React.useState<RuleType>(DEFAULT_NEW_RULE_DRAFT.ruleType);
   const [threshold, setThreshold] = React.useState(String(DEFAULT_NEW_RULE_DRAFT.thresholdValue));
@@ -520,6 +534,7 @@ function AddRuleForm({
           </select>
         </div>
       ) : null}
+      {mutationError != null ? <RuleMutationAlert message={mutationError} /> : null}
       <div className="flex gap-3">
         <button
           type="button"
@@ -569,6 +584,7 @@ interface ClassRulesSectionProps {
     limitUnit?: VolumeCapUnit,
   ) => void;
   activityNameById: Map<string, string>;
+  ruleMutationError: string | null;
 }
 
 function ClassRulesSection({
@@ -595,6 +611,7 @@ function ClassRulesSection({
   onCancelExerciseRule,
   onConfirmExerciseRule,
   activityNameById,
+  ruleMutationError,
 }: ClassRulesSectionProps): React.ReactElement {
   const showWeeklyGoal =
     activityClass.type === 'performance' || weeklyTarget != null;
@@ -633,6 +650,7 @@ function ClassRulesSection({
           {addingClassCap ? (
             <AddRuleForm
               ruleTypeOptions={CLASS_RULE_TYPE_OPTIONS}
+              mutationError={ruleMutationError}
               onSave={(ruleType, thresholdValue) => onConfirmClassCap(ruleType, thresholdValue)}
               onCancel={onCancelClassCap}
             />
@@ -711,6 +729,7 @@ function ClassRulesSection({
               ruleTypeOptions={EXERCISE_RULE_TYPE_OPTIONS}
               showActivityPicker
               activities={classActivities}
+              mutationError={ruleMutationError}
               onSave={(ruleType, thresholdValue, activityId, limitUnit) => {
                 if (activityId != null) {
                   onConfirmExerciseRule(ruleType, thresholdValue, activityId, limitUnit);
@@ -743,6 +762,8 @@ export function EditBlockRulesScreen({
   const [draftThresholds, setDraftThresholds] = React.useState<Record<string, string>>({});
   const [addingClassCapClassId, setAddingClassCapClassId] = React.useState<string | null>(null);
   const [addingExerciseRuleClassId, setAddingExerciseRuleClassId] = React.useState<string | null>(null);
+  const classCapBaselineCountRef = React.useRef(0);
+  const exerciseRuleBaselineCountRef = React.useRef(0);
 
   const sortedClasses = sortClassesForRules(engine.activityClasses);
   const scopedRules = engine.rules.filter((rule) => rule.activityClassId != null);
@@ -760,6 +781,26 @@ export function EditBlockRulesScreen({
     }
     setDraftThresholds(nextDrafts);
   }, [engine.rules]);
+
+  React.useEffect(() => {
+    if (addingClassCapClassId == null || engine.ruleMutationError != null) {
+      return;
+    }
+    const currentCount = getClassLevelRules(scopedRules, addingClassCapClassId).length;
+    if (currentCount > classCapBaselineCountRef.current) {
+      setAddingClassCapClassId(null);
+    }
+  }, [addingClassCapClassId, engine.ruleMutationError, scopedRules]);
+
+  React.useEffect(() => {
+    if (addingExerciseRuleClassId == null || engine.ruleMutationError != null) {
+      return;
+    }
+    const currentCount = getExerciseRules(scopedRules, addingExerciseRuleClassId).length;
+    if (currentCount > exerciseRuleBaselineCountRef.current) {
+      setAddingExerciseRuleClassId(null);
+    }
+  }, [addingExerciseRuleClassId, engine.ruleMutationError, scopedRules]);
 
   function updateDraftThreshold(ruleId: string, value: string): void {
     setDraftThresholds((previous) => ({
@@ -797,7 +838,6 @@ export function EditBlockRulesScreen({
       windowDays: 7,
       enabled: true,
     });
-    setAddingClassCapClassId(null);
   }
 
   function confirmExerciseRule(
@@ -816,6 +856,15 @@ export function EditBlockRulesScreen({
       limitUnit: isVolumeCapRule(ruleType) ? limitUnit : undefined,
       enabled: true,
     });
+  }
+
+  function cancelClassCap(): void {
+    engine.clearRuleMutationError();
+    setAddingClassCapClassId(null);
+  }
+
+  function cancelExerciseRule(): void {
+    engine.clearRuleMutationError();
     setAddingExerciseRuleClassId(null);
   }
 
@@ -881,17 +930,25 @@ export function EditBlockRulesScreen({
                   onCreateWeeklyTarget={handleCreateWeeklyTarget}
                   onAddClassCap={() => {
                     setAddingExerciseRuleClassId(null);
+                    classCapBaselineCountRef.current = getClassLevelRules(
+                      scopedRules,
+                      activityClass.id,
+                    ).length;
                     setAddingClassCapClassId(activityClass.id);
                   }}
-                  onCancelClassCap={() => setAddingClassCapClassId(null)}
+                  onCancelClassCap={cancelClassCap}
                   onConfirmClassCap={(ruleType, thresholdValue) =>
                     confirmClassCap(activityClass.id, ruleType, thresholdValue)
                   }
                   onAddExerciseRule={() => {
                     setAddingClassCapClassId(null);
+                    exerciseRuleBaselineCountRef.current = getExerciseRules(
+                      scopedRules,
+                      activityClass.id,
+                    ).length;
                     setAddingExerciseRuleClassId(activityClass.id);
                   }}
-                  onCancelExerciseRule={() => setAddingExerciseRuleClassId(null)}
+                  onCancelExerciseRule={cancelExerciseRule}
                   onConfirmExerciseRule={(ruleType, thresholdValue, activityId, limitUnit) =>
                     confirmExerciseRule(
                       activityClass.id,
@@ -902,6 +959,7 @@ export function EditBlockRulesScreen({
                     )
                   }
                   activityNameById={activityNameById}
+                  ruleMutationError={engine.ruleMutationError}
                 />
               );
             })
