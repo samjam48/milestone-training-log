@@ -5,7 +5,7 @@ from typing import cast
 
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Engine
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
@@ -261,6 +261,53 @@ def test_upgrade_head_creates_phase_one_schema_in_temporary_sqlite(
 
     goal_defaults = _sqlite_column_defaults(engine, "goals")
     assert goal_defaults["auto_track_progress"] in {"0", "false"}
+
+
+def test_stage_2_5_migration_disables_existing_weekly_activity_count_rules(
+    tmp_path: Path,
+) -> None:
+    database_url = f"sqlite:///{tmp_path / 'weekly-activity-count-migration.db'}"
+    config = _make_alembic_config(database_url)
+
+    command.upgrade(config, "20260527_0001")
+
+    engine = create_engine(database_url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                INSERT INTO training_blocks (
+                    id, user_id, name, start_date, status,
+                    is_review_milestone_hit, created_at, updated_at
+                ) VALUES (
+                    'blk-cross-class', 'local', 'Legacy Block', '2026-04-07', 'active',
+                    0, '2026-04-07T00:00:00', '2026-04-07T00:00:00'
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO rules (
+                    id, training_block_id, activity_class_id, rule_type,
+                    threshold_value, window_days, enabled, created_at, updated_at
+                ) VALUES (
+                    'rule-cross-class', 'blk-cross-class', NULL, 'weekly_activity_count',
+                    4, 7, 1, '2026-04-07T00:00:00', '2026-04-07T00:00:00'
+                )
+                """
+            )
+        )
+
+    command.upgrade(config, "head")
+
+    with engine.connect() as connection:
+        enabled = connection.execute(
+            text("SELECT enabled FROM rules WHERE id = 'rule-cross-class'")
+        ).scalar_one()
+
+    assert enabled in {0, False}
 
 
 def test_downgrade_base_removes_application_tables_from_temporary_sqlite(

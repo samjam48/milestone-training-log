@@ -202,6 +202,8 @@ def seed_rule(
     threshold_value: float,
     window_days: int,
     activity_class_id: str | None = None,
+    activity_id: str | None = None,
+    limit_unit: str | None = None,
     enabled: bool = True,
     created_at: datetime | None = None,
 ) -> None:
@@ -212,6 +214,8 @@ def seed_rule(
                 id=rule_id,
                 training_block_id=training_block_id,
                 activity_class_id=activity_class_id,
+                activity_id=activity_id,
+                limit_unit=limit_unit,
                 rule_type=rule_type,
                 threshold_value=threshold_value,
                 window_days=window_days,

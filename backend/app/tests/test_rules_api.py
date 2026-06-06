@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from httpx import AsyncClient
 
 from app.tests.helpers.seed import (
+    seed_activity,
     seed_activity_class,
     seed_rule,
     seed_training_block,
@@ -50,6 +51,29 @@ def _seed_rule_graph(app_with_test_database: FastAPI) -> None:
         app_with_test_database,
         class_id="cls-foot-load",
         name="Foot Load",
+    )
+
+
+def _seed_exercise_rule_graph(app_with_test_database: FastAPI) -> None:
+    _seed_rule_graph(app_with_test_database)
+    seed_activity_class(
+        app_with_test_database,
+        class_id="cls-upper",
+        name="Upper Body",
+    )
+    seed_activity(
+        app_with_test_database,
+        activity_id="act-walk",
+        activity_class_id="cls-foot-load",
+        name="Morning Walk",
+        default_volume_unit="km",
+    )
+    seed_activity(
+        app_with_test_database,
+        activity_id="act-bands",
+        activity_class_id="cls-upper",
+        name="Resistance Bands",
+        default_volume_unit="sets",
     )
 
 
@@ -186,7 +210,7 @@ async def test_create_class_scoped_rule_returns_created_payload(
     )
 
 
-async def test_create_cross_class_rule_allows_null_activity_class_id(
+async def test_create_cross_class_rule_rejects_null_activity_class_id(
     app_with_test_database: FastAPI,
     client: AsyncClient,
 ) -> None:
@@ -209,16 +233,98 @@ async def test_create_cross_class_rule_allows_null_activity_class_id(
         },
     )
 
-    assert response.status_code == 201
-    _assert_rule_payload(
-        response.json(),
-        rule_id="rule-cross",
-        training_block_id="blk-1",
-        activity_class_id=None,
-        rule_type="weekly_activity_count",
-        threshold_value=4.0,
-        window_days=7,
+    assert response.status_code == 422
+    assert response.json() == {"detail": "activity_class_id is required"}
+
+
+async def test_create_rule_rejects_weekly_activity_count_with_clear_message(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    _seed_rule_graph(app_with_test_database)
+
+    response = await client.post(
+        "/api/training-blocks/blk-1/rules",
+        json={
+            "id": "rule-deprecated",
+            "activity_class_id": "cls-foot-load",
+            "rule_type": "weekly_activity_count",
+            "threshold_value": 4.0,
+            "window_days": 7,
+        },
     )
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "detail": "weekly_activity_count rules are deprecated",
+    }
+
+
+async def test_create_rule_rejects_null_activity_class_id_for_class_scoped_rule(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    _seed_rule_graph(app_with_test_database)
+
+    response = await client.post(
+        "/api/training-blocks/blk-1/rules",
+        json={
+            "id": "rule-no-class",
+            "activity_class_id": None,
+            "rule_type": "frequency_limit",
+            "threshold_value": 3.0,
+            "window_days": 7,
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "activity_class_id is required"}
+
+
+async def test_create_exercise_rule_rejects_activity_id_without_activity_class_id(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    _seed_exercise_rule_graph(app_with_test_database)
+
+    response = await client.post(
+        "/api/training-blocks/blk-1/rules",
+        json={
+            "id": "rule-orphan-exercise",
+            "activity_class_id": None,
+            "activity_id": "act-walk",
+            "rule_type": "frequency_limit",
+            "threshold_value": 2.0,
+            "window_days": 7,
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "activity_class_id is required"}
+
+
+async def test_create_exercise_rule_rejects_activity_not_in_activity_class(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    _seed_exercise_rule_graph(app_with_test_database)
+
+    response = await client.post(
+        "/api/training-blocks/blk-1/rules",
+        json={
+            "id": "rule-wrong-class",
+            "activity_class_id": "cls-foot-load",
+            "activity_id": "act-bands",
+            "rule_type": "frequency_limit",
+            "threshold_value": 2.0,
+            "window_days": 7,
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "detail": "Activity does not belong to activity class",
+    }
 
 
 async def test_create_rule_defaults_enabled_to_true(
@@ -377,7 +483,6 @@ async def test_create_rule_rejects_missing_required_numeric_fields(
         "frequency_limit",
         "weekly_load_cap",
         "consecutive_day_limit",
-        "weekly_activity_count",
     ],
 )
 async def test_create_rule_accepts_known_rule_type_strings(
@@ -391,7 +496,7 @@ async def test_create_rule_accepts_known_rule_type_strings(
         "/api/training-blocks/blk-1/rules",
         json={
             "id": f"rule-{rule_type}",
-            "activity_class_id": "cls-foot-load" if rule_type != "weekly_activity_count" else None,
+            "activity_class_id": "cls-foot-load",
             "rule_type": rule_type,
             "threshold_value": 1.0,
             "window_days": 7,
@@ -468,7 +573,7 @@ async def test_patch_rule_allows_empty_body_without_changing_row(
     )
 
 
-async def test_patch_rule_allows_activity_class_id_to_be_cleared(
+async def test_patch_rule_rejects_activity_class_id_clear_on_class_scoped_rule(
     app_with_test_database: FastAPI,
     client: AsyncClient,
 ) -> None:
@@ -488,8 +593,34 @@ async def test_patch_rule_allows_activity_class_id_to_be_cleared(
         json={"activity_class_id": None},
     )
 
-    assert response.status_code == 200
-    assert response.json()["activity_class_id"] is None
+    assert response.status_code == 422
+    assert response.json() == {"detail": "activity_class_id is required"}
+
+
+async def test_patch_rule_rejects_rule_type_change_to_weekly_activity_count(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    _seed_rule_graph(app_with_test_database)
+    seed_rule(
+        app_with_test_database,
+        rule_id="rule-1",
+        training_block_id="blk-1",
+        activity_class_id="cls-foot-load",
+        rule_type="frequency_limit",
+        threshold_value=3.0,
+        window_days=7,
+    )
+
+    response = await client.patch(
+        "/api/rules/rule-1",
+        json={"rule_type": "weekly_activity_count"},
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "detail": "weekly_activity_count rules are deprecated",
+    }
 
 
 async def test_patch_rule_updates_threshold_value_and_window_days_independently(
@@ -676,3 +807,123 @@ async def test_patch_rule_rejects_null_required_fields_without_changing_row(
         threshold_value=3.0,
         window_days=7,
     )
+
+
+async def test_patch_rule_accepts_activity_id_and_limit_unit(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    _seed_exercise_rule_graph(app_with_test_database)
+    seed_rule(
+        app_with_test_database,
+        rule_id="rule-1",
+        training_block_id="blk-1",
+        activity_class_id="cls-foot-load",
+        rule_type="frequency_limit",
+        threshold_value=3.0,
+        window_days=7,
+    )
+
+    response = await client.patch(
+        "/api/rules/rule-1",
+        json={
+            "activity_id": "act-walk",
+            "limit_unit": "sessions",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["activity_id"] == "act-walk"
+    assert payload["limit_unit"] == "sessions"
+
+
+async def test_patch_rule_rejects_activity_not_in_activity_class(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    _seed_exercise_rule_graph(app_with_test_database)
+    seed_rule(
+        app_with_test_database,
+        rule_id="rule-1",
+        training_block_id="blk-1",
+        activity_class_id="cls-foot-load",
+        rule_type="frequency_limit",
+        threshold_value=3.0,
+        window_days=7,
+    )
+
+    response = await client.patch(
+        "/api/rules/rule-1",
+        json={"activity_id": "act-bands"},
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "detail": "Activity does not belong to activity class",
+    }
+
+
+async def test_patch_legacy_cross_class_rule_allows_idempotent_update(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    seed_training_block(
+        app_with_test_database,
+        block_id="blk-1",
+        name="Legacy Block",
+        start_date=date(2026, 4, 7),
+        status="archived",
+    )
+    seed_rule(
+        app_with_test_database,
+        rule_id="rule-legacy-cross",
+        training_block_id="blk-1",
+        activity_class_id=None,
+        rule_type="weekly_activity_count",
+        threshold_value=4.0,
+        window_days=7,
+        enabled=False,
+    )
+
+    response = await client.patch(
+        "/api/rules/rule-legacy-cross",
+        json={"threshold_value": 5.0},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["threshold_value"] == 5.0
+    assert response.json()["enabled"] is False
+
+
+async def test_patch_legacy_cross_class_rule_rejects_re_enable(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    seed_training_block(
+        app_with_test_database,
+        block_id="blk-1",
+        name="Legacy Block",
+        start_date=date(2026, 4, 7),
+        status="archived",
+    )
+    seed_rule(
+        app_with_test_database,
+        rule_id="rule-legacy-cross",
+        training_block_id="blk-1",
+        activity_class_id=None,
+        rule_type="weekly_activity_count",
+        threshold_value=4.0,
+        window_days=7,
+        enabled=False,
+    )
+
+    response = await client.patch(
+        "/api/rules/rule-legacy-cross",
+        json={"enabled": True},
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "detail": "Cannot enable deprecated weekly_activity_count rule",
+    }

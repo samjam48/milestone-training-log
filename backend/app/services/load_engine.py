@@ -701,49 +701,7 @@ def _violations_loop_rules(
                     rule, class_activity_ids, logs, as_of
                 )
             )
-        elif (
-            rule["rule_type"] == "weekly_activity_count"
-            and rule.get("activity_class_id") is None
-            and _is_performance_activity(activity)
-        ):
-            violations.extend(
-                _violations_weekly_activity_count(rule, activities, logs, as_of)
-            )
     return violations
-
-
-def _violations_weekly_activity_count(
-    rule: RuleDict,
-    activities: list[ActivityDict],
-    logs: list[LogDict],
-    as_of: str,
-) -> list[RuleViolationSnapshot]:
-    window = int(rule["window_days"])
-    win_start = add_days(as_of, -(window - 1))
-    perf_ids = {a["id"] for a in activities if _is_performance_activity(a)}
-    perf_count = float(
-        sum(
-            1
-            for log in logs
-            if log["activity_id"] in perf_ids
-            and win_start <= log["logged_date"] <= as_of
-        )
-        + 1
-    )
-    perf_threshold = float(rule["threshold_value"])
-    severity = _severity_from_ratio(perf_count, perf_threshold)
-    if severity is None:
-        return []
-    return [
-        {
-            "rule_id": rule["id"],
-            "rule_type": "weekly_activity_count",
-            "severity": severity,
-            "message": (
-                f"Weekly activity count {int(perf_count)} / {int(perf_threshold)}"
-            ),
-        }
-    ]
 
 
 def check_violations(

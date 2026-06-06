@@ -10,9 +10,11 @@ class RuleCreate(BaseModel):
 
     id: str
     activity_class_id: str | None = None
+    activity_id: str | None = None
     rule_type: RuleType
     threshold_value: float
     window_days: int
+    limit_unit: str | None = None
     enabled: bool = True
 
 
@@ -20,9 +22,11 @@ class RulePatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     activity_class_id: str | None = None
+    activity_id: str | None = None
     rule_type: RuleType | None = None
     threshold_value: float | None = None
     window_days: int | None = None
+    limit_unit: str | None = None
     enabled: bool | None = None
 
     @field_validator("rule_type", "threshold_value", "window_days", mode="before")
@@ -39,9 +43,11 @@ class RuleRead(BaseModel):
     id: str
     training_block_id: str
     activity_class_id: str | None
+    activity_id: str | None
     rule_type: str
     threshold_value: float
     window_days: int
+    limit_unit: str | None
     enabled: bool
     created_at: datetime
     updated_at: datetime

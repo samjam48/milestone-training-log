@@ -519,7 +519,33 @@ def test_check_violations_flags_consecutive_day_limit_danger() -> None:
     assert consecutive["severity"] == "danger"
 
 
-def test_check_violations_flags_weekly_activity_count_for_cross_class_rule() -> None:
+def test_check_violations_ignores_disabled_legacy_weekly_activity_count_rule() -> None:
+    cross_class_rule = {
+        "id": "rule-perf-count",
+        "activity_class_id": None,
+        "rule_type": "weekly_activity_count",
+        "threshold_value": 3,
+        "window_days": 7,
+        "enabled": False,
+    }
+    perf_logs = [
+        log
+        for log in LOGS
+        if log["logged_date"] >= "2026-05-19" and log["logged_date"] <= AS_OF
+    ]
+    violations = check_violations(
+        "act-walk",
+        volume_value=1.0,
+        rpe=3,
+        activities=ACTIVITIES,
+        logs=perf_logs,
+        rules=[cross_class_rule],
+        as_of=AS_OF,
+    )
+    assert all(v["rule_type"] != "weekly_activity_count" for v in violations)
+
+
+def test_check_violations_ignores_enabled_legacy_weekly_activity_count_rule() -> None:
     cross_class_rule = {
         "id": "rule-perf-count",
         "activity_class_id": None,
@@ -539,36 +565,6 @@ def test_check_violations_flags_weekly_activity_count_for_cross_class_rule() -> 
         rpe=3,
         activities=ACTIVITIES,
         logs=perf_logs,
-        rules=[cross_class_rule],
-        as_of=AS_OF,
-    )
-    count_violation = next(
-        v for v in violations if v["rule_type"] == "weekly_activity_count"
-    )
-    assert count_violation["severity"] in {"caution", "danger"}
-
-
-def test_check_violations_excludes_recovery_activities_from_weekly_activity_count() -> None:
-    cross_class_rule = {
-        "id": "rule-perf-count",
-        "activity_class_id": None,
-        "rule_type": "weekly_activity_count",
-        "threshold_value": 10,
-        "window_days": 7,
-        "enabled": True,
-    }
-    recovery_only = [
-        log
-        for log in LOGS
-        if log["activity_id"] in {"act-stretch", "act-pool"}
-        and log["logged_date"] >= "2026-05-19"
-    ]
-    violations = check_violations(
-        "act-stretch",
-        volume_value=15.0,
-        rpe=1,
-        activities=ACTIVITIES,
-        logs=recovery_only,
         rules=[cross_class_rule],
         as_of=AS_OF,
     )

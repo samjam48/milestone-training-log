@@ -41,6 +41,12 @@ def upgrade() -> None:
             ["id"],
         )
 
+    op.execute(
+        sa.text(
+            "UPDATE rules SET enabled = 0 WHERE rule_type = 'weekly_activity_count'"
+        )
+    )
+
 
 def downgrade() -> None:
     with op.batch_alter_table("rules", schema=None) as batch_op:
