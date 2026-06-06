@@ -481,7 +481,6 @@ async def test_create_rule_rejects_missing_required_numeric_fields(
     [
         "rest_between_class",
         "frequency_limit",
-        "weekly_load_cap",
         "consecutive_day_limit",
     ],
 )

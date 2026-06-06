@@ -50,6 +50,8 @@ class CheckViolationsRequest(BaseModel):
     volume_value: float
     rpe: int
     as_of: date | None = None
+    duration_minutes: int | None = None
+    volume_unit: str | None = None
 
 
 class RuleViolationRead(BaseModel):

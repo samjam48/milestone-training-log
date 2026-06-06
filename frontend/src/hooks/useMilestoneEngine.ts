@@ -31,6 +31,7 @@ import type {
   RuleViolationSnapshot,
   Score0to10,
   TrainingBlock,
+  VolumeCapUnit,
   VolumeUnit,
   WeeklyTarget,
 } from '../types';
@@ -172,10 +173,13 @@ export interface RuleDraft {
   ruleType: RuleType;
   thresholdValue: number;
   windowDays: number;
+  limitUnit?: VolumeCapUnit;
   enabled: boolean;
 }
 
-export type RulePatch = Partial<Pick<RuleDraft, 'thresholdValue' | 'windowDays' | 'enabled'>>;
+export type RulePatch = Partial<
+  Pick<RuleDraft, 'thresholdValue' | 'windowDays' | 'limitUnit' | 'enabled'>
+>;
 
 export interface WeeklyTargetDraft {
   activityClassId: ID;
@@ -254,7 +258,13 @@ export interface MilestoneEngineResult {
   submitLog: (draft: LogDraft) => void;
   updateLog: (logId: ID, patch: LogPatch) => void;
   submitIncident: (draft: IncidentDraft) => void;
-  checkViolations: (activityId: ID, volumeValue: number, rpe: number) => RuleViolationSnapshot[];
+  checkViolations: (
+    activityId: ID,
+    volumeValue: number,
+    rpe: number,
+    durationMinutes?: number,
+    volumeUnit?: VolumeUnit,
+  ) => RuleViolationSnapshot[];
 }
 
 // ---------------------------------------------------------------------------
@@ -550,6 +560,8 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     activityId: ID,
     volumeValue: number,
     rpe: number,
+    durationMinutes?: number,
+    volumeUnit?: VolumeUnit,
   ): RuleViolationSnapshot[] => {
     if (violationDebounceRef.current !== undefined) {
       clearTimeout(violationDebounceRef.current);
@@ -560,7 +572,14 @@ export function useMilestoneEngine(): MilestoneEngineResult {
         queryClient.getQueryData<Awaited<ReturnType<typeof getDashboard>>>(['dashboard'])
           ?.todayDate ?? todayDate;
 
-      void checkViolationsApi({ activityId, volumeValue, rpe, asOf })
+      void checkViolationsApi({
+        activityId,
+        volumeValue,
+        rpe,
+        asOf,
+        ...(durationMinutes !== undefined ? { durationMinutes } : {}),
+        ...(volumeUnit !== undefined ? { volumeUnit } : {}),
+      })
         .then((response) => {
           setLiveViolations(response.violations);
         })

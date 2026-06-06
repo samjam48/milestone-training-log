@@ -37,6 +37,8 @@ async def post_check_violations_route(
         volume_value=payload.volume_value,
         rpe=payload.rpe,
         as_of=payload.as_of,
+        duration_minutes=payload.duration_minutes,
+        volume_unit=payload.volume_unit,
     )
 
 

@@ -30,6 +30,9 @@ class RuleValidationError(Exception):
         super().__init__(detail)
 
 
+_VOLUME_CAP_RULE_TYPES = frozenset({"weekly_volume_cap", "daily_volume_cap"})
+
+
 def list_rules(session: Session, block_id: str) -> list[Rule]:
     _ensure_local_training_block_exists(session, block_id)
     statement = (
@@ -105,6 +108,17 @@ def _validate_create_payload(session: Session, payload: RuleCreate) -> None:
 
     if payload.rule_type == "weekly_activity_count":
         raise RuleValidationError("weekly_activity_count rules are deprecated")
+
+    if payload.rule_type == "weekly_load_cap":
+        raise RuleValidationError("weekly_load_cap rules are deprecated")
+
+    if payload.rule_type in _VOLUME_CAP_RULE_TYPES:
+        if payload.activity_id is None:
+            raise RuleValidationError(
+                "Volume caps require activity_id (exercise-scoped only)",
+            )
+        if not payload.limit_unit:
+            raise RuleValidationError("limit_unit is required for volume-cap rules")
 
     if payload.activity_id is not None:
         _validate_activity_belongs_to_class(

@@ -4,12 +4,22 @@ import { BackButton } from '../ui/BackButton';
 import { Card } from '../ui/Card';
 import { StackScreenEngineBody } from '../ui/StackScreenEngineBody';
 import type { MilestoneEngineResult, RuleDraft } from '../../hooks/useMilestoneEngine';
-import type { Activity, ActivityClass, Rule, RuleType, VolumeUnit, WeeklyTarget } from '../../types';
+import type {
+  Activity,
+  ActivityClass,
+  Rule,
+  RuleType,
+  VolumeCapUnit,
+  VolumeUnit,
+  WeeklyTarget,
+} from '../../types';
 import {
   CLASS_ADD_RULE_TYPES,
   EXERCISE_ADD_RULE_TYPES,
+  VOLUME_CAP_UNITS,
   getRuleHelper,
   getRuleLabel,
+  isVolumeCapRule,
 } from '../../lib/ruleTaxonomy';
 
 export interface EditBlockRulesScreenProps {
@@ -130,6 +140,14 @@ function formatThreshold(value: number): string {
   return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(2)));
 }
 
+function defaultLimitUnitForRule(ruleType: RuleType): VolumeCapUnit {
+  return ruleType === 'daily_volume_cap' ? 'minutes' : 'km';
+}
+
+function windowDaysForRuleType(ruleType: RuleType): number {
+  return ruleType === 'daily_volume_cap' ? 1 : 7;
+}
+
 function parseDisplayedThreshold(
   displayedValue: string,
   fallbackValue: number,
@@ -146,6 +164,7 @@ interface RuleRowProps {
   onDraftChange: (ruleId: string, value: string) => void;
   onCommitThreshold: (rule: Rule, value: number) => void;
   onCommitDraft: (rule: Rule) => void;
+  onLimitUnitChange: (rule: Rule, limitUnit: VolumeCapUnit) => void;
   onToggleEnabled: (rule: Rule) => void;
   onDelete: (ruleId: string) => void;
 }
@@ -158,6 +177,7 @@ function RuleRow({
   onDraftChange,
   onCommitThreshold,
   onCommitDraft,
+  onLimitUnitChange,
   onToggleEnabled,
   onDelete,
 }: RuleRowProps): React.ReactElement {
@@ -165,6 +185,10 @@ function RuleRow({
   const inputId = `rule-threshold-${rule.id}`;
   const thresholdValue = draftThresholds[rule.id] ?? formatThreshold(rule.thresholdValue);
   const helperText = getRuleHelper(rule.ruleType);
+  const showVolumeUnit = isVolumeCapRule(rule.ruleType);
+  const displayUnit = showVolumeUnit
+    ? (rule.limitUnit ?? defaultLimitUnitForRule(rule.ruleType))
+    : definition.unit;
 
   return (
     <div className={cn('px-4 py-3.5', indented && 'pl-8')}>
@@ -239,9 +263,26 @@ function RuleRow({
               onBlur={() => onCommitDraft(rule)}
               className="w-16 rounded-md border border-border bg-bg-sunken px-2 py-1.5 text-center text-body-lg font-semibold tabular-nums text-ink outline-none"
             />
-            <span className="shrink-0 text-caption text-ink-faint">
-              {definition.unit}
-            </span>
+            {showVolumeUnit ? (
+              <select
+                value={rule.limitUnit ?? defaultLimitUnitForRule(rule.ruleType)}
+                aria-label="Volume unit"
+                onChange={(event) =>
+                  onLimitUnitChange(rule, event.target.value as VolumeCapUnit)
+                }
+                className="rounded-md border border-border bg-bg-sunken px-2 py-1.5 text-caption text-ink"
+              >
+                {VOLUME_CAP_UNITS.map((unit) => (
+                  <option key={unit} value={unit}>
+                    {unit}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className="shrink-0 text-caption text-ink-faint">
+                {displayUnit}
+              </span>
+            )}
           </div>
           <button
             type="button"
@@ -331,7 +372,12 @@ interface AddRuleFormProps {
   activities?: Activity[];
   selectedActivityId?: string;
   onActivityChange?: (activityId: string) => void;
-  onSave: (ruleType: RuleType, thresholdValue: number, activityId?: string) => void;
+  onSave: (
+    ruleType: RuleType,
+    thresholdValue: number,
+    activityId?: string,
+    limitUnit?: VolumeCapUnit,
+  ) => void;
   onCancel: () => void;
 }
 
@@ -347,7 +393,11 @@ function AddRuleForm({
   const [ruleType, setRuleType] = React.useState<RuleType>(DEFAULT_NEW_RULE_DRAFT.ruleType);
   const [threshold, setThreshold] = React.useState(String(DEFAULT_NEW_RULE_DRAFT.thresholdValue));
   const [activityId, setActivityId] = React.useState(selectedActivityId);
+  const [limitUnit, setLimitUnit] = React.useState<VolumeCapUnit>(
+    defaultLimitUnitForRule(DEFAULT_NEW_RULE_DRAFT.ruleType),
+  );
   const helperText = getRuleHelper(ruleType);
+  const showVolumeUnit = isVolumeCapRule(ruleType);
 
   React.useEffect(() => {
     setActivityId(selectedActivityId);
@@ -362,7 +412,12 @@ function AddRuleForm({
       return;
     }
     const definition = RULE_DEFINITIONS[ruleType];
-    onSave(ruleType, clampThreshold(parsedThreshold, definition), activityId || undefined);
+    onSave(
+      ruleType,
+      clampThreshold(parsedThreshold, definition),
+      activityId || undefined,
+      showVolumeUnit ? limitUnit : undefined,
+    );
   }
 
   return (
@@ -404,7 +459,13 @@ function AddRuleForm({
         <select
           id="new-rule-type"
           value={ruleType}
-          onChange={(event) => setRuleType(event.target.value as RuleType)}
+          onChange={(event) => {
+            const nextRuleType = event.target.value as RuleType;
+            setRuleType(nextRuleType);
+            if (isVolumeCapRule(nextRuleType)) {
+              setLimitUnit(defaultLimitUnitForRule(nextRuleType));
+            }
+          }}
           aria-label="Rule type"
           className="w-full rounded-md border border-border bg-bg-sunken px-3 py-2 text-body text-ink"
         >
@@ -436,6 +497,29 @@ function AddRuleForm({
           className="w-full rounded-md border border-border bg-bg-sunken px-3 py-2 text-body text-ink"
         />
       </div>
+      {showVolumeUnit ? (
+        <div>
+          <label
+            htmlFor="new-rule-volume-unit"
+            className="mb-1 block text-caption text-ink-muted"
+          >
+            Volume unit
+          </label>
+          <select
+            id="new-rule-volume-unit"
+            value={limitUnit}
+            aria-label="Volume unit"
+            onChange={(event) => setLimitUnit(event.target.value as VolumeCapUnit)}
+            className="w-full rounded-md border border-border bg-bg-sunken px-3 py-2 text-body text-ink"
+          >
+            {VOLUME_CAP_UNITS.map((unit) => (
+              <option key={unit} value={unit}>
+                {unit}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
       <div className="flex gap-3">
         <button
           type="button"
@@ -468,6 +552,7 @@ interface ClassRulesSectionProps {
   onDraftChange: (ruleId: string, value: string) => void;
   onCommitThreshold: (rule: Rule, value: number) => void;
   onCommitDraft: (rule: Rule) => void;
+  onLimitUnitChange: (rule: Rule, limitUnit: VolumeCapUnit) => void;
   onToggleEnabled: (rule: Rule) => void;
   onDeleteRule: (ruleId: string) => void;
   onPatchWeeklyTarget: (targetId: string, patch: { targetValue?: number; targetUnit?: VolumeUnit }) => void;
@@ -477,7 +562,12 @@ interface ClassRulesSectionProps {
   onConfirmClassCap: (ruleType: RuleType, thresholdValue: number) => void;
   onAddExerciseRule: () => void;
   onCancelExerciseRule: () => void;
-  onConfirmExerciseRule: (ruleType: RuleType, thresholdValue: number, activityId: string) => void;
+  onConfirmExerciseRule: (
+    ruleType: RuleType,
+    thresholdValue: number,
+    activityId: string,
+    limitUnit?: VolumeCapUnit,
+  ) => void;
   activityNameById: Map<string, string>;
 }
 
@@ -493,6 +583,7 @@ function ClassRulesSection({
   onDraftChange,
   onCommitThreshold,
   onCommitDraft,
+  onLimitUnitChange,
   onToggleEnabled,
   onDeleteRule,
   onPatchWeeklyTarget,
@@ -532,6 +623,7 @@ function ClassRulesSection({
                   onDraftChange={onDraftChange}
                   onCommitThreshold={onCommitThreshold}
                   onCommitDraft={onCommitDraft}
+                  onLimitUnitChange={onLimitUnitChange}
                   onToggleEnabled={onToggleEnabled}
                   onDelete={onDeleteRule}
                 />
@@ -607,6 +699,7 @@ function ClassRulesSection({
                   onDraftChange={onDraftChange}
                   onCommitThreshold={onCommitThreshold}
                   onCommitDraft={onCommitDraft}
+                  onLimitUnitChange={onLimitUnitChange}
                   onToggleEnabled={onToggleEnabled}
                   onDelete={onDeleteRule}
                 />
@@ -618,9 +711,9 @@ function ClassRulesSection({
               ruleTypeOptions={EXERCISE_RULE_TYPE_OPTIONS}
               showActivityPicker
               activities={classActivities}
-              onSave={(ruleType, thresholdValue, activityId) => {
+              onSave={(ruleType, thresholdValue, activityId, limitUnit) => {
                 if (activityId != null) {
-                  onConfirmExerciseRule(ruleType, thresholdValue, activityId);
+                  onConfirmExerciseRule(ruleType, thresholdValue, activityId, limitUnit);
                 }
               }}
               onCancel={onCancelExerciseRule}
@@ -712,16 +805,22 @@ export function EditBlockRulesScreen({
     ruleType: RuleType,
     thresholdValue: number,
     activityId: string,
+    limitUnit?: VolumeCapUnit,
   ): void {
     engine.createRule({
       activityClassId: classId,
       activityId,
       ruleType,
       thresholdValue,
-      windowDays: 7,
+      windowDays: windowDaysForRuleType(ruleType),
+      limitUnit: isVolumeCapRule(ruleType) ? limitUnit : undefined,
       enabled: true,
     });
     setAddingExerciseRuleClassId(null);
+  }
+
+  function handleLimitUnitChange(rule: Rule, limitUnit: VolumeCapUnit): void {
+    engine.updateRule(rule.id, { limitUnit });
   }
 
   function handleCreateWeeklyTarget(classId: string): void {
@@ -771,6 +870,7 @@ export function EditBlockRulesScreen({
                   onDraftChange={updateDraftThreshold}
                   onCommitThreshold={commitThreshold}
                   onCommitDraft={commitDraftThreshold}
+                  onLimitUnitChange={handleLimitUnitChange}
                   onToggleEnabled={(rule) =>
                     engine.updateRule(rule.id, { enabled: !rule.enabled })
                   }
@@ -792,8 +892,14 @@ export function EditBlockRulesScreen({
                     setAddingExerciseRuleClassId(activityClass.id);
                   }}
                   onCancelExerciseRule={() => setAddingExerciseRuleClassId(null)}
-                  onConfirmExerciseRule={(ruleType, thresholdValue, activityId) =>
-                    confirmExerciseRule(activityClass.id, ruleType, thresholdValue, activityId)
+                  onConfirmExerciseRule={(ruleType, thresholdValue, activityId, limitUnit) =>
+                    confirmExerciseRule(
+                      activityClass.id,
+                      ruleType,
+                      thresholdValue,
+                      activityId,
+                      limitUnit,
+                    )
                   }
                   activityNameById={activityNameById}
                 />

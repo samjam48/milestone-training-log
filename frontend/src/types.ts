@@ -66,6 +66,9 @@ export type VolumeUnit =
   | 'reps' | 'sets' | 'sessions'
   | 'minutes';
 
+/** Units for exercise volume-cap rules (P25.7). */
+export type VolumeCapUnit = 'km' | 'minutes' | 'hours';
+
 // -----------------------------------------------------------------------------
 // ActivityLog — the central logged event
 // -----------------------------------------------------------------------------
@@ -168,6 +171,8 @@ export interface Rule extends Timestamped {
   ruleType: RuleType;
   thresholdValue: number;
   windowDays: number;                 // typically 7
+  /** Present on daily/weekly volume-cap rules (exercise-scoped). */
+  limitUnit?: VolumeCapUnit;
   enabled: boolean;
 }
 

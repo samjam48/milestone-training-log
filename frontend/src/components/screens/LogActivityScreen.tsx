@@ -167,9 +167,15 @@ export const LogActivityScreen: React.FC<Props> = ({
 
   // Live violation check — updates on every relevant input change
   const violations = React.useMemo(() => {
-    if (!selectedId || volume <= 0) return [];
-    return checkViolations(selectedId, volume, rpe > 0 ? rpe : 5);
-  }, [selectedId, volume, rpe, checkViolations]);
+    if (!selectedId || (volume <= 0 && duration <= 0)) return [];
+    return checkViolations(
+      selectedId,
+      volume,
+      rpe > 0 ? rpe : 5,
+      duration > 0 ? duration : undefined,
+      selAct?.defaultVolumeUnit,
+    );
+  }, [selectedId, volume, rpe, duration, selAct?.defaultVolumeUnit, checkViolations]);
 
   const canSubmit = selectedId !== '' && duration > 0;
 

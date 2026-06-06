@@ -358,6 +358,7 @@ export function mapRuleFromApi(raw: Record<string, unknown>): Rule {
     ruleType: raw.rule_type as RuleType,
     thresholdValue: Number(raw.threshold_value),
     windowDays: Number(raw.window_days),
+    limitUnit: (raw.limit_unit as Rule['limitUnit']) ?? undefined,
     enabled: Boolean(raw.enabled),
     ...readTimestamped(raw),
   };
@@ -667,12 +668,18 @@ export function mapCheckViolationsRequestBody(input: {
   volumeValue: number;
   rpe: number;
   asOf?: ISODate;
+  durationMinutes?: number;
+  volumeUnit?: string;
 }): Record<string, unknown> {
   return {
     activity_id: input.activityId,
     volume_value: input.volumeValue,
     rpe: input.rpe,
     ...(input.asOf !== undefined ? { as_of: input.asOf } : {}),
+    ...(input.durationMinutes !== undefined
+      ? { duration_minutes: input.durationMinutes }
+      : {}),
+    ...(input.volumeUnit !== undefined ? { volume_unit: input.volumeUnit } : {}),
   };
 }
 

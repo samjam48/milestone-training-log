@@ -23,6 +23,8 @@ export interface CheckViolationsInput {
   volumeValue: number;
   rpe: number;
   asOf?: ISODate;
+  durationMinutes?: number;
+  volumeUnit?: string;
 }
 
 export async function checkViolations(

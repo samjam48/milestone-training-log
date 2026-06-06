@@ -159,6 +159,7 @@ def _median(values: list[float]) -> float:
 _CAP_RULE_TYPES = frozenset(
     {"weekly_load_cap", "daily_volume_cap", "weekly_volume_cap"}
 )
+_VOLUME_CAP_RULE_TYPES = frozenset({"daily_volume_cap", "weekly_volume_cap"})
 _MIN_THRESHOLD_RULE_TYPES = _CAP_RULE_TYPES | frozenset(
     {"frequency_limit", "consecutive_day_limit"}
 )
@@ -403,6 +404,54 @@ def _class_consecutive_violation(
     return None
 
 
+def _log_volume_for_cap(log: LogDict, limit_unit: str) -> float | None:
+    if limit_unit == "hours":
+        duration = log.get("duration_minutes")
+        if duration is not None:
+            return float(duration) / 60.0
+        volume_unit = log.get("volume_unit")
+        if volume_unit == "hours":
+            return float(log["volume_value"])
+        if volume_unit == "minutes":
+            return float(log["volume_value"]) / 60.0
+        return None
+    if log.get("volume_unit") == limit_unit:
+        return float(log["volume_value"])
+    return None
+
+
+def _projected_volume_for_cap(
+    volume_value: float,
+    limit_unit: str,
+    *,
+    duration_minutes: int | None = None,
+    volume_unit: str | None = None,
+) -> float | None:
+    if limit_unit == "hours":
+        if duration_minutes is not None:
+            return float(duration_minutes) / 60.0
+        if volume_unit == "hours":
+            return volume_value
+        if volume_unit == "minutes":
+            return volume_value / 60.0
+        return None
+    if volume_unit is None or volume_unit == limit_unit:
+        return volume_value
+    return None
+
+
+def _sum_volume_for_cap(
+    logs: list[LogDict],
+    limit_unit: str,
+) -> float:
+    total = 0.0
+    for log in logs:
+        volume = _log_volume_for_cap(log, limit_unit)
+        if volume is not None:
+            total += volume
+    return total
+
+
 def _class_volume_cap_violation(
     class_id: str,
     activities: list[ActivityDict],
@@ -415,9 +464,11 @@ def _class_volume_cap_violation(
         effective = effective_rules_for_activity(activity_id, class_id, rules)
         for rule in effective:
             rule_type = rule["rule_type"]
-            if rule_type not in {"daily_volume_cap", "weekly_volume_cap"}:
+            if rule_type not in _VOLUME_CAP_RULE_TYPES:
                 continue
             limit_unit = rule.get("limit_unit")
+            if not limit_unit:
+                continue
             window = int(rule["window_days"])
             win_start = add_days(as_of, -(window - 1))
             activity_logs = [
@@ -425,18 +476,15 @@ def _class_volume_cap_violation(
                 for log in logs
                 if log["activity_id"] == activity_id
                 and win_start <= log["logged_date"] <= as_of
-                and log.get("volume_unit") == limit_unit
             ]
             if rule_type == "daily_volume_cap":
-                current = sum(
-                    log["volume_value"]
-                    for log in activity_logs
-                    if log["logged_date"] == as_of
-                )
+                activity_logs = [
+                    log for log in activity_logs if log["logged_date"] == as_of
+                ]
                 window_label = "daily"
             else:
-                current = sum(log["volume_value"] for log in activity_logs)
                 window_label = f"{window}-day"
+            current = _sum_volume_for_cap(activity_logs, limit_unit)
             threshold = float(rule["threshold_value"])
             severity = _severity_from_ratio(current, threshold)
             if severity is None:
@@ -1151,6 +1199,71 @@ def _violations_rest_between_class(
     ]
 
 
+def _violations_volume_cap(
+    rule: RuleDict,
+    activity_id: str,
+    logs: list[LogDict],
+    as_of: str,
+    volume_value: float,
+    *,
+    duration_minutes: int | None = None,
+    volume_unit: str | None = None,
+) -> list[RuleViolationSnapshot]:
+    limit_unit = rule.get("limit_unit")
+    if not limit_unit:
+        return []
+
+    rule_type = rule["rule_type"]
+    window = int(rule["window_days"])
+    win_start = add_days(as_of, -(window - 1))
+    activity_logs = [
+        log
+        for log in logs
+        if log["activity_id"] == activity_id
+        and win_start <= log["logged_date"] <= as_of
+    ]
+    if rule_type == "daily_volume_cap":
+        activity_logs = [log for log in activity_logs if log["logged_date"] == as_of]
+        window_label = "daily"
+    else:
+        window_label = f"{window}-day"
+
+    current = _sum_volume_for_cap(activity_logs, limit_unit)
+    projected_delta = _projected_volume_for_cap(
+        volume_value,
+        limit_unit,
+        duration_minutes=duration_minutes,
+        volume_unit=volume_unit,
+    )
+    projected = current if projected_delta is None else current + projected_delta
+    threshold = float(rule["threshold_value"])
+    if projected >= threshold:
+        return [
+            {
+                "rule_id": rule["id"],
+                "rule_type": rule_type,
+                "severity": "danger",
+                "message": (
+                    f"Projected {window_label} {limit_unit} volume "
+                    f"{round(projected, 1)} of {int(threshold)} cap"
+                ),
+            }
+        ]
+    if projected >= threshold * 0.8:
+        return [
+            {
+                "rule_id": rule["id"],
+                "rule_type": rule_type,
+                "severity": "caution",
+                "message": (
+                    f"Approaching {limit_unit} cap — "
+                    f"{round(projected, 1)} / {int(threshold)}"
+                ),
+            }
+        ]
+    return []
+
+
 def _violations_weekly_load_cap(
     cap_rule: RuleDict,
     class_activity_ids: set[str],
@@ -1311,6 +1424,9 @@ def check_violations(
     logs: list[LogDict],
     rules: list[RuleDict],
     as_of: str,
+    *,
+    duration_minutes: int | None = None,
+    volume_unit: str | None = None,
 ) -> list[RuleViolationSnapshot]:
     activity = next((a for a in activities if a["id"] == activity_id), None)
     if activity is None:
@@ -1346,6 +1462,27 @@ def check_violations(
                     rpe,
                 )
             )
+
+    has_volume_projection = volume_value > 0 or (
+        duration_minutes is not None and duration_minutes > 0
+    )
+    if has_volume_projection and rpe > 0:
+        effective = effective_rules_for_activity(
+            activity_id, class_id, enabled_rules
+        )
+        for rule in effective:
+            if rule["rule_type"] in _VOLUME_CAP_RULE_TYPES:
+                violations.extend(
+                    _violations_volume_cap(
+                        rule,
+                        activity_id,
+                        logs,
+                        as_of,
+                        volume_value,
+                        duration_minutes=duration_minutes,
+                        volume_unit=volume_unit,
+                    )
+                )
 
     violations.extend(
         _violations_loop_rules(
@@ -1485,7 +1622,7 @@ def _metric_actual_and_limit(
             )
         return actual, threshold, "sessions"
 
-    limit_unit = rule.get("limit_unit")
+    limit_unit = rule.get("limit_unit") or ""
     win_start = add_days(as_of, -(window - 1))
     if activity_id is not None:
         activity_logs = [
@@ -1493,7 +1630,6 @@ def _metric_actual_and_limit(
             for log in logs
             if log["activity_id"] == activity_id
             and win_start <= log["logged_date"] <= as_of
-            and log.get("volume_unit") == limit_unit
         ]
     else:
         assert class_id is not None
@@ -1503,17 +1639,13 @@ def _metric_actual_and_limit(
             for log in logs
             if log["activity_id"] in class_activity_ids
             and win_start <= log["logged_date"] <= as_of
-            and log.get("volume_unit") == limit_unit
         ]
 
     if rule["rule_type"] == "daily_volume_cap":
-        actual = sum(
-            log["volume_value"]
-            for log in activity_logs
-            if log["logged_date"] == as_of
-        )
-    else:
-        actual = sum(log["volume_value"] for log in activity_logs)
+        activity_logs = [
+            log for log in activity_logs if log["logged_date"] == as_of
+        ]
+    actual = _sum_volume_for_cap(activity_logs, limit_unit)
     return float(actual), threshold, str(limit_unit)
 
 

@@ -132,8 +132,14 @@ export function InlineLogSheet({
 
   const violations = React.useMemo(() => {
     if (!open || activity == null) return [];
-    return engine.checkViolations(activity.id, volume, rpe);
-  }, [activity, engine, open, volume, rpe]);
+    return engine.checkViolations(
+      activity.id,
+      volume,
+      rpe,
+      duration > 0 ? duration : undefined,
+      activity.defaultVolumeUnit,
+    );
+  }, [activity, engine, open, volume, rpe, duration]);
 
   React.useEffect(() => {
     setDangerOverridden(false);

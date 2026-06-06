@@ -38,6 +38,9 @@ export const CLASS_ADD_RULE_TYPES = [
   'consecutive_day_limit',
 ] as const satisfies readonly RuleType[];
 
+/** Units offered when creating or editing exercise volume-cap rules (P25.7). */
+export const VOLUME_CAP_UNITS = ['km', 'minutes', 'hours'] as const;
+
 /** Exercise add-rule picker: spacing + daily/weekly volume caps. */
 export const EXERCISE_ADD_RULE_TYPES = [
   'rest_between_class',
@@ -61,6 +64,10 @@ export function getRuleLabel(ruleType: RuleType): string {
     return 'Weekly load cap';
   }
   return ruleType;
+}
+
+export function isVolumeCapRule(ruleType: RuleType): boolean {
+  return ruleType === 'weekly_volume_cap' || ruleType === 'daily_volume_cap';
 }
 
 export function getRuleHelper(ruleType: RuleType): string | undefined {
