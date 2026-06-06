@@ -52,6 +52,8 @@ Phase 1 includes **10 tables**:
 - `target_date`
 - `timeframe` — monthly or quarterly
 - `activity_class_id` nullable
+- `activity_id` nullable — optional link to a specific activity for auto-progress or activity-scoped goals
+- `auto_track_progress` — when true, server recomputes `progress_value` from matching activity logs (default false)
 - `progress_value` nullable
 - `progress_target` nullable
 - `progress_unit` nullable
@@ -61,6 +63,8 @@ Phase 1 includes **10 tables**:
 
 Purpose:
 - Time-scoped outcomes that training blocks and dashboard progress can reference
+- `activity_class_id` remains for legacy class-scoped goals; `activity_id` is the preferred link when tracking a single activity
+- `auto_track_progress` defaults to false; existing rows and new class-only goals keep manual progress unless enabled
 
 ### `training_blocks`
 
@@ -165,17 +169,20 @@ Purpose:
 
 - `id`
 - `training_block_id`
-- `activity_class_id` nullable for cross-class rules
+- `activity_class_id` nullable for class-scoped rules (legacy cross-class rules deprecated in Stage 2.5)
+- `activity_id` nullable — when set, rule applies to that exercise and takes precedence over the class-level rule of the same type
 - `rule_type`
 - `threshold_value`
 - `window_days`
+- `limit_unit` nullable — optional display or compute hint for volume-cap rules (e.g. `km`, `min`)
 - `enabled`
 - `created_at`
 - `updated_at`
 
 Purpose:
 - Recovery constraints such as rest windows, frequency caps, weekly load caps,
-  consecutive-day limits, or cross-class weekly activity count
+  consecutive-day limits, or per-exercise volume caps
+- Class-level rules (`activity_id` null) apply to all activities in the class; exercise-level rules override per type/metric
 
 ### `weekly_targets`
 
@@ -213,6 +220,7 @@ Purpose:
 - One `activity_class` owns many `activities`.
 - One `activity_class` can be referenced by many `goals`, `rules`,
   `weekly_targets`, and `flare_up_incidents`.
+- One `activity` can be referenced by many `goals` and `rules` (exercise-scoped links).
 - One `activity` owns many `activity_logs`.
 - One `daily_check_in` can surface zero or more linked `flare_up_incidents`,
   though Phase 1 behavior expects at most one check-in-sourced incident row.
