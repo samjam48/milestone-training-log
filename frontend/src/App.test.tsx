@@ -1072,7 +1072,7 @@ describe('App — S2.7 NewActivitySheet wiring', () => {
     );
   });
 
-  it('closes the sheet on Cancel without calling submitNewActivity', async () => {
+  it('closes the modal on X without calling submitNewActivity', async () => {
     const user = userEvent.setup();
     const submitNewActivity = vi.fn();
     mockEngine.submitNewActivity = submitNewActivity;
@@ -1080,7 +1080,7 @@ describe('App — S2.7 NewActivitySheet wiring', () => {
 
     await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
     await user.click(screen.getByRole('button', { name: '+ New Activity' }));
-    await user.click(screen.getByRole('button', { name: /^cancel$/i }));
+    await user.click(screen.getByRole('button', { name: /^close$/i }));
 
     expect(submitNewActivity).not.toHaveBeenCalled();
     expect(

@@ -12,7 +12,6 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { screen, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders';
-import { expectSafeBottomOnlyInset } from '../../test/bottomInsetLayout';
 import type { ActivityClass } from '../../types';
 import type { NewActivityDraft } from '../../hooks/useMilestoneEngine';
 import { NewActivitySheet } from './NewActivitySheet';
@@ -105,47 +104,6 @@ describe('NewActivitySheet — close affordances', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('calls onClose when the scrim (backdrop) is clicked', async () => {
-    const user = userEvent.setup();
-    const onClose = vi.fn();
-
-    renderWithProviders(<NewActivitySheet {...baseProps({ onClose })} />);
-
-    // The scrim element is behind the panel; it is aria-hidden but still
-    // physically clickable. Query by test-id or by a known class.
-    const scrim = document.querySelector('[aria-hidden="true"].fixed.inset-0');
-    expect(scrim).not.toBeNull();
-    await user.click(scrim as Element);
-
-    expect(onClose).toHaveBeenCalledTimes(1);
-  });
-
-  it('calls onClose when the Cancel button is clicked', async () => {
-    const user = userEvent.setup();
-    const onClose = vi.fn();
-
-    renderWithProviders(<NewActivitySheet {...baseProps({ onClose })} />);
-
-    await user.click(screen.getByRole('button', { name: /cancel/i }));
-
-    expect(onClose).toHaveBeenCalledTimes(1);
-  });
-
-  it('does NOT call onCreate when closed via Cancel', async () => {
-    const user = userEvent.setup();
-    const onCreate = vi.fn();
-    const onClose = vi.fn();
-
-    renderWithProviders(
-      <NewActivitySheet {...baseProps({ onCreate, onClose })} />,
-    );
-
-    // Fill in name so submit would otherwise be enabled
-    await user.type(screen.getByRole('textbox', { name: /activity name/i }), 'Test');
-    await user.click(screen.getByRole('button', { name: /cancel/i }));
-
-    expect(onCreate).not.toHaveBeenCalled();
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -635,15 +593,3 @@ describe('NewActivitySheet — full reset on re-open', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// S2.1 — Sheet panel clears device safe area (edge case)
-// ---------------------------------------------------------------------------
-
-describe('NewActivitySheet — S2.1 safe-bottom on sheet panel', () => {
-  it('applies safe-bottom inset on the fixed bottom sheet panel', () => {
-    renderWithProviders(<NewActivitySheet {...baseProps({ open: true })} />);
-
-    const panel = screen.getByRole('dialog', { name: /create new activity/i });
-    expectSafeBottomOnlyInset(panel);
-  });
-});

@@ -1,10 +1,11 @@
 // =============================================================================
-// NewActivitySheet — bottom sheet for creating a new ad-hoc activity
+// NewActivitySheet — centered modal for creating a new ad-hoc activity
 // =============================================================================
 
 import * as React from 'react';
 import { cn } from '../../lib/cn';
 import { SegmentedControl } from '../ui/SegmentedControl';
+import { CenteredModal } from '../ui/CenteredModal';
 import { ACTIVITY_VOLUME_UNIT_OPTIONS } from './activityVolumeUnits';
 import type { ActivityClass, ActivityType, VolumeUnit } from '../../types';
 import type { NewActivityDraft } from '../../hooks/useMilestoneEngine';
@@ -59,8 +60,6 @@ export function NewActivitySheet({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  if (!open) return null;
-
   const canCreate = name.trim().length > 0 && classId !== '';
 
   function handleCreate(e: React.FormEvent<HTMLFormElement>) {
@@ -81,194 +80,161 @@ export function NewActivitySheet({
   }
 
   return (
-    <>
-      {/* Scrim */}
-      <div
-        className="fixed inset-0 z-50 bg-black/60"
-        style={{ backdropFilter: 'blur(4px)' }}
-        onClick={onClose}
-        aria-hidden="true"
-      />
-
-      {/* Panel */}
-      <div
-        className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-[440px] rounded-t-2xl bg-bg-raised border-t border-border pb-safe-bottom"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Create new activity"
-      >
-        {/* Drag handle */}
-        <div className="flex justify-center pt-3 pb-1">
-          <div className="h-1 w-10 rounded-full bg-border" aria-hidden="true" />
+    <CenteredModal open={open} onClose={onClose} ariaLabel="Create new activity">
+      <form onSubmit={handleCreate}>
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-title font-bold text-ink">New Activity</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-8 w-8 flex items-center justify-center rounded-full text-ink-muted hover:text-ink hover:bg-bg-overlay transition-colors duration-snap"
+            aria-label="Close"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path
+                d="M4 4l8 8M12 4l-8 8"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
         </div>
 
-        <div className="px-4 pb-8 pt-2">
-          <div className="flex items-center justify-between mb-5">
-            <h2 className="text-title font-bold text-ink">New Activity</h2>
-            <button
-              type="button"
-              onClick={onClose}
-              className="h-8 w-8 flex items-center justify-center rounded-full text-ink-muted hover:text-ink hover:bg-bg-overlay transition-colors duration-snap"
-              aria-label="Close"
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <path
-                  d="M4 4l8 8M12 4l-8 8"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-              </svg>
-            </button>
+        <div className="flex flex-col gap-4">
+          {/* ── Name ── */}
+          <div>
+            <p className="text-body font-medium text-ink mb-2">Activity name</p>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Evening jog"
+              autoFocus
+              aria-label="Activity name"
+              className={cn(
+                'w-full rounded-md bg-bg-sunken border border-border px-3 py-2.5',
+                'text-body text-ink placeholder:text-ink-faint',
+                'focus:outline-none focus:border-border-strong',
+              )}
+            />
           </div>
 
-          <form onSubmit={handleCreate} className="flex flex-col gap-4">
-
-            {/* ── Name ── */}
-            <div>
-              <p className="text-body font-medium text-ink mb-2">Activity name</p>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Evening jog"
-                autoFocus
-                aria-label="Activity name"
-                className={cn(
-                  'w-full rounded-md bg-bg-sunken border border-border px-3 py-2.5',
-                  'text-body text-ink placeholder:text-ink-faint',
-                  'focus:outline-none focus:border-border-strong',
-                )}
-              />
-            </div>
-
-            {/* ── Class picker ── */}
-            <div>
-              <p className="text-body font-medium text-ink mb-2">Activity class</p>
-              {activityClasses.length === 0 ? (
-                <div className="flex flex-col gap-3 py-2">
-                  <p className="text-body text-ink-faint">No activity classes</p>
-                  {onAddActivityClass != null && (
-                    <button
-                      type="button"
-                      onClick={onAddActivityClass}
-                      className="h-11 rounded-md bg-bg-sunken border border-border text-body font-medium text-ink-muted transition-colors duration-snap hover:bg-bg-overlay"
-                    >
-                      Add activity class
-                    </button>
-                  )}
-                </div>
-              ) : (
-                <div className="flex flex-col divide-y divide-border-subtle rounded-md border border-border overflow-hidden">
-                  {activityClasses.map((cls) => {
-                    const isSelected = classId === cls.id;
-                    return (
-                      <button
-                        key={cls.id}
-                        type="button"
-                        aria-pressed={isSelected}
-                        onClick={() => setClassId(cls.id)}
-                        className={cn(
-                          'flex items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors duration-snap',
-                          isSelected ? 'bg-ink/10' : 'bg-bg-sunken hover:bg-bg-overlay',
-                        )}
-                      >
-                        <div className="min-w-0">
-                          <p
-                            className={cn(
-                              'text-body font-medium',
-                              isSelected ? 'text-ink' : 'text-ink-muted',
-                            )}
-                          >
-                            {cls.name}
-                          </p>
-                          <p className="text-caption text-ink-faint capitalize">{cls.type}</p>
-                        </div>
-                        {isSelected && (
-                          <svg
-                            width="16"
-                            height="16"
-                            viewBox="0 0 16 16"
-                            fill="none"
-                            className="shrink-0"
-                            aria-hidden="true"
-                          >
-                            <path
-                              d="M3 8l3.5 3.5L13 4"
-                              stroke="#E8ECF1"
-                              strokeWidth="1.75"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                          </svg>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* ── Type ── */}
-            <div>
-              <p className="text-body font-medium text-ink mb-2">Type</p>
-              <SegmentedControl
-                value={type}
-                onChange={setType}
-                options={TYPE_OPTIONS}
-                ariaLabel="Activity type"
-              />
-            </div>
-
-            {/* ── Volume unit ── */}
-            <div>
-              <p className="text-body font-medium text-ink mb-2">Volume unit</p>
-              <div className="grid grid-cols-3 gap-1.5">
-                {ACTIVITY_VOLUME_UNIT_OPTIONS.map((u) => (
+          {/* ── Class picker ── */}
+          <div>
+            <p className="text-body font-medium text-ink mb-2">Activity class</p>
+            {activityClasses.length === 0 ? (
+              <div className="flex flex-col gap-3 py-2">
+                <p className="text-body text-ink-faint">No activity classes</p>
+                {onAddActivityClass != null && (
                   <button
-                    key={u.value}
                     type="button"
-                    aria-pressed={unit === u.value}
-                    onClick={() => setUnit(u.value)}
-                    className={cn(
-                      'h-9 rounded-md text-body font-medium transition-colors duration-snap border',
-                      unit === u.value
-                        ? 'bg-ink text-ink-inverse border-transparent'
-                        : 'bg-bg-sunken text-ink-muted border-border hover:bg-bg-overlay',
-                    )}
+                    onClick={onAddActivityClass}
+                    className="h-11 rounded-md bg-bg-sunken border border-border text-body font-medium text-ink-muted transition-colors duration-snap hover:bg-bg-overlay"
                   >
-                    {u.label}
+                    Add activity class
                   </button>
-                ))}
-              </div>
-            </div>
-
-            {/* ── Actions ── */}
-            <div className="flex gap-3 pt-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="flex-1 h-11 rounded-md bg-bg-sunken text-body font-medium text-ink-muted transition-colors duration-snap active:bg-bg-overlay"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={!canCreate}
-                className={cn(
-                  'flex-1 h-11 rounded-md text-body-lg font-semibold transition-colors duration-snap',
-                  canCreate
-                    ? 'bg-ink text-ink-inverse active:opacity-80'
-                    : 'bg-ink/20 text-ink-faint cursor-not-allowed',
                 )}
-              >
-                Create
-              </button>
-            </div>
+              </div>
+            ) : (
+              <div className="flex flex-col divide-y divide-border-subtle rounded-md border border-border overflow-hidden">
+                {activityClasses.map((cls) => {
+                  const isSelected = classId === cls.id;
+                  return (
+                    <button
+                      key={cls.id}
+                      type="button"
+                      aria-pressed={isSelected}
+                      onClick={() => setClassId(cls.id)}
+                      className={cn(
+                        'flex items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors duration-snap',
+                        isSelected ? 'bg-ink/10' : 'bg-bg-sunken hover:bg-bg-overlay',
+                      )}
+                    >
+                      <div className="min-w-0">
+                        <p
+                          className={cn(
+                            'text-body font-medium',
+                            isSelected ? 'text-ink' : 'text-ink-muted',
+                          )}
+                        >
+                          {cls.name}
+                        </p>
+                        <p className="text-caption text-ink-faint capitalize">{cls.type}</p>
+                      </div>
+                      {isSelected && (
+                        <svg
+                          width="16"
+                          height="16"
+                          viewBox="0 0 16 16"
+                          fill="none"
+                          className="shrink-0"
+                          aria-hidden="true"
+                        >
+                          <path
+                            d="M3 8l3.5 3.5L13 4"
+                            stroke="#E8ECF1"
+                            strokeWidth="1.75"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
-          </form>
+          {/* ── Type ── */}
+          <div>
+            <p className="text-body font-medium text-ink mb-2">Type</p>
+            <SegmentedControl
+              value={type}
+              onChange={setType}
+              options={TYPE_OPTIONS}
+              ariaLabel="Activity type"
+            />
+          </div>
+
+          {/* ── Volume unit ── */}
+          <div>
+            <p className="text-body font-medium text-ink mb-2">Volume unit</p>
+            <div className="grid grid-cols-3 gap-1.5">
+              {ACTIVITY_VOLUME_UNIT_OPTIONS.map((u) => (
+                <button
+                  key={u.value}
+                  type="button"
+                  aria-pressed={unit === u.value}
+                  onClick={() => setUnit(u.value)}
+                  className={cn(
+                    'h-9 rounded-md text-body font-medium transition-colors duration-snap border',
+                    unit === u.value
+                      ? 'bg-ink text-ink-inverse border-transparent'
+                      : 'bg-bg-sunken text-ink-muted border-border hover:bg-bg-overlay',
+                  )}
+                >
+                  {u.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={!canCreate}
+            className={cn(
+              'w-full h-11 rounded-md text-body-lg font-semibold transition-colors duration-snap',
+              canCreate
+                ? 'bg-ink text-ink-inverse active:opacity-80'
+                : 'bg-ink/20 text-ink-faint cursor-not-allowed',
+            )}
+          >
+            Create
+          </button>
         </div>
-      </div>
-    </>
+      </form>
+    </CenteredModal>
   );
 }
