@@ -3,9 +3,10 @@
 Follow-up items outside the current sprint (`AGENTS.md`). Phase 0–10 tickets
 are archived in `plans/archive/phase-0-10/`.
 
-## Stage 2 polish (in tickets — see `plans/tickets-stage-2-polish-2026-06-05.md`)
+## Stage 2 polish — complete (2026-06)
 
-Implementation tracked there (S2.1–S2.9): bottom CTA inset, login password toggle, Android/history back, incident body-part suggestions, activity class + activity creation, Log tab **+ New Activity**, empty log flows. PWA: optional S2.10.
+Delivered per `plans/tickets-stage-2-polish-2026-06-05.md` (S2.1–S2.9 + PWA S2.10).
+New usage-driven tweaks go in a follow-up batch (owner backlog), not this section.
 
 ## Phase 11 / production follow-ups
 
@@ -30,11 +31,38 @@ Implementation tracked there (S2.1–S2.9): bottom CTA inset, login password tog
 - ~~Refactor `check_violations` in `load_engine.py` — radon F-rank complexity; extract per-rule helpers when extending.~~ (B10.5)
 - ~~Add API integration test for `elevated_load` without active block on `GET /api/load/delayed-tax`.~~ — **B10.6** (Phase 10).
 
-## Phase 6 / 7 follow-ups
+## Phases 6–10 deferred UI — complete on `main` (verified 2026-06-06)
 
-- ~~Phase 6 F1.3: full Log History via `GET /api/activity-logs`~~ — ticketed in
-  `plans/archive/phase-0-10/tickets-phase-6-frontend-2026-05-28.md`.
-- Phase 8: wire `recovery_streaks` compliance UI (hook maps field in Phase 6 F1.3). *(re-routed from Phase 7, owner 2026-05-30 — dashboard surface, outside screen-port scope)*
-- Phase 8: delayed-tax / load-risk dashboard panel (`GET /api/load/delayed-tax`). *(re-routed from Phase 7, owner 2026-05-30)*
-- Phase 7.5: `CalendarHeatmap` on Settings / block-review using hook `dailyScores`. *(home screen Settings is built in Phase 7; worth doing right after — owner 2026-05-30)*
-- Phase 6 F1.4: replace hardcoded `cls-foot` display labels with `activityClasses` lookup.
+These were tracked as Phase 6/7/8/9 follow-ups; all are implemented. See
+`plans/archive/phase-0-10/tickets-phase-10-polish-2026-06-04.md` for the
+Phase 10 ticket set that closed the last gaps.
+
+| Item | Where it lives now |
+| --- | --- |
+| Log History via `GET /api/activity-logs` | `LogHistoryScreen` + hook `activityLogs` query (Phase 6 F1.3) |
+| `activityClasses` display labels (was F1.4 / `cls-foot`) | Dashboard graph title + class status; `delayedTaxDisplay`; log rows use `activities` lookup |
+| Delayed-tax / load-risk panel | `LoadRiskSection` on `DashboardScreen` (F10.3); symptom attribution on check-in/incident (F10.4) |
+| Recovery streaks UI | **Dashboard** section (F10.1) — owner D1 moved off Settings |
+| `CalendarHeatmap` + block review | `BlockSafetyMapSection` on Dashboard; `BlockReviewScreen` from Settings **Review** / **View** |
+| Edit goal | `GoalEditorScreen` via `GoalsScreen` → `onEditGoal` |
+| Edit / deactivate activity | `ActivityManagerScreen` + Settings inline confirm; `updateActivity` / `deactivateActivity` on hook |
+| View previous block / active block Review | `App.tsx` → `block-review` stack with `blockId` param |
+
+## Stage 5 — Native app + widgets (long-term)
+
+Tracked in `plans/PRD.md` §13. Android-first native shell + home-screen quick-entry widgets (log, check-in). iOS optional. Requires Capacitor (or equivalent) and notification backend if prefs toggles become real.
+
+## Stage 2.5 — Usage-driven logic & UX (approved 2026-06-06)
+
+**Planning:** `plans/feature-brief-stage-2-5-usage-logic-2026-06-06.md`, `plans/technical-design-stage-2-5-usage-logic-2026-06-06.md`
+
+Themes: goal editor + activity-linked auto-progress; log date + edit; block caps + weekly goals in Edit Rules (Option A); suggestion buckets; load-risk ↔ caps; activity class edit/delete; incident chips from check-ins.
+
+**Branch:** `feat/stage-2-5-usage-logic` (when implementation starts). Ticket file pending planner.
+
+## Product gaps still open (not in the list above)
+
+- **Weekly volume target editor** — targets display on Settings active-block card; no create/edit UI (set at block creation only).
+- **Activity class editor** — create via Settings `NewActivityClassForm`; no edit/rename existing class.
+- **Settings preference toggles** — Notifications and Metric units are local React state only (prototype; no backend).
+- **Incident body-part chips from check-in history** — deferred in Stage 2 (S2.5 uses incident history only).

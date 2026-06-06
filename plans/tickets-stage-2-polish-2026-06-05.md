@@ -322,7 +322,7 @@ Move to implementation via tickets above (do not duplicate in BACKLOG):
 Remain in `plans/BACKLOG.md` for later stages:
 
 - Render cold start, custom domain, automated Supabase backup
-- Delayed-tax dashboard panel, CalendarHeatmap, recovery streaks UI
+- ~~Delayed-tax dashboard panel, CalendarHeatmap, recovery streaks UI~~ — **done** on `main` (Phases 7–10; see `plans/BACKLOG.md` §Phases 6–10 deferred UI)
 - Strava / Health / MCP (Stage 3–4)
 
 ---

@@ -474,21 +474,22 @@ blank white screen. Log enough activities to meet milestone conditions →
 
 ### Phase 9 — UI Interaction Completeness
 
-**Goal:** Implement the stub interactions left as `() => undefined` no-ops after Phase 7. Each item requires a design screen or mockup before a ticket can be written. This section is a design backlog, not an implementation plan.
+**Status: ✅ Complete** (Phases 9–10, on `main` as of 2026-06). Implemented via
+`plans/archive/phase-0-10/tickets-phase-9-settings-flow-2026-06-03.md` and
+`plans/archive/phase-0-10/tickets-phase-10-polish-2026-06-04.md`.
 
-**Owner action required:** Produce mockups/designs for each item below before Phase 9 tickets are written. Use the same `export/preview/*.jsx` prototype convention so the implementer has a reference spec.
+| Item | Screen | Implementation |
+| --- | --- | --- |
+| Edit goal | GoalsScreen | `onEditGoal` → `GoalEditorScreen` with `engine.updateGoal` |
+| Edit activity | SettingsScreen | `onEditActivity` → `ActivityManagerScreen` with `engine.updateActivity` |
+| Deactivate activity | SettingsScreen | Inline confirm + `engine.deactivateActivity`; restore via `updateActivity` |
+| View previous block | SettingsScreen | `onViewBlock` → `BlockReviewScreen` with `blockId` |
+| Block summary (active block) | SettingsScreen | `onReview` → `BlockReviewScreen` (active block) |
 
-| Item | Current state | Screen | Notes |
-| --- | --- | --- | --- |
-| Edit goal | `onEdit={() => undefined}` stub | GoalsScreen | Needs an edit sheet (reuse NewGoalForm shell). Fields: title, target date, timeframe, class, progress target/unit. PATCH via `engine.updateGoal`. |
-| Edit activity | `onEdit={() => undefined}` stub | SettingsScreen — Activities Manager | Needs an edit sheet. Fields: name, class (read-only?), type, default volume unit. PATCH via a new `engine.updateActivity` mutation (not yet in the hook). |
-| Deactivate activity | `onDeactivate={() => undefined}` stub | SettingsScreen — Activities Manager | Needs confirmation dialog. On confirm: PATCH `isActive: false` via `engine.updateActivity`. Row should grey out or disappear per design decision. |
-| View previous block | No `onClick` | SettingsScreen — Previous Blocks list | Blocked on Phase 7.5 (CalendarHeatmap / block-review grid). Design the block-review screen first; this button routes to it. |
-| Block summary (current block) | `onReview={() => undefined}` stub | SettingsScreen — Active Block card | Same blocker as above — Phase 7.5 block-review screen. |
-
-**Dependencies:**
-- Edit activity and Deactivate activity both require a new `updateActivity(activityId, patch)` mutation added to `useMilestoneEngine` (hook extension, similar to the F2.0 pattern).
-- View previous block and Block summary both depend on the Phase 7.5 CalendarHeatmap / block-review work which already appears in the Phase 7 out-of-scope list.
+**Also closed from Phase 6/7/8 deferrals (Phase 10):** delayed-tax dashboard
+panel (`LoadRiskSection`), recovery streaks section on Dashboard, dynamic load
+graph title (`graph_class_id`), `CalendarHeatmap` in `BlockSafetyMapSection` +
+`BlockReviewScreen`. See `plans/BACKLOG.md` §Phases 6–10 deferred UI.
 
 `goals.progress_value` / `progress_target` / `progress_unit` in the initial
 ---
