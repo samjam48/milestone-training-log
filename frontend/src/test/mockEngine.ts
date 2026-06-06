@@ -72,6 +72,7 @@ function createBaseline(): MilestoneEngineResult {
     refetchAll: () => undefined,
     // F1.3 mutations
     submitLog: () => undefined,
+    updateLog: () => undefined,
     submitCheckIn: () => undefined,
     submitIncident: () => undefined,
     checkViolations: () => [],

@@ -18,13 +18,16 @@ import { Card } from '../ui/Card';
 import { Slider } from '../ui/Slider';
 import { SegmentedControl } from '../ui/SegmentedControl';
 import { RuleViolationBanner } from '../composites/RuleViolationBanner';
-import type { MilestoneEngineResult, LogDraft } from '../../hooks/useMilestoneEngine';
-import type { Activity, ActivityClass, RPE, PostActivityFeel, SafetyState } from '../../types';
+import { DatePickerModal, formatLogDateLabel } from '../ui/DatePickerModal';
+import type { MilestoneEngineResult, LogDraft, LogPatch } from '../../hooks/useMilestoneEngine';
+import type { Activity, ActivityClass, ISODate, RPE, PostActivityFeel, SafetyState } from '../../types';
 
 interface Props {
   engine: MilestoneEngineResult;
   /** Pre-selected activity (e.g. tapped from SuggestedActivityCard). */
   initialActivityId?: string;
+  /** When set, form edits an existing log instead of creating one. */
+  logId?: string;
   onBack: () => void;
   onComplete: () => void;
   onCreateActivity?: () => void;
@@ -94,20 +97,70 @@ function resolveInitialActivityId(
 // Screen
 // ---------------------------------------------------------------------------
 
-export const LogActivityScreen: React.FC<Props> = ({
-  engine, initialActivityId, onBack, onComplete, onCreateActivity,
-}) => {
-  const { activityClasses, activities, checkViolations, submitLog } = engine;
+function buildLogPatch(
+  selectedId: string,
+  loggedDate: ISODate,
+  duration: number,
+  volume: number,
+  selAct: Activity | undefined,
+  rpe: number,
+  feel: PostActivityFeel,
+  notes: string,
+  violations: ReturnType<MilestoneEngineResult['checkViolations']>,
+): LogPatch {
+  return {
+    activityId: selectedId,
+    loggedDate,
+    durationMinutes: duration,
+    volumeValue: volume,
+    volumeUnit: selAct?.defaultVolumeUnit,
+    rpe: rpe > 0 ? rpe as RPE : undefined,
+    postActivityFeel: feel,
+    notes: notes || undefined,
+    ruleViolationsAtLog: violations.length > 0 ? violations : undefined,
+  };
+}
 
-  const [selectedId,  setSelectedId]  = React.useState<string>(
-    () => resolveInitialActivityId(initialActivityId, activities),
+export const LogActivityScreen: React.FC<Props> = ({
+  engine, initialActivityId, logId, onBack, onComplete, onCreateActivity,
+}) => {
+  const {
+    todayDate,
+    activityClasses,
+    activities,
+    logs,
+    checkViolations,
+    submitLog,
+    updateLog,
+  } = engine;
+
+  const editingLog = logId != null ? logs.find(l => l.id === logId) : undefined;
+  const isEditMode = editingLog != null;
+
+  const [selectedId,  setSelectedId]  = React.useState<string>(() => {
+    if (editingLog != null) return editingLog.activityId;
+    return resolveInitialActivityId(initialActivityId, activities);
+  });
+  const [loggedDate,  setLoggedDate]  = React.useState<ISODate>(
+    () => editingLog?.loggedDate ?? todayDate,
   );
-  const [duration,    setDuration]    = React.useState(0);
-  const [volume,      setVolume]      = React.useState(0);
-  const [rpe,         setRpe]         = React.useState(5);
-  const [feel,        setFeel]        = React.useState<PostActivityFeel>('fine');
-  const [notes,       setNotes]       = React.useState('');
+  const [duration,    setDuration]    = React.useState(
+    () => editingLog?.durationMinutes ?? 0,
+  );
+  const [volume,      setVolume]      = React.useState(
+    () => editingLog?.volumeValue ?? 0,
+  );
+  const [rpe,         setRpe]         = React.useState<number>(
+    () => editingLog?.rpe ?? 5,
+  );
+  const [feel,        setFeel]        = React.useState<PostActivityFeel>(
+    () => editingLog?.postActivityFeel ?? 'fine',
+  );
+  const [notes,       setNotes]       = React.useState(
+    () => editingLog?.notes ?? '',
+  );
   const [submitted,   setSubmitted]   = React.useState(false);
+  const [datePickerOpen, setDatePickerOpen] = React.useState(false);
 
   const groups  = React.useMemo(() => groupActivities(activityClasses, activities), [activityClasses, activities]);
   const hasActiveActivities = groups.length > 0;
@@ -124,17 +177,24 @@ export const LogActivityScreen: React.FC<Props> = ({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!canSubmit) return;
-    const draft: LogDraft = {
-      activityId: selectedId,
-      durationMinutes: duration,
-      volumeValue: volume,
-      volumeUnit: selAct?.defaultVolumeUnit,
-      rpe: rpe > 0 ? rpe as RPE : undefined,
-      postActivityFeel: feel,
-      notes: notes || undefined,
-      ruleViolationsAtLog: violations.length > 0 ? violations : undefined,
-    };
-    submitLog(draft);
+    if (isEditMode && logId != null) {
+      updateLog(logId, buildLogPatch(
+        selectedId, loggedDate, duration, volume, selAct, rpe, feel, notes, violations,
+      ));
+    } else {
+      const draft: LogDraft = {
+        activityId: selectedId,
+        loggedDate,
+        durationMinutes: duration,
+        volumeValue: volume,
+        volumeUnit: selAct?.defaultVolumeUnit,
+        rpe: rpe > 0 ? rpe as RPE : undefined,
+        postActivityFeel: feel,
+        notes: notes || undefined,
+        ruleViolationsAtLog: violations.length > 0 ? violations : undefined,
+      };
+      submitLog(draft);
+    }
     setSubmitted(true);
     setTimeout(onComplete, 800);
   }
@@ -144,7 +204,9 @@ export const LogActivityScreen: React.FC<Props> = ({
       <span className="flex h-14 w-14 items-center justify-center rounded-full bg-safe/20">
         <svg width={28} height={28} viewBox="0 0 28 28" fill="none"><path d="M5 14l6 6L23 7" stroke="#3DD68C" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"/></svg>
       </span>
-      <p className="text-title font-semibold text-safe-fg">Session logged.</p>
+      <p className="text-title font-semibold text-safe-fg">
+        {isEditMode ? 'Session updated.' : 'Session logged.'}
+      </p>
       <p className="text-body text-ink-muted">Your dashboard has been updated.</p>
     </div>
   );
@@ -154,7 +216,9 @@ export const LogActivityScreen: React.FC<Props> = ({
       {/* Header */}
       <div className="px-4 pb-2 shrink-0">
         <BackButton onPress={onBack} />
-        <h1 className="text-title font-bold text-ink mt-3">Log Activity</h1>
+        <h1 className="text-title font-bold text-ink mt-3">
+          {isEditMode ? 'Edit Activity' : 'Log Activity'}
+        </h1>
       </div>
 
       <div className="flex flex-1 min-h-0 flex-col gap-4 overflow-y-auto px-4 pb-4 mt-2">
@@ -203,6 +267,24 @@ export const LogActivityScreen: React.FC<Props> = ({
         {/* Session details — only show after activity selected */}
         {selectedId && (
           <>
+            <Card pad="md">
+              <FieldLabel>Date</FieldLabel>
+              <button
+                type="button"
+                data-testid="log-date-field"
+                onClick={() => setDatePickerOpen(true)}
+                className={cn(
+                  'flex w-full items-center justify-between rounded-md border border-border bg-bg-sunken',
+                  'px-3 py-2.5 text-left transition-colors duration-snap hover:bg-bg-overlay',
+                )}
+              >
+                <span className="text-body font-medium text-ink">
+                  {formatLogDateLabel(loggedDate, todayDate)}
+                </span>
+                <span className="text-caption text-ink-muted">Change</span>
+              </button>
+            </Card>
+
             <Card pad="md">
               <FieldLabel>Session details</FieldLabel>
               <div className="flex flex-col gap-4">
@@ -256,10 +338,20 @@ export const LogActivityScreen: React.FC<Props> = ({
               ? 'bg-caution text-ink-inverse active:brightness-90'
               : 'bg-ink text-ink-inverse active:opacity-80',
             !canSubmit && 'opacity-40 cursor-not-allowed')}>
-          {violations.length > 0 ? 'Log anyway' : 'Log session'}
+          {isEditMode
+            ? (violations.length > 0 ? 'Save anyway' : 'Save changes')
+            : (violations.length > 0 ? 'Log anyway' : 'Log session')}
         </button>
       </div>
       )}
+
+      <DatePickerModal
+        open={datePickerOpen}
+        value={loggedDate}
+        maxDate={todayDate}
+        onClose={() => setDatePickerOpen(false)}
+        onChange={setLoggedDate}
+      />
     </form>
   );
 };

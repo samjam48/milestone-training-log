@@ -5,7 +5,7 @@
  * Vitest harness (package.json, vitest.config.ts) is created by Implementer in F1.1.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { screen, within, cleanup, waitFor } from '@testing-library/react';
+import { screen, within, cleanup, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from './test/renderWithProviders';
 import {
@@ -24,6 +24,7 @@ import {
   c63YogaActivity,
 } from './test/mockEngine';
 import type { Activity, ActivityClass } from './types';
+import { createLogHistoryEngine } from './test/fixtures/c62Fixtures';
 import { App } from './App';
 
 const { apiFetchMock } = vi.hoisted(() => ({
@@ -1213,5 +1214,78 @@ describe('App — S2.8 Log Activity empty state', () => {
 
     expect(getNewActivityDialog()).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'New Activity' })).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// S25.F4 — Edit log stack route (plans/tickets-stage-2-5-usage-logic-2026-06-06.md)
+// ---------------------------------------------------------------------------
+
+describe('App — S25.F4 edit log flow', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetMockEngine();
+    Object.assign(mockEngine, createLogHistoryEngine(1));
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('opens Edit Activity on the stack when Edit is tapped in Log History', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+
+    expect(screen.getByTestId('stack-screen-overlay')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Edit Activity' })).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
+  });
+
+  it('updates the history row after save triggers updateLog and a mocked refetch', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup();
+    const originalLog = mockEngine.logs[0]!;
+    mockEngine.refetchAll = vi.fn();
+    mockEngine.updateLog = vi.fn((logId, patch) => {
+      mockEngine.logs = mockEngine.logs.map(log =>
+        log.id === logId ? { ...log, ...patch } : log,
+      );
+      mockEngine.refetchAll();
+    });
+
+    renderWithProviders(<App />);
+
+    try {
+      await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
+      expect(screen.getByText('20 min')).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Edit' }));
+
+      const durationLabel = screen.getByText('Duration');
+      const durationField = durationLabel.parentElement;
+      expect(durationField).not.toBeNull();
+      const durationInput = within(durationField!).getByRole('spinbutton');
+      fireEvent.change(durationInput, { target: { value: '45' } });
+      await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+      expect(mockEngine.updateLog).toHaveBeenCalledWith(
+        originalLog.id,
+        expect.objectContaining({ durationMinutes: 45 }),
+      );
+      expect(mockEngine.refetchAll).toHaveBeenCalledTimes(1);
+      expect(screen.getByText('Session updated.')).toBeInTheDocument();
+
+      await vi.advanceTimersByTimeAsync(800);
+
+      expect(screen.queryByRole('heading', { name: 'Edit Activity' })).not.toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Log History' })).toBeInTheDocument();
+      expect(screen.getByText('45 min')).toBeInTheDocument();
+      expect(screen.queryByText('20 min')).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

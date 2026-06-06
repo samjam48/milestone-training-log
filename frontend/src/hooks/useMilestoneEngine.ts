@@ -42,6 +42,7 @@ import {
   listActivityLogs,
   listActivities,
   createActivityLog,
+  patchActivityLog,
   createDailyCheckIn,
   createFlareUpIncident,
   checkViolations as checkViolationsApi,
@@ -91,6 +92,7 @@ export interface CheckInDraft {
 
 export interface LogDraft {
   activityId: string;
+  loggedDate: ISODate;
   durationMinutes: number;
   volumeValue: number;
   volumeUnit?: VolumeUnit;
@@ -98,6 +100,18 @@ export interface LogDraft {
   postActivityFeel?: PostActivityFeel;
   notes?: string;
   /** Violations detected at submit time — stored on the log for history display. */
+  ruleViolationsAtLog?: RuleViolationSnapshot[];
+}
+
+export interface LogPatch {
+  activityId?: string;
+  loggedDate?: ISODate;
+  durationMinutes?: number;
+  volumeValue?: number;
+  volumeUnit?: VolumeUnit;
+  rpe?: RPE;
+  postActivityFeel?: PostActivityFeel;
+  notes?: string;
   ruleViolationsAtLog?: RuleViolationSnapshot[];
 }
 
@@ -211,6 +225,7 @@ export interface MilestoneEngineResult {
   // F1.3 mutations
   submitCheckIn: (draft: CheckInDraft) => void;
   submitLog: (draft: LogDraft) => void;
+  updateLog: (logId: ID, patch: LogPatch) => void;
   submitIncident: (draft: IncidentDraft) => void;
   checkViolations: (activityId: ID, volumeValue: number, rpe: number) => RuleViolationSnapshot[];
 }
@@ -272,7 +287,7 @@ export function useMilestoneEngine(): MilestoneEngineResult {
       createActivityLog({
         id: crypto.randomUUID(),
         activityId: draft.activityId,
-        loggedDate: todayDate,
+        loggedDate: draft.loggedDate,
         durationMinutes: draft.durationMinutes,
         volumeValue: draft.volumeValue,
         volumeUnit: draft.volumeUnit,
@@ -281,6 +296,17 @@ export function useMilestoneEngine(): MilestoneEngineResult {
         notes: draft.notes,
         ruleViolationsAtLog: draft.ruleViolationsAtLog ?? liveViolations,
       }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['activity-logs'] });
+      void queryClient.invalidateQueries({ queryKey: ['activities'] });
+      void queryClient.invalidateQueries({ queryKey: ['delayed-tax'] });
+    },
+  });
+
+  const updateLogMutation = useMutation({
+    mutationFn: ({ logId, patch }: { logId: ID; patch: LogPatch }) =>
+      patchActivityLog(logId, patch as Record<string, unknown>),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       void queryClient.invalidateQueries({ queryKey: ['activity-logs'] });
@@ -481,6 +507,10 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     submitLogMutation.mutate(draft);
   }, [submitLogMutation]);
 
+  const updateLog = React.useCallback((logId: ID, patch: LogPatch) => {
+    updateLogMutation.mutate({ logId, patch });
+  }, [updateLogMutation]);
+
   const submitIncident = React.useCallback((draft: IncidentDraft) => {
     submitIncidentMutation.mutate(draft);
   }, [submitIncidentMutation]);
@@ -588,6 +618,7 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     // F1.3 mutations
     submitCheckIn,
     submitLog,
+    updateLog,
     submitIncident,
     checkViolations,
   };

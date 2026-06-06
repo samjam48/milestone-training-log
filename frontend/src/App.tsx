@@ -97,6 +97,7 @@ function resolveStackScreen(
   entry: StackEntry,
   engine: MilestoneEngineResult,
   onPop: () => void,
+  onOpenNewActivity?: () => void,
 ): React.ReactElement {
   if (entry.screen === 'goal-editor') {
     const goal = entry.params.goal as Omit<Goal, 'userId'> | undefined | null;
@@ -136,6 +137,19 @@ function resolveStackScreen(
         engine={engine}
         onBack={onPop}
         onComplete={onPop}
+      />
+    );
+  }
+  if (entry.screen === 'edit-log') {
+    const logId = entry.params.logId as string | undefined;
+    if (logId == null || logId === '') return <></>;
+    return (
+      <LogActivityScreen
+        engine={engine}
+        logId={logId}
+        onBack={onPop}
+        onComplete={onPop}
+        onCreateActivity={onOpenNewActivity}
       />
     );
   }
@@ -266,6 +280,7 @@ export function App(): React.ReactElement {
         onOpenLogActivity={() => openLogActivity()}
         onOpenLogIncident={() => setOverlay('log-incident')}
         onOpenNewActivity={openNewActivitySheet}
+        onEditLog={(logId) => pushScreen('edit-log', { logId })}
       />
     );
   } else if (activeTab === 'goals') {
@@ -308,7 +323,7 @@ export function App(): React.ReactElement {
           data-testid="stack-screen-overlay"
           className="absolute inset-0 z-40 flex flex-col bg-bg pt-safe-top"
         >
-          {resolveStackScreen(topEntry, engine, navigateBack)}
+          {resolveStackScreen(topEntry, engine, navigateBack, openNewActivitySheet)}
         </div>
       )}
       {!shellBlocked && (

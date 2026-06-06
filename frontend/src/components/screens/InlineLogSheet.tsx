@@ -152,6 +152,7 @@ export function InlineLogSheet({
 
     const draft: LogDraft = {
       activityId: activity.id,
+      loggedDate: engine.todayDate,
       durationMinutes: duration,
       volumeValue: volume,
       volumeUnit: activity.defaultVolumeUnit,

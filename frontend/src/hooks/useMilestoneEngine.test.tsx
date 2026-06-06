@@ -28,6 +28,7 @@ import {
 import {
   mapActivityLogCreateBody,
   mapActivityLogFromApi,
+  mapActivityLogPatchBody,
   mapDashboardFromApi,
   type DashboardPayload,
 } from '../lib/api/mappers';
@@ -44,6 +45,7 @@ vi.mock('../lib/api', () => ({
   getDashboard: vi.fn(),
   listActivityLogs: vi.fn(),
   createActivityLog: vi.fn(),
+  patchActivityLog: vi.fn(),
   createDailyCheckIn: vi.fn(),
   createFlareUpIncident: vi.fn(),
   checkViolations: vi.fn(),
@@ -69,6 +71,7 @@ import {
   getDashboard,
   listActivityLogs,
   createActivityLog,
+  patchActivityLog,
   checkViolations as checkViolationsApi,
   // F2.0 additions
   listGoals,
@@ -320,6 +323,7 @@ describe('useMilestoneEngine API rewire (F1.3)', () => {
 
     result.current.submitLog({
       activityId: 'act-walk',
+      loggedDate: dashboardPayload.todayDate,
       durationMinutes: 25,
       volumeValue: 2,
       volumeUnit: 'km',
@@ -369,6 +373,7 @@ describe('useMilestoneEngine API rewire (F1.3)', () => {
 
     result.current.submitLog({
       activityId: 'act-walk',
+      loggedDate: dashboardPayload.todayDate,
       durationMinutes: 25,
       volumeValue: 2,
       volumeUnit: 'km',
@@ -392,6 +397,7 @@ describe('useMilestoneEngine API rewire (F1.3)', () => {
 
     result.current.submitLog({
       activityId: 'act-walk',
+      loggedDate: dashboardPayload.todayDate,
       durationMinutes: 20,
       volumeValue: 1.5,
       volumeUnit: 'km',
@@ -401,6 +407,66 @@ describe('useMilestoneEngine API rewire (F1.3)', () => {
     await waitFor(() => {
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['dashboard'] });
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['activity-logs'] });
+    });
+  });
+
+  it('updateLog PATCH body includes snake_case logged_date from patch', async () => {
+    vi.mocked(patchActivityLog).mockImplementation(async (_logId, patch) =>
+      mapActivityLogFromApi({
+        ...mapActivityLogPatchBody(patch),
+        id: activityLogsListOnlyLog.id,
+        activity_id: activityLogsListOnlyLog.activityId,
+        logged_date: '2026-05-20',
+        duration_minutes: 30,
+        volume_value: 2,
+        volume_unit: 'km',
+        created_at: '2026-05-25T08:00:00Z',
+        updated_at: '2026-05-25T08:00:00Z',
+        rule_violations_at_log: null,
+      }),
+    );
+
+    const { result } = renderHookWithProviders(() => useMilestoneEngine());
+
+    await waitFor(() => {
+      expect(result.current.todayDate).toBe(dashboardPayload.todayDate);
+    });
+
+    result.current.updateLog('log-1', {
+      loggedDate: '2026-05-20' as const,
+      durationMinutes: 30,
+    });
+
+    await waitFor(() => {
+      expect(patchActivityLog).toHaveBeenCalledTimes(1);
+    });
+
+    expect(patchActivityLog).toHaveBeenCalledWith('log-1', {
+      loggedDate: '2026-05-20',
+      durationMinutes: 30,
+    });
+    expect(mapActivityLogPatchBody({ loggedDate: '2026-05-20', durationMinutes: 30 })).toMatchObject({
+      logged_date: '2026-05-20',
+      duration_minutes: 30,
+    });
+  });
+
+  it('invalidates dashboard and activity-logs query keys after successful updateLog', async () => {
+    vi.mocked(patchActivityLog).mockResolvedValue(activityLogsListOnlyLog);
+
+    const { result, queryClient } = renderHookWithProviders(() => useMilestoneEngine());
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    await waitFor(() => {
+      expect(result.current.logs).toEqual([activityLogsListOnlyLog]);
+    });
+
+    result.current.updateLog('log-1', { durationMinutes: 25 });
+
+    await waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['dashboard'] });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['activity-logs'] });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['delayed-tax'] });
     });
   });
 
@@ -1082,6 +1148,7 @@ describe('useMilestoneEngine data plane (F2.0)', () => {
 
     // Original fields still present
     expect(typeof result.current.submitLog).toBe('function');
+    expect(typeof result.current.updateLog).toBe('function');
     expect(typeof result.current.submitCheckIn).toBe('function');
     expect(typeof result.current.submitIncident).toBe('function');
     expect(typeof result.current.checkViolations).toBe('function');
@@ -1211,6 +1278,7 @@ describe('useMilestoneEngine delayed tax (H10.1)', () => {
 
     result.current.submitLog({
       activityId: 'act-walk',
+      loggedDate: dashboardPayload.todayDate,
       durationMinutes: 20,
       volumeValue: 1.5,
       volumeUnit: 'km',

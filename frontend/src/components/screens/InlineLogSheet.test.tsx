@@ -126,6 +126,7 @@ describe('InlineLogSheet quick-log contract (F9.10)', () => {
 
     const expectedDraft: LogDraft = {
       activityId: c63StretchActivity.id,
+      loggedDate: mockEngine.todayDate,
       durationMinutes: 20,
       volumeValue: 20,
       volumeUnit: c63StretchActivity.defaultVolumeUnit,

@@ -13,6 +13,7 @@ interface Props {
   onOpenLogActivity: () => void;
   onOpenLogIncident: () => void;
   onOpenNewActivity?: () => void;
+  onEditLog?: (logId: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -43,7 +44,11 @@ const Pill: React.FC<{ children: React.ReactNode; className?: string }> = ({ chi
   </span>
 );
 
-const LogRow: React.FC<{ log: ActivityLog; activityName: string }> = ({ log, activityName }) => {
+const LogRow: React.FC<{
+  log: ActivityLog;
+  activityName: string;
+  onEdit?: () => void;
+}> = ({ log, activityName, onEdit }) => {
   const feel = feelLabel(log.postActivityFeel);
   const hasViolation = (log.ruleViolationsAtLog?.length ?? 0) > 0;
   const worstViolation = log.ruleViolationsAtLog?.[0];
@@ -52,7 +57,16 @@ const LogRow: React.FC<{ log: ActivityLog; activityName: string }> = ({ log, act
     <div className="flex flex-col gap-2 py-3 px-4">
       <div className="flex items-start justify-between gap-2">
         <span className="text-body font-semibold text-ink">{activityName}</span>
-        <div className="flex gap-1.5 flex-wrap justify-end">
+        <div className="flex gap-1.5 flex-wrap justify-end items-center">
+          {onEdit != null && (
+            <button
+              type="button"
+              onClick={onEdit}
+              className="text-caption font-semibold text-ink-muted hover:text-ink transition-colors duration-snap"
+            >
+              Edit
+            </button>
+          )}
           {log.rpe && (
             <Pill className="bg-bg-sunken text-ink-muted">RPE {log.rpe}</Pill>
           )}
@@ -110,6 +124,7 @@ export const LogHistoryScreen: React.FC<Props> = ({
   onOpenLogActivity,
   onOpenLogIncident,
   onOpenNewActivity,
+  onEditLog,
 }) => {
   const { logs, activities } = engine;
   const activityMap = React.useMemo(
@@ -173,6 +188,11 @@ export const LogHistoryScreen: React.FC<Props> = ({
                               key={log.id}
                               log={log}
                               activityName={activityMap.get(log.activityId) ?? 'Unknown'}
+                              onEdit={
+                                onEditLog != null
+                                  ? () => onEditLog(log.id)
+                                  : undefined
+                              }
                             />
                           ))}
                         </div>
