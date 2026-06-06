@@ -470,6 +470,12 @@ def _foot_class_bar(payload: dict[str, object]) -> dict[str, object]:
     return next(bar for bar in class_bars if bar["activity_class_id"] == "cls-foot")
 
 
+def _foot_weekly_progress(payload: dict[str, object]) -> dict[str, object]:
+    return next(
+        row for row in payload["weekly_progress"] if row["activity_class_id"] == "cls-foot"
+    )
+
+
 async def test_get_dashboard_includes_suggestion_buckets_goal_rows_load_risk_summary(
     app_with_test_database: FastAPI,
     client: AsyncClient,
@@ -687,3 +693,45 @@ async def test_backdated_activity_log_updates_suggestion_buckets_and_load_risk_s
     assert followup_payload["suggestion_buckets"] != baseline_buckets
     assert followup_payload["load_risk_summary"] != baseline_summary
     assert _foot_class_bar(followup_payload)["actual"] > baseline_foot_actual
+
+
+# ---------------------------------------------------------------------------
+# S25.B9 — PATCH logged_date across week boundary updates dashboard derivations
+# ---------------------------------------------------------------------------
+
+
+async def test_patch_logged_date_across_week_boundary_updates_dashboard_derivations(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PATCH logged_date across the load-risk week boundary recomputes dashboard state."""
+    freeze_server_today(monkeypatch)
+    seed_dashboard_mock_graph(app_with_test_database)
+
+    baseline = await client.get(DASHBOARD_URL, params={"as_of": AS_OF})
+    assert baseline.status_code == 200
+    baseline_payload = baseline.json()
+    baseline_foot_progress = _foot_weekly_progress(baseline_payload)
+    baseline_summary = baseline_payload["load_risk_summary"]
+    assert baseline_summary is not None
+    baseline_foot_actual = _foot_class_bar(baseline_payload)["actual"]
+
+    # log-25 is 2026-05-22 (inside risk week 2026-05-19..25); move to prior week.
+    patch_response = await client.patch(
+        "/api/activity-logs/log-25",
+        json={"logged_date": "2026-05-18"},
+    )
+    assert patch_response.status_code == 200
+    assert patch_response.json()["logged_date"] == "2026-05-18"
+
+    followup = await client.get(DASHBOARD_URL, params={"as_of": AS_OF})
+    assert followup.status_code == 200
+    followup_payload = followup.json()
+
+    followup_foot_actual = _foot_class_bar(followup_payload)["actual"]
+
+    # weekly_progress spans block start→as_of (both dates stay in range); load_risk uses 7-day window.
+    assert _foot_weekly_progress(followup_payload)["value"] == baseline_foot_progress["value"]
+    assert followup_foot_actual < baseline_foot_actual
+    assert followup_payload["load_risk_summary"] != baseline_summary

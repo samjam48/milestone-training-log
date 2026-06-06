@@ -7,12 +7,22 @@ import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
 
+from app.tests.helpers.load_api_test_utils import (
+    FROZEN_TODAY,
+    freeze_server_today,
+    freeze_server_today_as,
+)
 from app.tests.helpers.seed import (
     seed_activity,
     seed_activity_class,
     seed_activity_log,
+    seed_goal,
+    seed_training_block,
     utc_datetime,
 )
+
+TODAY_ISO = FROZEN_TODAY.isoformat()
+FUTURE_DATE_ISO = "2026-05-26"
 
 
 def _seed_log_graph(
@@ -815,3 +825,489 @@ async def test_delete_missing_activity_log_returns_stable_not_found(
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Activity log not found"}
+
+
+# ---------------------------------------------------------------------------
+# S25.B9 — Log date validation + derived-state recompute
+# ---------------------------------------------------------------------------
+
+
+def _install_recompute_derived_state_spy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> list[dict[str, object]]:
+    calls: list[dict[str, object]] = []
+
+    def _spy(
+        _session: object,
+        *,
+        activity_ids: set[str],
+        anchor_date: date,
+    ) -> None:
+        calls.append({"activity_ids": set(activity_ids), "anchor_date": anchor_date})
+
+    monkeypatch.setattr(
+        "app.services.activity_logs.recompute_derived_state",
+        _spy,
+        raising=False,
+    )
+    return calls
+
+
+def _install_goal_recompute_spy(monkeypatch: pytest.MonkeyPatch) -> list[set[str]]:
+    calls: list[set[str]] = []
+
+    def _spy(_session: object, *, activity_ids: set[str]) -> None:
+        calls.append(set(activity_ids))
+
+    monkeypatch.setattr(
+        "app.services.goals.recompute_auto_tracked_goals",
+        _spy,
+    )
+    return calls
+
+
+def _seed_auto_track_goal_graph(
+    app_with_test_database: FastAPI,
+    *,
+    goal_id: str,
+    activity_id: str,
+    activity_name: str,
+    progress_target: float = 20.0,
+    progress_unit: str = "km",
+    target_date: date = date(2026, 6, 30),
+) -> None:
+    seed_activity_class(
+        app_with_test_database,
+        class_id="cls-foot",
+        name="Foot Load",
+    )
+    seed_activity(
+        app_with_test_database,
+        activity_id=activity_id,
+        activity_class_id="cls-foot",
+        name=activity_name,
+        default_volume_unit=progress_unit,
+    )
+    seed_goal(
+        app_with_test_database,
+        goal_id=goal_id,
+        title=f"{activity_name} target",
+        description="Auto-tracked goal for log recompute tests",
+        target_date=target_date,
+        timeframe="monthly",
+        activity_class_id="cls-foot",
+        activity_id=activity_id,
+        auto_track_progress=True,
+        progress_target=progress_target,
+        progress_unit=progress_unit,
+        progress_value=None,
+        status="active",
+    )
+
+
+async def _goal_progress_value(client: AsyncClient, goal_id: str) -> float | None:
+    response = await client.get("/api/goals")
+    assert response.status_code == 200
+    goal = next(item for item in response.json() if item["id"] == goal_id)
+    return goal["progress_value"]
+
+
+async def test_create_activity_log_rejects_future_logged_date(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _seed_log_graph(app_with_test_database)
+    freeze_server_today(monkeypatch)
+
+    response = await client.post(
+        "/api/activity-logs",
+        json={
+            "id": "log-future",
+            "activity_id": "act-walk",
+            "logged_date": FUTURE_DATE_ISO,
+            "duration_minutes": 30,
+            "volume_value": 3.0,
+            "volume_unit": "km",
+        },
+    )
+
+    assert response.status_code == 422
+    error_fields = {
+        str(error_location[-1])
+        for error in response.json()["detail"]
+        if (error_location := error.get("loc"))
+    }
+    assert "logged_date" in error_fields
+
+
+@pytest.mark.parametrize("logged_date", [TODAY_ISO, "2026-05-20"])
+async def test_create_activity_log_accepts_logged_date_on_or_before_today(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+    logged_date: str,
+) -> None:
+    _seed_log_graph(app_with_test_database)
+    freeze_server_today(monkeypatch)
+
+    response = await client.post(
+        "/api/activity-logs",
+        json={
+            "id": f"log-{logged_date}",
+            "activity_id": "act-walk",
+            "logged_date": logged_date,
+            "duration_minutes": 30,
+            "volume_value": 3.0,
+            "volume_unit": "km",
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["logged_date"] == logged_date
+
+
+async def test_patch_activity_log_rejects_future_logged_date_without_changing_row(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _seed_log_graph(app_with_test_database)
+    seed_activity_log(
+        app_with_test_database,
+        log_id="log-walk",
+        activity_id="act-walk",
+        logged_date=date(2026, 5, 20),
+    )
+    freeze_server_today(monkeypatch)
+
+    response = await client.patch(
+        "/api/activity-logs/log-walk",
+        json={"logged_date": FUTURE_DATE_ISO},
+    )
+
+    assert response.status_code == 422
+    error_fields = {
+        str(error_location[-1])
+        for error in response.json()["detail"]
+        if (error_location := error.get("loc"))
+    }
+    assert "logged_date" in error_fields
+
+    list_response = await client.get("/api/activity-logs")
+    assert list_response.status_code == 200
+    assert len(list_response.json()) == 1
+    assert list_response.json()[0]["logged_date"] == "2026-05-20"
+
+
+async def test_create_activity_log_calls_recompute_derived_state(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _seed_log_graph(app_with_test_database)
+    calls = _install_recompute_derived_state_spy(monkeypatch)
+
+    response = await client.post(
+        "/api/activity-logs",
+        json={
+            "id": "log-recompute-create",
+            "activity_id": "act-walk",
+            "logged_date": "2026-05-21",
+            "duration_minutes": 30,
+            "volume_value": 3.0,
+            "volume_unit": "km",
+        },
+    )
+
+    assert response.status_code == 201
+    assert calls == [
+        {
+            "activity_ids": {"act-walk"},
+            "anchor_date": date(2026, 5, 21),
+        }
+    ]
+
+
+async def test_patch_activity_log_calls_recompute_derived_state(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _seed_log_graph(app_with_test_database)
+    seed_activity_log(
+        app_with_test_database,
+        log_id="log-walk",
+        activity_id="act-walk",
+        logged_date=date(2026, 5, 20),
+    )
+    calls = _install_recompute_derived_state_spy(monkeypatch)
+
+    response = await client.patch(
+        "/api/activity-logs/log-walk",
+        json={"logged_date": "2026-05-22"},
+    )
+
+    assert response.status_code == 200
+    assert calls == [
+        {
+            "activity_ids": {"act-walk"},
+            "anchor_date": date(2026, 5, 22),
+        }
+    ]
+
+
+async def test_delete_activity_log_calls_recompute_derived_state(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _seed_log_graph(app_with_test_database)
+    seed_activity_log(
+        app_with_test_database,
+        log_id="log-walk",
+        activity_id="act-walk",
+        logged_date=date(2026, 5, 21),
+    )
+    calls = _install_recompute_derived_state_spy(monkeypatch)
+
+    response = await client.delete("/api/activity-logs/log-walk")
+
+    assert response.status_code == 204
+    assert calls == [
+        {
+            "activity_ids": {"act-walk"},
+            "anchor_date": date(2026, 5, 21),
+        }
+    ]
+
+
+async def test_create_activity_log_calls_recompute_auto_tracked_goals(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    freeze_server_today_as(monkeypatch, date(2026, 6, 30))
+    _seed_auto_track_goal_graph(
+        app_with_test_database,
+        goal_id="goal-auto-walk",
+        activity_id="act-walk",
+        activity_name="Walk",
+    )
+    goal_calls = _install_goal_recompute_spy(monkeypatch)
+
+    response = await client.post(
+        "/api/activity-logs",
+        json={
+            "id": "log-goal-recompute",
+            "activity_id": "act-walk",
+            "logged_date": "2026-06-10",
+            "duration_minutes": 30,
+            "volume_value": 5.0,
+            "volume_unit": "km",
+        },
+    )
+
+    assert response.status_code == 201
+    assert goal_calls == [{"act-walk"}]
+
+
+async def test_patch_logged_date_recomputes_auto_tracked_goal_progress(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    freeze_server_today_as(monkeypatch, date(2026, 6, 30))
+    _seed_auto_track_goal_graph(
+        app_with_test_database,
+        goal_id="goal-auto-walk",
+        activity_id="act-walk",
+        activity_name="Walk",
+    )
+    seed_activity_log(
+        app_with_test_database,
+        log_id="log-june",
+        activity_id="act-walk",
+        logged_date=date(2026, 6, 10),
+        volume_value=5.0,
+        volume_unit="km",
+    )
+    seed_activity_log(
+        app_with_test_database,
+        log_id="log-may",
+        activity_id="act-walk",
+        logged_date=date(2026, 5, 31),
+        volume_value=4.0,
+        volume_unit="km",
+    )
+
+    assert await _goal_progress_value(client, "goal-auto-walk") is None
+
+    patch_into_period = await client.patch(
+        "/api/activity-logs/log-may",
+        json={"logged_date": "2026-06-12"},
+    )
+    assert patch_into_period.status_code == 200
+    assert await _goal_progress_value(client, "goal-auto-walk") == 9.0
+
+    patch_out_of_period = await client.patch(
+        "/api/activity-logs/log-june",
+        json={"logged_date": "2026-05-15"},
+    )
+    assert patch_out_of_period.status_code == 200
+    assert await _goal_progress_value(client, "goal-auto-walk") == 4.0
+
+
+async def test_patch_activity_id_recomputes_goals_for_both_activities(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    seed_activity_class(
+        app_with_test_database,
+        class_id="cls-foot",
+        name="Foot Load",
+    )
+    seed_activity(
+        app_with_test_database,
+        activity_id="act-walk",
+        activity_class_id="cls-foot",
+        name="Walk",
+        default_volume_unit="km",
+    )
+    seed_activity(
+        app_with_test_database,
+        activity_id="act-bike",
+        activity_class_id="cls-foot",
+        name="Bike",
+        default_volume_unit="km",
+    )
+    seed_goal(
+        app_with_test_database,
+        goal_id="goal-auto-walk",
+        title="Walk target",
+        description="Auto-tracked walk goal",
+        target_date=date(2026, 6, 30),
+        timeframe="monthly",
+        activity_class_id="cls-foot",
+        activity_id="act-walk",
+        auto_track_progress=True,
+        progress_target=20.0,
+        progress_unit="km",
+        progress_value=None,
+        status="active",
+    )
+    seed_goal(
+        app_with_test_database,
+        goal_id="goal-auto-bike",
+        title="Bike target",
+        description="Auto-tracked bike goal",
+        target_date=date(2026, 6, 30),
+        timeframe="monthly",
+        activity_class_id="cls-foot",
+        activity_id="act-bike",
+        auto_track_progress=True,
+        progress_target=20.0,
+        progress_unit="km",
+        progress_value=None,
+        status="active",
+    )
+    seed_activity_log(
+        app_with_test_database,
+        log_id="log-walk",
+        activity_id="act-walk",
+        logged_date=date(2026, 6, 10),
+        volume_value=5.0,
+        volume_unit="km",
+    )
+
+    assert await _goal_progress_value(client, "goal-auto-walk") is None
+    assert await _goal_progress_value(client, "goal-auto-bike") is None
+
+    response = await client.patch(
+        "/api/activity-logs/log-walk",
+        json={"activity_id": "act-bike"},
+    )
+
+    assert response.status_code == 200
+    assert await _goal_progress_value(client, "goal-auto-walk") == 0.0
+    assert await _goal_progress_value(client, "goal-auto-bike") == 5.0
+
+
+async def test_patch_activity_id_calls_recompute_derived_state_for_both_activities(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _seed_log_graph(app_with_test_database, activity_id="act-walk")
+    seed_activity(
+        app_with_test_database,
+        activity_id="act-bike",
+        activity_class_id="cls-load",
+        name="Bike",
+    )
+    seed_activity_log(
+        app_with_test_database,
+        log_id="log-walk",
+        activity_id="act-walk",
+        logged_date=date(2026, 5, 20),
+    )
+    calls = _install_recompute_derived_state_spy(monkeypatch)
+
+    response = await client.patch(
+        "/api/activity-logs/log-walk",
+        json={"activity_id": "act-bike"},
+    )
+
+    assert response.status_code == 200
+    assert len(calls) == 1
+    assert calls[0]["activity_ids"] == {"act-walk", "act-bike"}
+    assert calls[0]["anchor_date"] == date(2026, 5, 20)
+
+
+async def test_create_recovery_log_calls_recompute_derived_state_for_recovery_streak(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seed_training_block(
+        app_with_test_database,
+        block_id="blk-active",
+        name="Recovery Block",
+        start_date=date(2026, 5, 1),
+        status="active",
+    )
+    seed_activity_class(
+        app_with_test_database,
+        class_id="cls-recovery",
+        name="Recovery",
+        class_type="recovery",
+        default_recovery_window_days=1,
+    )
+    seed_activity(
+        app_with_test_database,
+        activity_id="act-mobility",
+        activity_class_id="cls-recovery",
+        name="Mobility",
+        activity_type="recovery",
+    )
+    calls = _install_recompute_derived_state_spy(monkeypatch)
+
+    response = await client.post(
+        "/api/activity-logs",
+        json={
+            "id": "log-recovery",
+            "activity_id": "act-mobility",
+            "logged_date": "2026-05-21",
+            "duration_minutes": 20,
+            "volume_value": 1.0,
+            "volume_unit": "minutes",
+        },
+    )
+
+    assert response.status_code == 201
+    assert calls == [
+        {
+            "activity_ids": {"act-mobility"},
+            "anchor_date": date(2026, 5, 21),
+        }
+    ]
