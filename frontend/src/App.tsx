@@ -268,6 +268,7 @@ export function App(): React.ReactElement {
         onOpenLogIncident={() => setOverlay('log-incident')}
         onOpenNewActivity={openNewActivitySheet}
         onEditLog={(logId) => pushScreen('edit-log', { logId })}
+        onDeleteLog={engine.deleteLog}
       />
     );
   } else if (activeTab === 'goals') {

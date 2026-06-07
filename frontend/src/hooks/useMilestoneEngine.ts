@@ -46,6 +46,7 @@ import {
   listDailyCheckIns,
   createActivityLog,
   patchActivityLog,
+  deleteActivityLog,
   createDailyCheckIn,
   createFlareUpIncident,
   checkViolations as checkViolationsApi,
@@ -260,6 +261,7 @@ export interface MilestoneEngineResult {
   submitCheckIn: (draft: CheckInDraft) => void;
   submitLog: (draft: LogDraft) => Promise<void>;
   updateLog: (logId: ID, patch: LogPatch) => Promise<void>;
+  deleteLog: (logId: ID) => Promise<void>;
   submitIncident: (draft: IncidentDraft) => void;
   checkViolations: (
     activityId: ID,
@@ -371,6 +373,16 @@ export function useMilestoneEngine(): MilestoneEngineResult {
   const updateLogMutation = useMutation({
     mutationFn: ({ logId, patch }: { logId: ID; patch: LogPatch }) =>
       patchActivityLog(logId, patch as Record<string, unknown>),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['activity-logs'] });
+      void queryClient.invalidateQueries({ queryKey: ['activities'] });
+      void queryClient.invalidateQueries({ queryKey: ['delayed-tax'] });
+    },
+  });
+
+  const deleteLogMutation = useMutation({
+    mutationFn: (logId: ID) => deleteActivityLog(logId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       void queryClient.invalidateQueries({ queryKey: ['activity-logs'] });
@@ -639,6 +651,10 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     await updateLogMutation.mutateAsync({ logId, patch });
   }, [updateLogMutation]);
 
+  const deleteLog = React.useCallback(async (logId: ID) => {
+    await deleteLogMutation.mutateAsync(logId);
+  }, [deleteLogMutation]);
+
   const submitIncident = React.useCallback((draft: IncidentDraft) => {
     submitIncidentMutation.mutate(draft);
   }, [submitIncidentMutation]);
@@ -771,6 +787,7 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     submitCheckIn,
     submitLog,
     updateLog,
+    deleteLog,
     submitIncident,
     checkViolations,
   };

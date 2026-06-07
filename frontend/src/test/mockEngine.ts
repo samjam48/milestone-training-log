@@ -81,6 +81,7 @@ function createBaseline(): MilestoneEngineResult {
     // F1.3 mutations
     submitLog: async () => undefined,
     updateLog: async () => undefined,
+    deleteLog: async () => undefined,
     submitCheckIn: () => undefined,
     submitIncident: () => undefined,
     checkViolations: () => [],

@@ -14,6 +14,7 @@ interface Props {
   onOpenLogIncident: () => void;
   onOpenNewActivity?: () => void;
   onEditLog?: (logId: string) => void;
+  onDeleteLog?: (logId: string) => void | Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -48,7 +49,8 @@ const LogRow: React.FC<{
   log: ActivityLog;
   activityName: string;
   onEdit?: () => void;
-}> = ({ log, activityName, onEdit }) => {
+  onDelete?: () => void;
+}> = ({ log, activityName, onEdit, onDelete }) => {
   const feel = feelLabel(log.postActivityFeel);
   const hasViolation = (log.ruleViolationsAtLog?.length ?? 0) > 0;
   const worstViolation = log.ruleViolationsAtLog?.[0];
@@ -65,6 +67,15 @@ const LogRow: React.FC<{
               className="text-caption font-semibold text-ink-muted hover:text-ink transition-colors duration-snap"
             >
               Edit
+            </button>
+          )}
+          {onDelete != null && (
+            <button
+              type="button"
+              onClick={onDelete}
+              className="text-caption font-semibold text-danger-fg hover:bg-danger/10 rounded-sm px-1 transition-colors duration-snap"
+            >
+              Delete
             </button>
           )}
           {log.rpe && (
@@ -125,6 +136,7 @@ export const LogHistoryScreen: React.FC<Props> = ({
   onOpenLogIncident,
   onOpenNewActivity,
   onEditLog,
+  onDeleteLog,
 }) => {
   const { logs, activities } = engine;
   const activityMap = React.useMemo(
@@ -132,6 +144,12 @@ export const LogHistoryScreen: React.FC<Props> = ({
     [activities],
   );
   const { monthKeys, byMonth } = React.useMemo(() => groupLogs(logs), [logs]);
+  const handleDeleteLog = React.useCallback((log: ActivityLog) => {
+    if (onDeleteLog == null) return;
+    const confirmed = window.confirm('Delete this activity log?');
+    if (!confirmed) return;
+    void onDeleteLog(log.id);
+  }, [onDeleteLog]);
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -191,6 +209,11 @@ export const LogHistoryScreen: React.FC<Props> = ({
                               onEdit={
                                 onEditLog != null
                                   ? () => onEditLog(log.id)
+                                  : undefined
+                              }
+                              onDelete={
+                                onDeleteLog != null
+                                  ? () => handleDeleteLog(log)
                                   : undefined
                               }
                             />

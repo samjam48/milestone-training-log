@@ -46,6 +46,7 @@ vi.mock('../lib/api', () => ({
   listActivityLogs: vi.fn(),
   createActivityLog: vi.fn(),
   patchActivityLog: vi.fn(),
+  deleteActivityLog: vi.fn(),
   createDailyCheckIn: vi.fn(),
   createFlareUpIncident: vi.fn(),
   checkViolations: vi.fn(),
@@ -77,6 +78,7 @@ import {
   listActivityLogs,
   createActivityLog,
   patchActivityLog,
+  deleteActivityLog,
   checkViolations as checkViolationsApi,
   // F2.0 additions
   listGoals,
@@ -255,6 +257,7 @@ function setupDefaultApiMocks(): void {
   });
   vi.mocked(deleteActivityClass).mockResolvedValue(undefined);
   vi.mocked(patchActivity).mockResolvedValue(activityFixture);
+  vi.mocked(deleteActivityLog).mockResolvedValue(undefined);
   vi.mocked(listActivities).mockResolvedValue([]);
   vi.mocked(listDailyCheckIns).mockResolvedValue([
     {
@@ -1750,6 +1753,25 @@ describe('useMilestoneEngine — S25.F8/F9 check-ins and activity class mutation
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['dashboard'] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['activity-classes'] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['activities'] });
+  });
+
+  it('deleteLog DELETEs and invalidates dashboard, activity logs, activities, and delayed tax', async () => {
+    const { result, queryClient } = renderHookWithProviders(() => useMilestoneEngine());
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    await waitFor(() => {
+      expect(result.current.todayDate).toBe(dashboardPayload.todayDate);
+    });
+
+    await act(async () => {
+      await result.current.deleteLog('log-1');
+    });
+
+    expect(deleteActivityLog).toHaveBeenCalledWith('log-1');
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['dashboard'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['activity-logs'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['activities'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['delayed-tax'] });
   });
 
   it('submitCheckIn invalidates daily-check-ins on success', async () => {
