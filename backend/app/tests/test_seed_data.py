@@ -28,7 +28,7 @@ EXPECTED_COUNTS = {
     "activity_classes": 3,
     "activities": 5,
     "training_blocks": 1,
-    "rules": 4,
+    "rules": 6,
     "weekly_targets": 2,
     "activity_logs": 26,
     "daily_check_ins": 6,
@@ -188,10 +188,18 @@ def test_seed_mirrors_sam_chen_training_scenario_semantics(tmp_path: Path) -> No
         rules = session.exec(select(Rule)).all()
         assert {rule.id: rule.rule_type for rule in rules} == {
             "rule-rest-foot": "rest_between_class",
-            "rule-cap-foot": "weekly_load_cap",
+            "rule-consec-foot": "consecutive_day_limit",
+            "rule-vol-walk-weekly": "weekly_volume_cap",
+            "rule-vol-bike-daily": "daily_volume_cap",
             "rule-freq-foot": "frequency_limit",
             "rule-rest-upper": "rest_between_class",
         }
+        vol_walk = next(r for r in rules if r.id == "rule-vol-walk-weekly")
+        assert vol_walk.activity_id == "act-walk"
+        assert vol_walk.limit_unit == "km"
+        vol_bike = next(r for r in rules if r.id == "rule-vol-bike-daily")
+        assert vol_bike.activity_id == "act-bike"
+        assert vol_bike.limit_unit == "minutes"
         assert {rule.training_block_id for rule in rules} == {"blk-1"}
 
         weekly_targets = session.exec(select(WeeklyTarget)).all()

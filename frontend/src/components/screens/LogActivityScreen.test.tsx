@@ -2,7 +2,7 @@
  * C6.2 — Log form decimal volume acceptance tests.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { screen, within, cleanup } from '@testing-library/react';
+import { screen, within, cleanup, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders';
 import {
@@ -304,5 +304,90 @@ describe('LogActivityScreen — S25.F4 edit log', () => {
         durationMinutes: 25,
       }),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// D3 — Await API success before success UI / navigation
+// ---------------------------------------------------------------------------
+
+describe('LogActivityScreen — D3 async save', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  const TODAY = '2026-05-28';
+
+  async function submitCreateLog(
+    user: ReturnType<typeof userEvent.setup>,
+    submitLog: ReturnType<typeof vi.fn>,
+  ): Promise<void> {
+    const engine = createLogActivityEngine({ todayDate: TODAY, submitLog });
+    renderWithProviders(
+      <LogActivityScreen engine={engine} onBack={vi.fn()} onComplete={vi.fn()} />,
+    );
+    await user.click(screen.getByRole('button', { name: 'Morning Walk' }));
+    const durationInput = screen.getByPlaceholderText('20');
+    await user.clear(durationInput);
+    await user.type(durationInput, '20');
+    await user.click(screen.getByRole('button', { name: 'Log session' }));
+  }
+
+  it('shows a loading overlay while submitLog is in flight', async () => {
+    const user = userEvent.setup();
+    let resolveSubmit!: () => void;
+    const submitLog = vi.fn(
+      () => new Promise<void>(resolve => { resolveSubmit = resolve; }),
+    );
+
+    await submitCreateLog(user, submitLog);
+
+    expect(screen.getByTestId('log-activity-saving')).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Logging session' })).toBeInTheDocument();
+
+    resolveSubmit();
+    await waitFor(() => {
+      expect(screen.queryByTestId('log-activity-saving')).not.toBeInTheDocument();
+    });
+  });
+
+  it('does not show success UI until submitLog resolves', async () => {
+    const user = userEvent.setup();
+    let resolveSubmit!: () => void;
+    const submitLog = vi.fn(
+      () => new Promise<void>(resolve => { resolveSubmit = resolve; }),
+    );
+
+    await submitCreateLog(user, submitLog);
+
+    expect(screen.queryByText('Session logged.')).not.toBeInTheDocument();
+
+    resolveSubmit();
+    await waitFor(() => {
+      expect(screen.getByText('Session logged.')).toBeInTheDocument();
+    });
+  });
+
+  it('surfaces API errors and stays on the form without calling onComplete', async () => {
+    const user = userEvent.setup();
+    const onComplete = vi.fn();
+    const { ApiError } = await import('../../lib/api/client');
+    const submitLog = vi.fn().mockRejectedValue(new ApiError(500, 'Server error'));
+
+    const engine = createLogActivityEngine({ todayDate: TODAY, submitLog });
+    renderWithProviders(
+      <LogActivityScreen engine={engine} onBack={vi.fn()} onComplete={onComplete} />,
+    );
+    await user.click(screen.getByRole('button', { name: 'Morning Walk' }));
+    const durationInput = screen.getByPlaceholderText('20');
+    await user.clear(durationInput);
+    await user.type(durationInput, '20');
+    await user.click(screen.getByRole('button', { name: 'Log session' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('Server error');
+    });
+    expect(screen.getByRole('heading', { name: 'Log Activity' })).toBeInTheDocument();
+    expect(onComplete).not.toHaveBeenCalled();
   });
 });

@@ -79,8 +79,8 @@ function createBaseline(): MilestoneEngineResult {
     isUnauthorized: false,
     refetchAll: () => undefined,
     // F1.3 mutations
-    submitLog: () => undefined,
-    updateLog: () => undefined,
+    submitLog: async () => undefined,
+    updateLog: async () => undefined,
     submitCheckIn: () => undefined,
     submitIncident: () => undefined,
     checkViolations: () => [],

@@ -258,8 +258,8 @@ export interface MilestoneEngineResult {
   refetchAll: () => void;
   // F1.3 mutations
   submitCheckIn: (draft: CheckInDraft) => void;
-  submitLog: (draft: LogDraft) => void;
-  updateLog: (logId: ID, patch: LogPatch) => void;
+  submitLog: (draft: LogDraft) => Promise<void>;
+  updateLog: (logId: ID, patch: LogPatch) => Promise<void>;
   submitIncident: (draft: IncidentDraft) => void;
   checkViolations: (
     activityId: ID,
@@ -629,12 +629,12 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     submitCheckInMutation.mutate(draft);
   }, [submitCheckInMutation]);
 
-  const submitLog = React.useCallback((draft: LogDraft) => {
-    submitLogMutation.mutate(draft);
+  const submitLog = React.useCallback(async (draft: LogDraft) => {
+    await submitLogMutation.mutateAsync(draft);
   }, [submitLogMutation]);
 
-  const updateLog = React.useCallback((logId: ID, patch: LogPatch) => {
-    updateLogMutation.mutate({ logId, patch });
+  const updateLog = React.useCallback(async (logId: ID, patch: LogPatch) => {
+    await updateLogMutation.mutateAsync({ logId, patch });
   }, [updateLogMutation]);
 
   const submitIncident = React.useCallback((draft: IncidentDraft) => {

@@ -5,6 +5,7 @@ import { Slider } from '../ui/Slider';
 import { SegmentedControl, type SegmentedOption } from '../ui/SegmentedControl';
 import { RuleViolationBanner } from '../composites/RuleViolationBanner';
 import type { LogDraft, MilestoneEngineResult } from '../../hooks/useMilestoneEngine';
+import { ApiError } from '../../lib/api/client';
 import type {
   Activity,
   PostActivityFeel,
@@ -119,6 +120,8 @@ export function InlineLogSheet({
   const [rpe, setRpe] = React.useState<RPE>(DEFAULT_RPE);
   const [feel, setFeel] = React.useState<PostActivityFeel>('fine');
   const [dangerOverridden, setDangerOverridden] = React.useState(false);
+  const [isSaving, setIsSaving] = React.useState(false);
+  const [saveError, setSaveError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     if (open) {
@@ -127,6 +130,8 @@ export function InlineLogSheet({
       setRpe(DEFAULT_RPE);
       setFeel('fine');
       setDangerOverridden(false);
+      setSaveError(null);
+      setIsSaving(false);
     }
   }, [open, activity?.id, activity?.defaultVolumeUnit]);
 
@@ -152,9 +157,9 @@ export function InlineLogSheet({
 
   const dangerBlocked = hasDangerViolation(violations) && !dangerOverridden;
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>): void {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    if (activity == null || dangerBlocked) return;
+    if (activity == null || dangerBlocked || isSaving) return;
 
     const draft: LogDraft = {
       activityId: activity.id,
@@ -167,8 +172,22 @@ export function InlineLogSheet({
       ruleViolationsAtLog: violations.length > 0 ? violations : undefined,
     };
 
-    engine.submitLog(draft);
-    onClose();
+    setSaveError(null);
+    setIsSaving(true);
+    try {
+      await engine.submitLog(draft);
+      onClose();
+    } catch (error) {
+      setSaveError(
+        error instanceof ApiError
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : 'Could not save session.',
+      );
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   return (
@@ -266,17 +285,34 @@ export function InlineLogSheet({
             />
           )}
 
+          {saveError != null && (
+            <p role="alert" className="text-body text-danger-fg">
+              {saveError}
+            </p>
+          )}
+
           <button
             type="submit"
-            disabled={dangerBlocked}
+            disabled={dangerBlocked || isSaving}
             className={cn(
-              'h-12 w-full rounded-md text-body-lg font-semibold transition-colors duration-snap',
-              dangerBlocked
+              'flex h-12 w-full items-center justify-center gap-2 rounded-md text-body-lg font-semibold transition-colors duration-snap',
+              dangerBlocked && !isSaving
                 ? 'cursor-not-allowed bg-ink/20 text-ink-faint'
                 : 'bg-ink text-ink-inverse active:opacity-80',
+              isSaving && 'cursor-wait opacity-80',
             )}
           >
-            Log session
+            {isSaving ? (
+              <>
+                <span
+                  className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-ink-inverse/30 border-t-ink-inverse"
+                  aria-hidden="true"
+                />
+                <span>Logging…</span>
+              </>
+            ) : (
+              'Log session'
+            )}
           </button>
         </form>
       </section>

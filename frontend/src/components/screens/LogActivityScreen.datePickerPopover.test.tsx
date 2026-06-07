@@ -279,6 +279,44 @@ describe('LogActivityScreen — P25.5 future dates disabled in popover', () => {
 });
 
 // ---------------------------------------------------------------------------
+// P25.5 — Calendar grid aligns with Monday-first column headers
+// ---------------------------------------------------------------------------
+
+function cellColumnIndex(grid: Element, testId: string): number {
+  const children = Array.from(grid.children);
+  const index = children.findIndex(
+    child => child.getAttribute('data-testid') === testId,
+  );
+  expect(index).toBeGreaterThanOrEqual(0);
+  return index % 7;
+}
+
+describe('LogActivityScreen — P25.5 calendar column alignment', () => {
+  it('places June 2026 dates under the correct Mon–Sun columns', async () => {
+    const user = userEvent.setup();
+    const engine = createLogActivityEngine({ todayDate: '2026-06-07' });
+
+    renderWithProviders(
+      <LogActivityScreen engine={engine} onBack={vi.fn()} onComplete={vi.fn()} />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Morning Walk' }));
+    await user.click(screen.getByTestId(DATE_PICKER_FIELD_TEST_ID));
+
+    const popover = findDatePickerPopover();
+    expect(popover).not.toBeNull();
+    const grids = popover!.querySelectorAll('.grid.grid-cols-7');
+    const dayGrid = grids[grids.length - 1];
+    expect(dayGrid).toBeDefined();
+
+    // June 2026: 1st = Monday, 6th = Saturday, 7th = Sunday
+    expect(cellColumnIndex(dayGrid!, 'date-picker-day-2026-06-01')).toBe(0);
+    expect(cellColumnIndex(dayGrid!, 'date-picker-day-2026-06-06')).toBe(5);
+    expect(cellColumnIndex(dayGrid!, 'date-picker-day-2026-06-07')).toBe(6);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // P25.5 — InlineLogSheet unchanged guard
 // ---------------------------------------------------------------------------
 

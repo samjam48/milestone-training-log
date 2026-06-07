@@ -1243,7 +1243,7 @@ describe('App — S25.F4 edit log flow', () => {
     const user = userEvent.setup();
     const originalLog = mockEngine.logs[0]!;
     mockEngine.refetchAll = vi.fn();
-    mockEngine.updateLog = vi.fn((logId, patch) => {
+    mockEngine.updateLog = vi.fn(async (logId, patch) => {
       mockEngine.logs = mockEngine.logs.map(log =>
         log.id === logId ? { ...log, ...patch } : log,
       );

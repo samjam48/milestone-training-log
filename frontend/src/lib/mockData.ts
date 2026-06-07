@@ -55,10 +55,12 @@ export const ACTIVITIES: Activity[] = [
 // Rules
 // ---------------------------------------------------------------------------
 export const RULES: Rule[] = [
-  { id: 'rule-rest-foot',  trainingBlockId: 'blk-1', activityClassId: 'cls-foot',  ruleType: 'rest_between_class', thresholdValue: 3,   windowDays: 3,  enabled: true, createdAt: '2026-04-07T06:00:00Z' },
-  { id: 'rule-cap-foot',   trainingBlockId: 'blk-1', activityClassId: 'cls-foot',  ruleType: 'weekly_load_cap',    thresholdValue: 120, windowDays: 7,  enabled: true, createdAt: '2026-04-07T06:00:00Z' },
-  { id: 'rule-freq-foot',  trainingBlockId: 'blk-1', activityClassId: 'cls-foot',  ruleType: 'frequency_limit',    thresholdValue: 3,   windowDays: 7,  enabled: true, createdAt: '2026-04-07T06:00:00Z' },
-  { id: 'rule-rest-upper', trainingBlockId: 'blk-1', activityClassId: 'cls-upper', ruleType: 'rest_between_class', thresholdValue: 2,   windowDays: 2,  enabled: true, createdAt: '2026-04-07T06:00:00Z' },
+  { id: 'rule-rest-foot',       trainingBlockId: 'blk-1', activityClassId: 'cls-foot',  ruleType: 'rest_between_class',   thresholdValue: 3, windowDays: 3, enabled: true, createdAt: '2026-04-07T06:00:00Z' },
+  { id: 'rule-consec-foot',     trainingBlockId: 'blk-1', activityClassId: 'cls-foot',  ruleType: 'consecutive_day_limit', thresholdValue: 2, windowDays: 7, enabled: true, createdAt: '2026-04-07T06:00:00Z' },
+  { id: 'rule-vol-walk-weekly', trainingBlockId: 'blk-1', activityClassId: 'cls-foot',  activityId: 'act-walk', ruleType: 'weekly_volume_cap', thresholdValue: 8,  windowDays: 7, limitUnit: 'km',       enabled: true, createdAt: '2026-04-07T06:00:00Z' },
+  { id: 'rule-vol-bike-daily',  trainingBlockId: 'blk-1', activityClassId: 'cls-foot',  activityId: 'act-bike', ruleType: 'daily_volume_cap',  thresholdValue: 45, windowDays: 1, limitUnit: 'minutes', enabled: true, createdAt: '2026-04-07T06:00:00Z' },
+  { id: 'rule-freq-foot',       trainingBlockId: 'blk-1', activityClassId: 'cls-foot',  ruleType: 'frequency_limit',       thresholdValue: 3, windowDays: 7, enabled: true, createdAt: '2026-04-07T06:00:00Z' },
+  { id: 'rule-rest-upper',      trainingBlockId: 'blk-1', activityClassId: 'cls-upper', ruleType: 'rest_between_class',    thresholdValue: 2, windowDays: 2, enabled: true, createdAt: '2026-04-07T06:00:00Z' },
 ];
 
 // ---------------------------------------------------------------------------

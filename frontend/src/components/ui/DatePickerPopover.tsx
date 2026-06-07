@@ -137,7 +137,9 @@ export const DatePickerPopover: React.FC<DatePickerPopoverProps> = ({
   }
 
   const totalDays = daysInMonth(viewYear, viewMonth);
-  const firstWeekday = new Date(Date.UTC(viewYear, viewMonth - 1, 1)).getUTCDay();
+  // Weekday headers are Mon–Sun; JS getUTCDay() is Sun=0, so shift to Mon=0 … Sun=6.
+  const firstWeekday =
+    (new Date(Date.UTC(viewYear, viewMonth - 1, 1)).getUTCDay() + 6) % 7;
   const weekdays = weekdayLabels();
   const cells: Array<{ iso: ISODate; day: number } | null> = [];
 

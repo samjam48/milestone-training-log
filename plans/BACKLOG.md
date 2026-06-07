@@ -86,14 +86,14 @@ Owner decisions **locked and signed off** 2026-06-06: exercise daily + weekly vo
 
 | Item | Ticket | Status |
 | --- | --- | --- |
-| Rule labels: rest vs frequency vs consecutive | P25.6 | Ready |
-| Exercise volume caps + units; drop load points UI | P25.7 | Ready (after P25.6) |
-| Centered modals (class new/edit/delete) | P25.2 | Ready |
-| Edit activity → centered modal (no deactivate) | P25.3 | Ready (after P25.2) |
-| New activity → centered modal | P25.4 | Ready (after P25.2) |
-| Date picker → compact popover | P25.5 | Ready |
-| Edit Rules: surface API errors on rule create | P25.8 | Ready (D1) |
-| Remove weekly goal from Edit Rules | P25.9 | Ready (D2) |
+| Rule labels: rest vs frequency vs consecutive | P25.6 | Done |
+| Exercise volume caps + units; drop load points UI | P25.7 | Done |
+| Centered modals (class new/edit/delete) | P25.2 | Done |
+| Edit activity → centered modal (no deactivate) | P25.3 | Done |
+| New activity → centered modal | P25.4 | Done |
+| Date picker → compact popover | P25.5 | Done |
+| Edit Rules: surface API errors on rule create | P25.8 | Done (D1) |
+| Remove weekly goal from Edit Rules | P25.9 | Done (D2) |
 
 ## Stage 2.5 review decisions (2026-06-06)
 
@@ -101,7 +101,7 @@ Owner decisions **locked and signed off** 2026-06-06: exercise daily + weekly vo
 | --- | --- | --- |
 | D1 | F5 duplicate rule API errors not shown | **Implement** — ticket **P25.8** |
 | D2 | F5 weekly goal one-click in Edit Rules | **Remove** weekly goal from Edit Rules; use Goals tab → **P25.9** |
-| D3 | F3/F4 optimistic save pops on API failure | **Accept for MVP** — defer fix (see technical debt below) |
+| D3 | F3/F4 optimistic save pops on API failure | **Fixed (2026-06-07)** — `submitLog` / `updateLog` return promises; Log Activity awaits API before success UI / navigation |
 
 ## Stage 2.5 technical debt (non-blocking, from review)
 
@@ -116,9 +116,10 @@ Recorded after S25 batch review; not in polish ticket scope unless noted.
 | `docs/api-map.md` rules section stale rule-type count | S25.B2 | Dashboard section updated in D1; rules table may still say “five types” |
 | Exercise-scoped rule **409** on class delete untested | S25.B8 | Implemented; only class-level rule test exists |
 | eslint `react-refresh/only-export-components` warnings (3) | lint | Pre-existing in UI files |
-| Log create/edit optimistic pop on mutation failure | S25.F4 (D3) | Gate stack pop on `updateLog` / `submitLog` success |
-| Dashboard `weekly_progress` vs Goals after P25.9 | P25.9 follow-up | Align or retire `weekly_targets` once Edit Rules weekly goal removed |
-| `weekly_targets` API / table lifecycle | P25.9 follow-up | Decide keep for dashboard chart only, migrate to goals, or deprecate |
+| ~~Log create/edit optimistic pop on mutation failure~~ | S25.F4 (D3) | **Done** — async save with loading overlay + inline error |
+| Dashboard `weekly_progress` vs Goals after P25.9 | P25.9 follow-up | **Owner (2026-06-07): keep as-is** — dashboard “Last 7 days” chart still reads `weekly_targets`; Goals tab is the only place to edit aspirational targets. Monitor whether two progress surfaces confuse daily use; revisit migrate-to-goals or retire chart. |
+| `weekly_targets` API / table lifecycle | P25.9 follow-up | **Keep for now** (display-only chart). `weekly_targets` rows remain in DB/API; no Edit Rules UI. Re-seed locally does not remove table. |
+| `weekly_load_cap` in seed / local DB | Owner 2026-06-07 | Removed from `seed_data.py`; new creates blocked in API. **Production:** if legacy rows exist in Supabase, delete manually or leave disabled — engine still evaluates them if enabled. |
 
 ## Product gaps still open (not in the list above)
 
