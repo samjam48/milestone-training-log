@@ -34,6 +34,20 @@ from app.schemas.load_engine import (
 
 DEFAULT_RPE = 5
 
+LOAD_TAX_RECENCY_WEIGHTS: list[float] = [
+    1.0,
+    0.85,
+    0.7,
+    0.55,
+    0.4,
+    0.25,
+    0.15,
+]
+
+_LOAD_TAX_BASE = 1.0
+_LOAD_TAX_REST_BROKEN = 4.0
+_LOAD_TAX_CONSECUTIVE_REACHED = 3.0
+
 
 # ---------------------------------------------------------------------------
 # ISO date helpers (load.ts parity)
@@ -108,6 +122,210 @@ def rolling_load(logs: list[LogDict], as_of: str, window_days: int) -> float:
         if start <= logged_date <= as_of:
             total += log_load(log)
     return total
+
+
+def _rpe_load_tax(rpe: int) -> float:
+    if rpe <= 4:
+        return 0.0
+    if rpe <= 6:
+        return 0.5
+    if rpe <= 8:
+        return 1.0
+    return 2.0
+
+
+def _proximity_load_tax(usage_ratio: float) -> float:
+    if usage_ratio >= 1.0:
+        return 4.0
+    if usage_ratio >= 0.8:
+        return 2.0
+    if usage_ratio >= 0.5:
+        return 1.0
+    return 0.0
+
+
+def _scoped_activity_ids(
+    rule: RuleDict,
+    activity: ActivityDict,
+    activities: list[ActivityDict],
+) -> set[str]:
+    rule_activity_id = rule.get("activity_id")
+    if rule_activity_id:
+        return {str(rule_activity_id)}
+    class_id = activity["activity_class_id"]
+    return set(_activity_ids_for_class(class_id, activities))
+
+
+def _logs_excluding(
+    logs: list[LogDict],
+    exclude_log: LogDict | None,
+) -> list[LogDict]:
+    if exclude_log is None:
+        return logs
+    exclude_id = exclude_log.get("id")
+    exclude_date = exclude_log["logged_date"]
+    exclude_activity_id = exclude_log["activity_id"]
+    return [
+        log
+        for log in logs
+        if not (
+            log["logged_date"] == exclude_date
+            and log["activity_id"] == exclude_activity_id
+            and (exclude_id is None or log.get("id") == exclude_id)
+        )
+    ]
+
+
+def _rule_usage_ratio(
+    rule: RuleDict,
+    activity: ActivityDict,
+    activities: list[ActivityDict],
+    logs: list[LogDict],
+    as_of: str,
+    *,
+    exclude_log: LogDict | None = None,
+) -> float:
+    threshold = float(rule["threshold_value"])
+    if threshold <= 0:
+        return 0.0
+
+    window = int(rule["window_days"])
+    win_start = add_days(as_of, -(window - 1))
+    scope_ids = _scoped_activity_ids(rule, activity, activities)
+    scoped_logs = [
+        log
+        for log in _logs_excluding(logs, exclude_log)
+        if log["activity_id"] in scope_ids
+        and win_start <= log["logged_date"] <= as_of
+    ]
+
+    rule_type = rule["rule_type"]
+    if rule_type == "weekly_load_cap":
+        actual = sum(log_load(log) for log in scoped_logs)
+    elif rule_type == "frequency_limit":
+        actual = float(len(scoped_logs))
+    elif rule_type in _VOLUME_CAP_RULE_TYPES:
+        limit_unit = rule.get("limit_unit")
+        if not limit_unit:
+            return 0.0
+        if rule_type == "daily_volume_cap":
+            scoped_logs = [
+                log for log in scoped_logs if log["logged_date"] == as_of
+            ]
+        actual = _sum_volume_for_cap(scoped_logs, limit_unit)
+    else:
+        return 0.0
+
+    return actual / threshold
+
+
+def _rest_rule_broken(
+    rule: RuleDict,
+    activity: ActivityDict,
+    activities: list[ActivityDict],
+    logs: list[LogDict],
+    as_of: str,
+) -> bool:
+    scope_ids = _scoped_activity_ids(rule, activity, activities)
+    prior_logs = [
+        log
+        for log in logs
+        if log["activity_id"] in scope_ids and log["logged_date"] < as_of
+    ]
+    if not prior_logs:
+        return False
+    prior_logs.sort(key=lambda log: log["logged_date"], reverse=True)
+    days_since = _days_between(prior_logs[0]["logged_date"], as_of)
+    threshold = int(rule["threshold_value"])
+    return days_since <= threshold
+
+
+def _consecutive_limit_reached(
+    rule: RuleDict,
+    activity: ActivityDict,
+    activities: list[ActivityDict],
+    logs: list[LogDict],
+    as_of: str,
+) -> bool:
+    threshold = int(rule["threshold_value"])
+    scope_ids = _scoped_activity_ids(rule, activity, activities)
+    consecutive = 0
+    cursor = as_of
+    while True:
+        has_log = any(
+            log["activity_id"] in scope_ids and log["logged_date"] == cursor
+            for log in logs
+        )
+        if not has_log:
+            break
+        consecutive += 1
+        cursor = add_days(cursor, -1)
+    return consecutive >= threshold
+
+
+def compute_log_load_tax(
+    log: LogDict,
+    activity: ActivityDict,
+    activities: list[ActivityDict],
+    activity_classes: list[ActivityClassDict],
+    logs: list[LogDict],
+    rules: list[RuleDict],
+    *,
+    as_of: str,
+) -> float:
+    del activity_classes
+    if not _is_performance_activity(activity):
+        return 0.0
+
+    rpe_value = log.get("rpe")
+    rpe = DEFAULT_RPE if rpe_value is None else int(rpe_value)
+    tax = _LOAD_TAX_BASE + _rpe_load_tax(rpe)
+
+    class_id = activity["activity_class_id"]
+    logs_up_to = [entry for entry in logs if entry["logged_date"] <= as_of]
+    effective = effective_rules_for_activity(activity["id"], class_id, rules)
+
+    proximity_by_category: dict[str, float] = {}
+    for rule in effective:
+        if not rule.get("enabled", True):
+            continue
+        rule_type = rule["rule_type"]
+        if rule_type == "rest_between_class":
+            if _rest_rule_broken(rule, activity, activities, logs_up_to, as_of):
+                proximity_by_category[rule_type] = max(
+                    proximity_by_category.get(rule_type, 0.0),
+                    _LOAD_TAX_REST_BROKEN,
+                )
+        elif rule_type == "consecutive_day_limit":
+            if _consecutive_limit_reached(
+                rule, activity, activities, logs_up_to, as_of
+            ):
+                proximity_by_category[rule_type] = max(
+                    proximity_by_category.get(rule_type, 0.0),
+                    _LOAD_TAX_CONSECUTIVE_REACHED,
+                )
+        elif rule_type in (
+            "weekly_load_cap",
+            "frequency_limit",
+            "daily_volume_cap",
+            "weekly_volume_cap",
+        ):
+            usage_ratio = _rule_usage_ratio(
+                rule,
+                activity,
+                activities,
+                logs_up_to,
+                as_of,
+                exclude_log=log,
+            )
+            proximity = _proximity_load_tax(usage_ratio)
+            proximity_by_category[rule_type] = max(
+                proximity_by_category.get(rule_type, 0.0),
+                proximity,
+            )
+
+    tax += sum(proximity_by_category.values())
+    return tax
 
 
 # ---------------------------------------------------------------------------
@@ -1175,6 +1393,60 @@ def compute_clean_streak(logs: list[LogDict]) -> int:
 # ---------------------------------------------------------------------------
 
 
+def _daily_load_tax_for_class(
+    class_id: str,
+    activities: list[ActivityDict],
+    activity_classes: list[ActivityClassDict],
+    logs: list[LogDict],
+    rules: list[RuleDict],
+    day: str,
+) -> float:
+    ids = set(_activity_ids_for_class(class_id, activities))
+    activity_map = {activity["id"]: activity for activity in activities}
+    total = 0.0
+    for log in logs:
+        if log["logged_date"] != day or log["activity_id"] not in ids:
+            continue
+        activity = activity_map.get(log["activity_id"])
+        if activity is None or not _is_performance_activity(activity):
+            continue
+        total += compute_log_load_tax(
+            log,
+            activity,
+            activities,
+            activity_classes,
+            logs,
+            rules,
+            as_of=day,
+        )
+    return total
+
+
+def _recency_weighted_load_tax(
+    class_id: str,
+    activities: list[ActivityDict],
+    activity_classes: list[ActivityClassDict],
+    logs: list[LogDict],
+    rules: list[RuleDict],
+    as_of: str,
+    window_days: int,
+) -> float:
+    del window_days
+    total = 0.0
+    for offset, weight in enumerate(LOAD_TAX_RECENCY_WEIGHTS):
+        day = add_days(as_of, -offset)
+        daily_tax = _daily_load_tax_for_class(
+            class_id,
+            activities,
+            activity_classes,
+            logs,
+            rules,
+            day,
+        )
+        total += daily_tax * weight
+    return total
+
+
 def compute_load_series(
     class_id: str,
     activities: list[ActivityDict],
@@ -1182,23 +1454,53 @@ def compute_load_series(
     start_date: str,
     end_date: str,
     window_days: int = 7,
+    *,
+    activity_classes: list[ActivityClassDict] | None = None,
+    rules: list[RuleDict] | None = None,
 ) -> list[LoadPoint]:
     ids = set(_activity_ids_for_class(class_id, activities))
-    scoped = [
-        log
-        for log in logs
-        if log["activity_id"] in ids
-        and start_date <= log["logged_date"] <= end_date
+    class_logs = [
+        log for log in logs if log["activity_id"] in ids and log["logged_date"] <= end_date
     ]
+
     series: list[LoadPoint] = []
     for day in each_day(start_date, end_date):
-        series.append(
-            {
-                "date": day,
-                "load": rolling_load(scoped, day, window_days),
-                "daily_load": daily_load(scoped, day),
-            }
-        )
+        if activity_classes is not None:
+            series.append(
+                {
+                    "date": day,
+                    "load": _recency_weighted_load_tax(
+                        class_id,
+                        activities,
+                        activity_classes,
+                        class_logs,
+                        rules or [],
+                        day,
+                        window_days,
+                    ),
+                    "daily_load": _daily_load_tax_for_class(
+                        class_id,
+                        activities,
+                        activity_classes,
+                        class_logs,
+                        rules or [],
+                        day,
+                    ),
+                }
+            )
+        else:
+            scoped = [
+                log
+                for log in class_logs
+                if start_date <= log["logged_date"] <= end_date
+            ]
+            series.append(
+                {
+                    "date": day,
+                    "load": rolling_load(scoped, day, window_days),
+                    "daily_load": daily_load(scoped, day),
+                }
+            )
     return series
 
 

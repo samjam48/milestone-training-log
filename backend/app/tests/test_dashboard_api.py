@@ -836,3 +836,72 @@ async def test_get_dashboard_weekly_progress_includes_activity_fields_when_scope
     assert walk_row["activity_name"] == "Morning Walk"
     assert class_row["activity_id"] is None
     assert class_row["activity_name"] is None
+
+
+# ---------------------------------------------------------------------------
+# WTL.B5 — load-tax load_series contract on GET /api/dashboard
+# ---------------------------------------------------------------------------
+
+
+WTL_B5_GRAPH_WINDOW_DAYS = 30
+
+
+def _wtl_b5_graph_start(as_of: date) -> date:
+    return as_of - timedelta(days=WTL_B5_GRAPH_WINDOW_DAYS - 1)
+
+
+async def test_get_dashboard_load_series_spans_last_thirty_days(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    from app.tests.helpers.wtl_b5_fixtures import WTL_B5_AS_OF, seed_wtl_b5_dashboard_graph
+
+    seed_wtl_b5_dashboard_graph(app_with_test_database)
+    as_of = date.fromisoformat(WTL_B5_AS_OF)
+    expected_start = _wtl_b5_graph_start(as_of)
+
+    response = await client.get(DASHBOARD_URL, params={"as_of": WTL_B5_AS_OF})
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert len(payload["load_series"]) == WTL_B5_GRAPH_WINDOW_DAYS
+    assert payload["load_series"][0]["date"] == expected_start.isoformat()
+    assert payload["load_series"][-1]["date"] == WTL_B5_AS_OF
+
+
+async def test_get_dashboard_load_series_point_includes_load_tax_fields(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    from app.tests.helpers.wtl_b5_fixtures import WTL_B5_AS_OF, seed_wtl_b5_dashboard_graph
+
+    seed_wtl_b5_dashboard_graph(app_with_test_database)
+
+    response = await client.get(DASHBOARD_URL, params={"as_of": WTL_B5_AS_OF})
+    assert response.status_code == 200
+    point = next(
+        row for row in response.json()["load_series"] if row["date"] == WTL_B5_AS_OF
+    )
+
+    assert set(point.keys()) == {"date", "load", "daily_load"}
+    assert point["daily_load"] == pytest.approx(1.5)
+    assert point["load"] == pytest.approx(1.5)
+
+
+async def test_get_dashboard_week_load_threshold_null_avoids_zero_cap_display(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    from app.tests.helpers.wtl_b5_fixtures import WTL_B5_AS_OF, seed_wtl_b5_dashboard_graph
+
+    seed_wtl_b5_dashboard_graph(
+        app_with_test_database,
+        include_weekly_load_cap=True,
+        weekly_load_cap_threshold=120.0,
+    )
+
+    response = await client.get(DASHBOARD_URL, params={"as_of": WTL_B5_AS_OF})
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["week_load_threshold"] is None

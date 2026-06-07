@@ -97,7 +97,7 @@ async def test_get_dashboard_graph_class_id_weekly_load_cap_on_foot_not_first_pe
     payload = response.json()
     assert payload["graph_class_id"] == "cls-foot"
     assert payload["graph_class_id"] != first_performance_by_sort
-    assert payload["week_load_threshold"] == 90
+    assert payload["week_load_threshold"] is None
 
 
 async def test_get_dashboard_graph_class_id_falls_back_to_first_performance_class_without_cap(
@@ -117,7 +117,7 @@ async def test_get_dashboard_graph_class_id_falls_back_to_first_performance_clas
     payload = response.json()
     assert payload["graph_class_id"] == expected
     assert payload["graph_class_id"] == "cls-arm"
-    assert payload["week_load_threshold"] == 0
+    assert payload["week_load_threshold"] is None
 
 
 async def test_get_dashboard_graph_class_id_null_without_active_block(
@@ -176,5 +176,5 @@ async def test_get_dashboard_seeded_mock_graph_class_id_matches_load_series_clas
     assert response.status_code == 200
     payload = response.json()
     assert payload["graph_class_id"] == "cls-foot"
-    assert payload["week_load_threshold"] == 120
+    assert payload["week_load_threshold"] is None
     assert payload["load_series"]

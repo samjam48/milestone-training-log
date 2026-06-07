@@ -100,7 +100,7 @@ class DashboardRead(BaseModel):
     load_series: list[LoadPointRead]
     graph_class_id: str | None
     flare_up_dates: list[str]
-    week_load_threshold: int
+    week_load_threshold: int | None = None
     clean_streak: int
     recovery_streaks: list[RecoveryStreakRead]
     goals: list[GoalRead]  # all local goals (Goals tab: active, achieved, paused, missed)

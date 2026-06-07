@@ -193,15 +193,22 @@ def get_dashboard(session: Session, *, as_of: date | None = None) -> DashboardRe
     )
 
     graph_class_id = resolve_graph_class_id(rule_dicts, class_dicts)
+    graph_start = (
+        format_iso_date(resolved - timedelta(days=29))
+        if block_start is not None
+        else None
+    )
     load_series = (
         compute_load_series(
             graph_class_id,
             activity_dicts,
             log_dicts,
-            block_start,
+            graph_start,
             as_of_str,
+            activity_classes=class_dicts,
+            rules=rule_dicts,
         )
-        if block_start is not None and graph_class_id is not None
+        if block_start is not None and graph_class_id is not None and graph_start is not None
         else []
     )
 
@@ -303,22 +310,9 @@ def _build_previous_blocks(session: Session) -> list[TrainingBlockRead]:
     return [TrainingBlockRead.model_validate(block) for block in blocks]
 
 
-def _week_load_threshold(graph_class_id: str | None, rules: list[RuleDict]) -> int:
-    if graph_class_id is None:
-        return 0
-    cap_rule = next(
-        (
-            rule
-            for rule in rules
-            if rule.get("enabled", True)
-            and rule["rule_type"] == "weekly_load_cap"
-            and rule["activity_class_id"] == graph_class_id
-        ),
-        None,
-    )
-    if cap_rule is None:
-        return 0
-    return int(cap_rule["threshold_value"])
+def _week_load_threshold(graph_class_id: str | None, rules: list[RuleDict]) -> int | None:
+    del graph_class_id, rules
+    return None
 
 
 def _build_recovery_streaks(

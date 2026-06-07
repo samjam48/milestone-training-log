@@ -97,8 +97,15 @@ def _expected_clean_streak() -> int:
     return compute_clean_streak(LOGS)
 
 
+GRAPH_WINDOW_DAYS = 30
+
+
+def _graph_window_start(as_of: date) -> date:
+    return as_of - timedelta(days=GRAPH_WINDOW_DAYS - 1)
+
+
 def _expected_load_series_length() -> int:
-    return (FROZEN_AS_OF - BLOCK_START_DATE).days + 1
+    return GRAPH_WINDOW_DAYS
 
 
 def _expected_incident_dates() -> list[str]:
@@ -127,7 +134,7 @@ def test_get_dashboard_cls_foot_status_matches_compute_class_statuses(
     assert foot.state == _expected_foot_state()
     assert foot.state == "caution"
     assert dashboard.user_name == "Sam"
-    assert dashboard.week_load_threshold == 120
+    assert dashboard.week_load_threshold is None
 
 
 def test_get_dashboard_has_checked_in_today_false_without_as_of_check_in(
@@ -178,29 +185,31 @@ def test_get_dashboard_logs_limited_to_30_day_window_but_engine_uses_full_histor
 
     assert _foot_status(dashboard).state == _expected_foot_state()
 
-    early_block_point = next(
-        point for point in dashboard.load_series if point.date == date(2026, 4, 8)
+    window_point = next(
+        point for point in dashboard.load_series if point.date == date(2026, 5, 5)
     )
-    assert early_block_point.daily_load > 0
+    assert window_point.daily_load > 0
 
 
-def test_get_dashboard_load_series_spans_block_start_through_as_of_inclusive(
+def test_get_dashboard_load_series_spans_last_thirty_days_through_as_of_inclusive(
     app_with_test_database: FastAPI,
     session: Session,
 ) -> None:
     seed_dashboard_mock_graph(app_with_test_database)
+    graph_start = _graph_window_start(FROZEN_AS_OF)
 
     dashboard = get_dashboard(session, as_of=FROZEN_AS_OF)
 
     assert len(dashboard.load_series) == _expected_load_series_length()
-    assert dashboard.load_series[0].date == BLOCK_START_DATE
+    assert dashboard.load_series[0].date == graph_start
     assert dashboard.load_series[-1].date == FROZEN_AS_OF
+    assert dashboard.load_series[0].date != BLOCK_START_DATE
 
     expected_series = compute_load_series(
         "cls-foot",
         ACTIVITIES,
         LOGS,
-        BLOCK_START,
+        format_iso_date(graph_start),
         AS_OF,
     )
     assert len(dashboard.load_series) == len(expected_series)
@@ -352,7 +361,7 @@ def test_get_dashboard_empty_database_returns_neutral_payload(
     assert dashboard.daily_scores == []
     assert dashboard.load_series == []
     assert dashboard.clean_streak == 0
-    assert dashboard.week_load_threshold == 0
+    assert dashboard.week_load_threshold is None
 
 
 def test_get_dashboard_excludes_records_after_as_of(
@@ -1155,3 +1164,125 @@ def test_get_dashboard_suggestion_buckets_no_weekly_target_activity_not_in_do(
     do_ids = _bucket_ids(dashboard.suggestion_buckets, "do")
     assert "act-wtl-walk" not in do_ids
     assert "act-wtl-bike" in do_ids
+
+
+# ---------------------------------------------------------------------------
+# WTL.B5 — load-tax load_series and nullable graph threshold
+# ---------------------------------------------------------------------------
+
+
+WTL_B5_GRAPH_WINDOW_DAYS = 30
+
+
+def _wtl_b5_graph_start(as_of: date) -> date:
+    return as_of - timedelta(days=WTL_B5_GRAPH_WINDOW_DAYS - 1)
+
+
+def test_get_dashboard_load_series_spans_last_thirty_days_not_block_start(
+    app_with_test_database: FastAPI,
+    session: Session,
+) -> None:
+    from app.tests.helpers.wtl_b5_fixtures import WTL_B5_AS_OF, seed_wtl_b5_dashboard_graph
+
+    seed_wtl_b5_dashboard_graph(app_with_test_database)
+    as_of = date.fromisoformat(WTL_B5_AS_OF)
+    expected_start = _wtl_b5_graph_start(as_of)
+
+    dashboard = get_dashboard(session, as_of=as_of)
+
+    assert len(dashboard.load_series) == WTL_B5_GRAPH_WINDOW_DAYS
+    assert dashboard.load_series[0].date == expected_start
+    assert dashboard.load_series[-1].date == as_of
+    assert dashboard.load_series[0].date != BLOCK_START_DATE
+
+
+def test_get_dashboard_load_series_matches_load_tax_engine_series(
+    app_with_test_database: FastAPI,
+    session: Session,
+) -> None:
+    from app.services.activities import list_activities
+    from app.services.activity_classes import list_activity_classes
+    from app.services.activity_logs import list_activity_logs
+    from app.tests.helpers.wtl_b5_fixtures import (
+        WTL_B5_AS_OF,
+        WTL_B5_BLOCK_ID,
+        WTL_B5_CLASS_ID,
+        seed_wtl_b5_dashboard_graph,
+    )
+
+    seed_wtl_b5_dashboard_graph(app_with_test_database)
+    as_of = date.fromisoformat(WTL_B5_AS_OF)
+    graph_start = _wtl_b5_graph_start(as_of)
+
+    active_block = get_active_training_block(session)
+    assert active_block.id == WTL_B5_BLOCK_ID
+
+    activity_classes = [activity_class_dict(cls) for cls in list_activity_classes(session)]
+    activities = [activity_dict(activity) for activity in list_activities(session)]
+    logs = [log_dict(log) for log in list_activity_logs(session, end_date=as_of)]
+    rules = [rule_dict(rule) for rule in list_rules(session, active_block.id)]
+
+    expected = compute_load_series(
+        WTL_B5_CLASS_ID,
+        activities,
+        logs,
+        format_iso_date(graph_start),
+        WTL_B5_AS_OF,
+        activity_classes=activity_classes,
+        rules=rules,
+    )
+
+    dashboard = get_dashboard(session, as_of=as_of)
+
+    assert len(dashboard.load_series) == len(expected)
+    for actual, engine_point in zip(dashboard.load_series, expected, strict=True):
+        assert actual.date.isoformat() == engine_point["date"]
+        assert actual.load == pytest.approx(engine_point["load"])
+        assert actual.daily_load == pytest.approx(engine_point["daily_load"])
+
+
+def test_get_dashboard_load_series_daily_load_is_load_tax_not_raw_volume_rpe(
+    app_with_test_database: FastAPI,
+    session: Session,
+) -> None:
+    from app.tests.helpers.wtl_b5_fixtures import WTL_B5_AS_OF, seed_wtl_b5_dashboard_graph
+
+    seed_wtl_b5_dashboard_graph(app_with_test_database)
+    dashboard = get_dashboard(session, as_of=date.fromisoformat(WTL_B5_AS_OF))
+
+    as_of_point = next(
+        point for point in dashboard.load_series if point.date.isoformat() == WTL_B5_AS_OF
+    )
+    assert as_of_point.daily_load == pytest.approx(1.5)
+    assert as_of_point.daily_load != pytest.approx(10.0)
+
+
+def test_get_dashboard_week_load_threshold_null_without_explicit_load_tax_cap(
+    app_with_test_database: FastAPI,
+    session: Session,
+) -> None:
+    from app.tests.helpers.wtl_b5_fixtures import WTL_B5_AS_OF, seed_wtl_b5_dashboard_graph
+
+    seed_wtl_b5_dashboard_graph(
+        app_with_test_database,
+        include_weekly_load_cap=True,
+        weekly_load_cap_threshold=120.0,
+    )
+    dashboard = get_dashboard(session, as_of=date.fromisoformat(WTL_B5_AS_OF))
+
+    assert dashboard.week_load_threshold is None
+
+
+def test_get_dashboard_week_load_threshold_null_when_no_cap_rules(
+    app_with_test_database: FastAPI,
+    session: Session,
+) -> None:
+    from app.tests.helpers.wtl_b5_fixtures import WTL_B5_AS_OF, seed_wtl_b5_dashboard_graph
+
+    seed_wtl_b5_dashboard_graph(
+        app_with_test_database,
+        include_weekly_load_cap=False,
+    )
+    dashboard = get_dashboard(session, as_of=date.fromisoformat(WTL_B5_AS_OF))
+
+    assert dashboard.week_load_threshold is None

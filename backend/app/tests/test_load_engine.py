@@ -34,6 +34,16 @@ from app.services.load_engine import (
     parse_iso_date,
     rolling_load,
 )
+from app.tests.helpers.wtl_b5_fixtures import (
+    WTL_B5_ACTIVITIES,
+    WTL_B5_ACTIVITY_CLASSES,
+    WTL_B5_AS_OF,
+    WTL_B5_CLASS_ID,
+    WTL_B5_STRETCH_ID,
+    WTL_B5_WALK_ID,
+    wtl_b5_log,
+    wtl_b5_rule,
+)
 from app.tests.helpers.load_engine_fixtures import (
     ACTIVITIES,
     ACTIVITY_CLASSES,
@@ -2688,6 +2698,472 @@ def test_detect_delayed_tax_emits_flare_incident_symptom_marker() -> None:
 
 
 # ---------------------------------------------------------------------------
+# WTL.B5 — load-tax formula and recency-weighted load series
+# ---------------------------------------------------------------------------
+
+
+def _require_wtl_b5_load_tax_symbols() -> tuple[list[float], Any, Any]:
+    module = importlib.import_module("app.services.load_engine")
+    missing = [
+        name
+        for name in ("LOAD_TAX_RECENCY_WEIGHTS", "compute_log_load_tax")
+        if not hasattr(module, name)
+    ]
+    if missing:
+        pytest.fail(
+            "app.services.load_engine must export "
+            + ", ".join(missing)
+            + " (WTL.B5)"
+        )
+    return (
+        module.LOAD_TAX_RECENCY_WEIGHTS,
+        module.compute_log_load_tax,
+        module.compute_load_series,
+    )
+
+
+def test_load_tax_recency_weights_match_ticket_constants() -> None:
+    weights, _, _ = _require_wtl_b5_load_tax_symbols()
+    assert weights == [
+        1.0,
+        0.85,
+        0.7,
+        0.55,
+        0.4,
+        0.25,
+        0.15,
+    ]
+
+
+def _wtl_b5_walk() -> dict[str, Any]:
+    return next(a for a in WTL_B5_ACTIVITIES if a["id"] == WTL_B5_WALK_ID)
+
+
+def _wtl_b5_stretch() -> dict[str, Any]:
+    return next(a for a in WTL_B5_ACTIVITIES if a["id"] == WTL_B5_STRETCH_ID)
+
+
+def test_compute_log_load_tax_recovery_activity_returns_zero() -> None:
+    _, compute_log_load_tax, _ = _require_wtl_b5_load_tax_symbols()
+    log = wtl_b5_log(
+        log_id="log-recovery",
+        activity_id=WTL_B5_STRETCH_ID,
+        logged_date=WTL_B5_AS_OF,
+        volume_value=30.0,
+        rpe=8,
+        volume_unit="minutes",
+        duration_minutes=30,
+    )
+    assert (
+        compute_log_load_tax(
+            log,
+            _wtl_b5_stretch(),
+            WTL_B5_ACTIVITIES,
+            WTL_B5_ACTIVITY_CLASSES,
+            [log],
+            [],
+            as_of=WTL_B5_AS_OF,
+        )
+        == 0.0
+    )
+
+
+def test_compute_log_load_tax_base_performance_session_minimum_one() -> None:
+    _, compute_log_load_tax, _ = _require_wtl_b5_load_tax_symbols()
+    log = wtl_b5_log(
+        log_id="log-base",
+        activity_id=WTL_B5_WALK_ID,
+        logged_date=WTL_B5_AS_OF,
+        volume_value=0.5,
+        rpe=3,
+    )
+    tax = compute_log_load_tax(
+        log,
+        _wtl_b5_walk(),
+        WTL_B5_ACTIVITIES,
+        WTL_B5_ACTIVITY_CLASSES,
+        [log],
+        [],
+        as_of=WTL_B5_AS_OF,
+    )
+    assert tax >= 1.0
+
+
+@pytest.mark.parametrize(
+    ("rpe", "expected_rpe_tax"),
+    [
+        (3, 0.0),
+        (5, 0.5),
+        (6, 0.5),
+        (7, 1.0),
+        (8, 1.0),
+        (9, 2.0),
+        (10, 2.0),
+    ],
+)
+def test_compute_log_load_tax_rpe_tiers(rpe: int, expected_rpe_tax: float) -> None:
+    _, compute_log_load_tax, _ = _require_wtl_b5_load_tax_symbols()
+    log = wtl_b5_log(
+        log_id=f"log-rpe-{rpe}",
+        activity_id=WTL_B5_WALK_ID,
+        logged_date=WTL_B5_AS_OF,
+        volume_value=1.0,
+        rpe=rpe,
+    )
+    tax = compute_log_load_tax(
+        log,
+        _wtl_b5_walk(),
+        WTL_B5_ACTIVITIES,
+        WTL_B5_ACTIVITY_CLASSES,
+        [log],
+        [],
+        as_of=WTL_B5_AS_OF,
+    )
+    assert tax == pytest.approx(1.0 + expected_rpe_tax)
+
+
+def test_compute_log_load_tax_no_rules_still_contributes_base_and_rpe() -> None:
+    _, compute_log_load_tax, _ = _require_wtl_b5_load_tax_symbols()
+    log = wtl_b5_log(
+        log_id="log-no-rules",
+        activity_id=WTL_B5_WALK_ID,
+        logged_date=WTL_B5_AS_OF,
+        volume_value=10.0,
+        rpe=7,
+    )
+    tax = compute_log_load_tax(
+        log,
+        _wtl_b5_walk(),
+        WTL_B5_ACTIVITIES,
+        WTL_B5_ACTIVITY_CLASSES,
+        [log],
+        [],
+        as_of=WTL_B5_AS_OF,
+    )
+    raw_volume_rpe = log["volume_value"] * log["rpe"]
+    assert tax == pytest.approx(2.0)
+    assert tax < raw_volume_rpe
+
+
+@pytest.mark.parametrize(
+    ("prior_load", "expected_proximity_tax"),
+    [
+        (4.0, 0.0),
+        (5.0, 1.0),
+        (8.0, 2.0),
+        (10.0, 4.0),
+    ],
+)
+def test_compute_log_load_tax_rule_proximity_tiers_for_weekly_load_cap(
+    prior_load: float,
+    expected_proximity_tax: float,
+) -> None:
+    _, compute_log_load_tax, _ = _require_wtl_b5_load_tax_symbols()
+    cap_rule = wtl_b5_rule(
+        id="rule-cap-proximity",
+        rule_type="weekly_load_cap",
+        threshold_value=10.0,
+    )
+    prior = wtl_b5_log(
+        log_id="log-prior-cap",
+        activity_id=WTL_B5_WALK_ID,
+        logged_date=add_days(WTL_B5_AS_OF, -1),
+        volume_value=prior_load,
+        rpe=1,
+    )
+    current = wtl_b5_log(
+        log_id="log-current-cap",
+        activity_id=WTL_B5_WALK_ID,
+        logged_date=WTL_B5_AS_OF,
+        volume_value=1.0,
+        rpe=3,
+    )
+    tax = compute_log_load_tax(
+        current,
+        _wtl_b5_walk(),
+        WTL_B5_ACTIVITIES,
+        WTL_B5_ACTIVITY_CLASSES,
+        [prior, current],
+        [cap_rule],
+        as_of=WTL_B5_AS_OF,
+    )
+    assert tax == pytest.approx(1.0 + expected_proximity_tax)
+
+
+def test_compute_log_load_tax_rest_rule_broken_adds_four() -> None:
+    _, compute_log_load_tax, _ = _require_wtl_b5_load_tax_symbols()
+    rest_rule = wtl_b5_rule(
+        id="rule-rest",
+        rule_type="rest_between_class",
+        threshold_value=3,
+        window_days=3,
+    )
+    prior = wtl_b5_log(
+        log_id="log-prior-rest",
+        activity_id=WTL_B5_WALK_ID,
+        logged_date=add_days(WTL_B5_AS_OF, -1),
+        volume_value=1.0,
+        rpe=3,
+    )
+    current = wtl_b5_log(
+        log_id="log-current-rest",
+        activity_id=WTL_B5_WALK_ID,
+        logged_date=WTL_B5_AS_OF,
+        volume_value=1.0,
+        rpe=3,
+    )
+    tax = compute_log_load_tax(
+        current,
+        _wtl_b5_walk(),
+        WTL_B5_ACTIVITIES,
+        WTL_B5_ACTIVITY_CLASSES,
+        [prior, current],
+        [rest_rule],
+        as_of=WTL_B5_AS_OF,
+    )
+    assert tax == pytest.approx(1.0 + 4.0)
+
+
+def test_compute_log_load_tax_consecutive_day_limit_adds_three() -> None:
+    _, compute_log_load_tax, _ = _require_wtl_b5_load_tax_symbols()
+    consecutive_rule = wtl_b5_rule(
+        id="rule-consecutive",
+        rule_type="consecutive_day_limit",
+        threshold_value=2,
+        window_days=7,
+    )
+    prior = wtl_b5_log(
+        log_id="log-prior-consecutive",
+        activity_id=WTL_B5_WALK_ID,
+        logged_date=add_days(WTL_B5_AS_OF, -1),
+        volume_value=1.0,
+        rpe=3,
+    )
+    current = wtl_b5_log(
+        log_id="log-current-consecutive",
+        activity_id=WTL_B5_WALK_ID,
+        logged_date=WTL_B5_AS_OF,
+        volume_value=1.0,
+        rpe=3,
+    )
+    tax = compute_log_load_tax(
+        current,
+        _wtl_b5_walk(),
+        WTL_B5_ACTIVITIES,
+        WTL_B5_ACTIVITY_CLASSES,
+        [prior, current],
+        [consecutive_rule],
+        as_of=WTL_B5_AS_OF,
+    )
+    assert tax == pytest.approx(1.0 + 3.0)
+
+
+def test_compute_log_load_tax_category_cap_stacks_same_rule_type_once() -> None:
+    _, compute_log_load_tax, _ = _require_wtl_b5_load_tax_symbols()
+    loose_cap = wtl_b5_rule(
+        id="rule-cap-loose",
+        rule_type="weekly_load_cap",
+        threshold_value=20.0,
+    )
+    strict_cap = wtl_b5_rule(
+        id="rule-cap-strict",
+        rule_type="weekly_load_cap",
+        threshold_value=10.0,
+    )
+    prior = wtl_b5_log(
+        log_id="log-prior-double-cap",
+        activity_id=WTL_B5_WALK_ID,
+        logged_date=add_days(WTL_B5_AS_OF, -1),
+        volume_value=8.0,
+        rpe=1,
+    )
+    current = wtl_b5_log(
+        log_id="log-current-double-cap",
+        activity_id=WTL_B5_WALK_ID,
+        logged_date=WTL_B5_AS_OF,
+        volume_value=1.0,
+        rpe=3,
+    )
+    tax = compute_log_load_tax(
+        current,
+        _wtl_b5_walk(),
+        WTL_B5_ACTIVITIES,
+        WTL_B5_ACTIVITY_CLASSES,
+        [prior, current],
+        [loose_cap, strict_cap],
+        as_of=WTL_B5_AS_OF,
+    )
+    assert tax == pytest.approx(1.0 + 2.0)
+
+
+def test_compute_log_load_tax_ignores_disabled_rules() -> None:
+    _, compute_log_load_tax, _ = _require_wtl_b5_load_tax_symbols()
+    disabled_cap = wtl_b5_rule(
+        id="rule-cap-disabled",
+        rule_type="weekly_load_cap",
+        threshold_value=10.0,
+        enabled=False,
+    )
+    prior = wtl_b5_log(
+        log_id="log-prior-disabled",
+        activity_id=WTL_B5_WALK_ID,
+        logged_date=add_days(WTL_B5_AS_OF, -1),
+        volume_value=9.0,
+        rpe=1,
+    )
+    current = wtl_b5_log(
+        log_id="log-current-disabled",
+        activity_id=WTL_B5_WALK_ID,
+        logged_date=WTL_B5_AS_OF,
+        volume_value=1.0,
+        rpe=3,
+    )
+    tax = compute_log_load_tax(
+        current,
+        _wtl_b5_walk(),
+        WTL_B5_ACTIVITIES,
+        WTL_B5_ACTIVITY_CLASSES,
+        [prior, current],
+        [disabled_cap],
+        as_of=WTL_B5_AS_OF,
+    )
+    assert tax == pytest.approx(1.0)
+
+
+def test_compute_load_series_daily_load_uses_load_tax_not_raw_volume_rpe() -> None:
+    _, _, compute_load_series_wtl = _require_wtl_b5_load_tax_symbols()
+    log = wtl_b5_log(
+        log_id="log-series-daily",
+        activity_id=WTL_B5_WALK_ID,
+        logged_date=WTL_B5_AS_OF,
+        volume_value=10.0,
+        rpe=7,
+    )
+    series = compute_load_series_wtl(
+        WTL_B5_CLASS_ID,
+        WTL_B5_ACTIVITIES,
+        [log],
+        WTL_B5_AS_OF,
+        WTL_B5_AS_OF,
+        activity_classes=WTL_B5_ACTIVITY_CLASSES,
+        rules=[],
+    )
+    point = series[0]
+    assert point["daily_load"] == pytest.approx(2.0)
+    assert point["daily_load"] != pytest.approx(log["volume_value"] * log["rpe"])
+
+
+def test_compute_load_series_excludes_recovery_logs_from_tax() -> None:
+    _, _, compute_load_series_wtl = _require_wtl_b5_load_tax_symbols()
+    performance = wtl_b5_log(
+        log_id="log-series-perf",
+        activity_id=WTL_B5_WALK_ID,
+        logged_date=WTL_B5_AS_OF,
+        volume_value=2.0,
+        rpe=5,
+    )
+    recovery = wtl_b5_log(
+        log_id="log-series-recovery",
+        activity_id=WTL_B5_STRETCH_ID,
+        logged_date=WTL_B5_AS_OF,
+        volume_value=30.0,
+        rpe=8,
+        volume_unit="minutes",
+        duration_minutes=30,
+    )
+    series = compute_load_series_wtl(
+        WTL_B5_CLASS_ID,
+        WTL_B5_ACTIVITIES,
+        [performance, recovery],
+        WTL_B5_AS_OF,
+        WTL_B5_AS_OF,
+        activity_classes=WTL_B5_ACTIVITY_CLASSES,
+        rules=[],
+    )
+    assert series[0]["daily_load"] == pytest.approx(1.5)
+
+
+def test_compute_load_series_rolling_load_applies_recency_weights() -> None:
+    weights, _, compute_load_series_wtl = _require_wtl_b5_load_tax_symbols()
+    older = wtl_b5_log(
+        log_id="log-series-older",
+        activity_id=WTL_B5_WALK_ID,
+        logged_date=add_days(WTL_B5_AS_OF, -6),
+        volume_value=1.0,
+        rpe=3,
+    )
+    today = wtl_b5_log(
+        log_id="log-series-today",
+        activity_id=WTL_B5_WALK_ID,
+        logged_date=WTL_B5_AS_OF,
+        volume_value=1.0,
+        rpe=7,
+    )
+    series = compute_load_series_wtl(
+        WTL_B5_CLASS_ID,
+        WTL_B5_ACTIVITIES,
+        [older, today],
+        WTL_B5_AS_OF,
+        WTL_B5_AS_OF,
+        activity_classes=WTL_B5_ACTIVITY_CLASSES,
+        rules=[],
+    )
+    expected = (2.0 * weights[0]) + (1.0 * weights[6])
+    assert series[0]["load"] == pytest.approx(expected)
+
+
+def test_compute_load_series_logs_outside_seven_day_window_do_not_affect_point() -> None:
+    weights, _, compute_load_series_wtl = _require_wtl_b5_load_tax_symbols()
+    outside_window = wtl_b5_log(
+        log_id="log-series-outside",
+        activity_id=WTL_B5_WALK_ID,
+        logged_date=add_days(WTL_B5_AS_OF, -7),
+        volume_value=99.0,
+        rpe=10,
+    )
+    inside_window = wtl_b5_log(
+        log_id="log-series-inside",
+        activity_id=WTL_B5_WALK_ID,
+        logged_date=WTL_B5_AS_OF,
+        volume_value=1.0,
+        rpe=3,
+    )
+    series = compute_load_series_wtl(
+        WTL_B5_CLASS_ID,
+        WTL_B5_ACTIVITIES,
+        [outside_window, inside_window],
+        WTL_B5_AS_OF,
+        WTL_B5_AS_OF,
+        activity_classes=WTL_B5_ACTIVITY_CLASSES,
+        rules=[],
+    )
+    assert series[0]["load"] == pytest.approx(1.0 * weights[0])
+
+
+def test_compute_load_series_early_point_uses_logs_before_series_start_in_window() -> None:
+    """A log before the 30-day graph start still affects an early point's 7-day window."""
+    weights, _, compute_load_series_wtl = _require_wtl_b5_load_tax_symbols()
+    graph_start = add_days(WTL_B5_AS_OF, -29)
+    prior = wtl_b5_log(
+        log_id="log-series-prior",
+        activity_id=WTL_B5_WALK_ID,
+        logged_date=add_days(graph_start, -1),
+        volume_value=1.0,
+        rpe=7,
+    )
+    series = compute_load_series_wtl(
+        WTL_B5_CLASS_ID,
+        WTL_B5_ACTIVITIES,
+        [prior],
+        graph_start,
+        graph_start,
+        activity_classes=WTL_B5_ACTIVITY_CLASSES,
+        rules=[],
+    )
+    assert series[0]["load"] == pytest.approx(2.0 * weights[1])
+
+
+# ---------------------------------------------------------------------------
 # Import surface — module must export all planned functions
 # ---------------------------------------------------------------------------
 
@@ -2701,9 +3177,11 @@ def test_detect_delayed_tax_emits_flare_incident_symptom_marker() -> None:
         "add_days",
         "diff_days",
         "each_day",
+        "LOAD_TAX_RECENCY_WEIGHTS",
         "log_load",
         "daily_load",
         "rolling_load",
+        "compute_log_load_tax",
         "compute_class_statuses",
         "compute_daily_safety_scores",
         "compute_suggestions",
