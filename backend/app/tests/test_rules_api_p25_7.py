@@ -5,14 +5,13 @@ plans/tickets-stage-2-5-polish-followup-2026-06-06.md
 
 from __future__ import annotations
 
-from datetime import date
 from typing import Any
 
 import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
 
-from app.tests.helpers.seed import seed_rule, seed_training_block
+from app.tests.helpers.seed import seed_rule
 from app.tests.test_rules_api import _seed_exercise_rule_graph, _seed_rule_graph
 
 
