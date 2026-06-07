@@ -153,30 +153,44 @@ const ARM_PERFORMANCE_CLASS: ActivityClass = {
 
 const LOAD_RISK_SUMMARY: LoadRiskSummary = {
   weekDays: [
-    { date: '2026-05-22', flagged: true },
-    { date: '2026-05-23', flagged: false },
-    { date: '2026-05-24', flagged: true },
-    { date: '2026-05-25', flagged: false },
-    { date: '2026-05-26', flagged: false },
-    { date: '2026-05-27', flagged: false },
-    { date: '2026-05-28', flagged: false },
+    { date: '2026-05-22', flagged: true, state: 'caution' },
+    { date: '2026-05-23', flagged: false, state: 'safe' },
+    { date: '2026-05-24', flagged: true, state: 'caution' },
+    { date: '2026-05-25', flagged: false, state: 'safe' },
+    { date: '2026-05-26', flagged: false, state: 'safe' },
+    { date: '2026-05-27', flagged: false, state: 'safe' },
+    { date: '2026-05-28', flagged: false, state: 'safe' },
   ],
-  classBars: [
+  ruleLimitRows: [
     {
+      id: 'row-foot-km',
+      scope: 'class',
+      ruleId: 'rule-foot-km',
+      ruleType: 'weekly_volume_cap',
       activityClassId: 'cls-foot',
       className: 'Foot load',
       actual: 8,
       limit: 10,
       unit: 'km',
-      exercises: [
-        {
-          activityId: 'act-walk',
-          activityName: 'Walking',
-          actual: 5,
-          limit: 6,
-          unit: 'km',
-        },
-      ],
+      state: 'safe',
+      label: 'Foot load weekly volume',
+      displayMode: 'bar',
+    },
+    {
+      id: 'row-walk-km',
+      scope: 'activity',
+      ruleId: 'rule-walk-km',
+      ruleType: 'weekly_volume_cap',
+      activityClassId: 'cls-foot',
+      className: 'Foot load',
+      activityId: 'act-walk',
+      activityName: 'Walking',
+      actual: 5,
+      limit: 6,
+      unit: 'km',
+      state: 'caution',
+      label: 'Walking weekly volume',
+      displayMode: 'bar',
     },
   ],
 };
@@ -524,7 +538,7 @@ describe('DashboardScreen — F10.5 load graph title (engine.graphClassId / B10.
 });
 
 describe('DashboardScreen — Load risk visual panel (engine.loadRiskSummary)', () => {
-  it('renders Load risk after the load graph with week strip and class bars', () => {
+  it('renders Load risk after the load graph with week strip and rule rows', () => {
     setupDashboardWithLoadRisk(LOAD_RISK_SUMMARY);
     useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
 
@@ -537,7 +551,7 @@ describe('DashboardScreen — Load risk visual panel (engine.loadRiskSummary)', 
     assertAppearsAfter(section, blockSafetyLabel);
 
     expect(screen.getByTestId('load-risk-week-strip')).toBeInTheDocument();
-    expect(screen.getByTestId('load-risk-class-bars')).toBeInTheDocument();
+    expect(screen.getByTestId('load-risk-rule-rows')).toBeInTheDocument();
     expect(screen.getByText('8 / 10 km')).toBeInTheDocument();
   });
 

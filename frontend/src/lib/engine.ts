@@ -58,32 +58,11 @@ export interface Suggestion {
   description?: string;
 }
 
-export interface LoadRiskDay {
-  date: ISODate;
-  flagged: boolean;
-}
-
-export interface LoadRiskExerciseBar {
-  activityId: ID;
-  activityName: string;
-  actual: number;
-  limit: number;
-  unit: string;
-}
-
-export interface LoadRiskClassBar {
-  activityClassId: ID;
-  className: string;
-  actual: number;
-  limit: number;
-  unit: string;
-  exercises: LoadRiskExerciseBar[];
-}
-
-export interface LoadRiskSummary {
-  weekDays: LoadRiskDay[];
-  classBars: LoadRiskClassBar[];
-}
+export type {
+  LoadRiskDayCell as LoadRiskDay,
+  LoadRiskRuleLimitRow,
+  LoadRiskSummary,
+} from '../types';
 
 const DESCRIPTION_MAX_LEN = 80;
 

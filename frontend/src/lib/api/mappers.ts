@@ -485,29 +485,26 @@ function mapSuggestionFromApi(raw: Record<string, unknown>): Suggestion {
   };
 }
 
-function mapLoadRiskExerciseBarFromApi(raw: Record<string, unknown>) {
+function mapLoadRiskRuleLimitRowFromApi(raw: Record<string, unknown>) {
+  const displayMode = raw.display_mode;
   return {
-    activityId: String(raw.activity_id),
-    activityName: String(raw.activity_name),
-    actual: Number(raw.actual),
-    limit: Number(raw.limit),
-    unit: String(raw.unit),
-  };
-}
-
-function mapLoadRiskClassBarFromApi(raw: Record<string, unknown>) {
-  const exercises = raw.exercises;
-  return {
+    id: String(raw.id),
+    scope: raw.scope as LoadRiskSummary['ruleLimitRows'][number]['scope'],
+    ruleId: String(raw.rule_id),
+    ruleType: String(raw.rule_type),
     activityClassId: String(raw.activity_class_id),
     className: String(raw.class_name),
     actual: Number(raw.actual),
     limit: Number(raw.limit),
     unit: String(raw.unit),
-    exercises: Array.isArray(exercises)
-      ? exercises.map((item) =>
-          mapLoadRiskExerciseBarFromApi(isRecord(item) ? item : {}),
-        )
-      : [],
+    state: raw.state as LoadRiskSummary['ruleLimitRows'][number]['state'],
+    label: String(raw.label),
+    activityId: raw.activity_id == null ? null : String(raw.activity_id),
+    activityName: raw.activity_name == null ? null : String(raw.activity_name),
+    displayMode:
+      displayMode === 'status'
+        ? ('status' as const)
+        : ('bar' as const),
   };
 }
 
@@ -518,7 +515,7 @@ export function mapLoadRiskSummaryFromApi(
     return null;
   }
   const weekDays = raw.week_days;
-  const classBars = raw.class_bars;
+  const ruleLimitRows = raw.rule_limit_rows;
   return {
     weekDays: Array.isArray(weekDays)
       ? weekDays.map((item) => {
@@ -526,11 +523,14 @@ export function mapLoadRiskSummaryFromApi(
           return {
             date: String(day.date) as ISODate,
             flagged: Boolean(day.flagged),
+            state: day.state as LoadRiskSummary['weekDays'][number]['state'],
           };
         })
       : [],
-    classBars: Array.isArray(classBars)
-      ? classBars.map((item) => mapLoadRiskClassBarFromApi(isRecord(item) ? item : {}))
+    ruleLimitRows: Array.isArray(ruleLimitRows)
+      ? ruleLimitRows.map((item) =>
+          mapLoadRiskRuleLimitRowFromApi(isRecord(item) ? item : {}),
+        )
       : [],
   };
 }
