@@ -267,6 +267,7 @@ export interface MilestoneEngineResult {
     rpe: number,
     durationMinutes?: number,
     volumeUnit?: VolumeUnit,
+    asOf?: ISODate,
   ) => RuleViolationSnapshot[];
 }
 
@@ -591,13 +592,14 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     rpe: number,
     durationMinutes?: number,
     volumeUnit?: VolumeUnit,
+    asOfOverride?: ISODate,
   ): RuleViolationSnapshot[] => {
     if (violationDebounceRef.current !== undefined) {
       clearTimeout(violationDebounceRef.current);
     }
 
     violationDebounceRef.current = setTimeout(() => {
-      const asOf =
+      const asOf = asOfOverride ??
         queryClient.getQueryData<Awaited<ReturnType<typeof getDashboard>>>(['dashboard'])
           ?.todayDate ?? todayDate;
 

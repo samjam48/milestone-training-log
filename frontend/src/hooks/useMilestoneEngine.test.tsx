@@ -519,6 +519,28 @@ describe('useMilestoneEngine API rewire (F1.3)', () => {
       });
     });
   });
+
+  it('checkViolations uses an explicit as_of when the form supplies one', async () => {
+    const { result } = renderHookWithProviders(() => useMilestoneEngine());
+
+    result.current.checkViolations(
+      'act-walk',
+      2.5,
+      5,
+      undefined,
+      undefined,
+      '2026-05-20',
+    );
+
+    await waitFor(() => {
+      expect(checkViolationsApi).toHaveBeenCalledWith({
+        activityId: 'act-walk',
+        volumeValue: 2.5,
+        rpe: 5,
+        asOf: '2026-05-20',
+      });
+    });
+  });
 });
 
 // =============================================================================

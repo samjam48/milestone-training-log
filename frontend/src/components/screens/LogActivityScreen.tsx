@@ -195,8 +195,9 @@ export const LogActivityScreen: React.FC<Props> = ({
       rpe > 0 ? rpe : 5,
       duration > 0 ? duration : undefined,
       selAct?.defaultVolumeUnit,
+      loggedDate,
     );
-  }, [selectedId, volume, rpe, duration, selAct?.defaultVolumeUnit, checkViolations]);
+  }, [selectedId, volume, rpe, duration, selAct?.defaultVolumeUnit, loggedDate, checkViolations]);
 
   const canSubmit = selectedId !== '' && duration > 0;
 
