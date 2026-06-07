@@ -43,7 +43,7 @@ def upgrade() -> None:
 
     op.execute(
         sa.text(
-            "UPDATE rules SET enabled = 0 WHERE rule_type = 'weekly_activity_count'"
+            "UPDATE rules SET enabled = false WHERE rule_type = 'weekly_activity_count'"
         )
     )
 
