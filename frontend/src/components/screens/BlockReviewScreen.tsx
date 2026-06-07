@@ -58,6 +58,16 @@ function formatDate(date: ISODate): string {
   });
 }
 
+function formatCalendarWeekRange(startDate: ISODate, endDate: ISODate): string {
+  const formatShort = (iso: ISODate): string =>
+    new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      timeZone: 'UTC',
+    });
+  return `${formatShort(startDate)} – ${formatShort(endDate)}`;
+}
+
 function countCleanLogs(logs: ActivityLog[]): number {
   return logs.filter(
     (log) =>
@@ -216,8 +226,7 @@ export function BlockReviewScreen({
           {titleBlock.id !== '' ? (
             isWeeklyFocusReviewBlock(titleBlock) ? (
               <p className="mt-0.5 truncate text-caption text-ink-muted">
-                {titleBlock.focusTitle ?? titleBlock.name}
-                {titleBlock.weekNumber != null ? ` · Week ${titleBlock.weekNumber}` : ''}
+                {formatCalendarWeekRange(titleBlock.startDate, displayEndDate)}
               </p>
             ) : (
               <p className="mt-0.5 truncate text-caption text-ink-muted">

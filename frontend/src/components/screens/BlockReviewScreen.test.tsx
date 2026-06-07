@@ -13,6 +13,7 @@ import { renderWithProviders } from '../../test/renderWithProviders';
 import { mockEngine, resetMockEngine } from '../../test/mockEngine';
 import type { ActivityLog, DailySafetyScore, ISODate, LoadPoint, TrainingBlock } from '../../types';
 import { WTL_F7_PREVIOUS_WEEK_2 } from '../../test/wtlF7WeeklyFocusFixtures';
+import { formatCalendarWeekRange } from '../../test/wruF1WeeklyRulesFixtures';
 import { BlockReviewScreen } from './BlockReviewScreen';
 
 vi.mock('../../hooks/useMilestoneEngine', () => ({
@@ -99,6 +100,16 @@ const PREVIOUS_BLOCK: TrainingBlock = {
   createdAt: '2026-05-01T00:00:00Z',
 };
 
+const PREVIOUS_BLOCK_LABEL = formatCalendarWeekRange(
+  PREVIOUS_BLOCK.startDate,
+  PREVIOUS_BLOCK.endDate,
+);
+
+const WTL_F7_PREVIOUS_WEEK_2_LABEL = formatCalendarWeekRange(
+  WTL_F7_PREVIOUS_WEEK_2.startDate,
+  WTL_F7_PREVIOUS_WEEK_2.endDate,
+);
+
 const REVIEW_RESPONSE = {
   block: PREVIOUS_BLOCK,
   dailyScores: [
@@ -177,10 +188,14 @@ async function openActiveBlockReview(): Promise<void> {
   await user.click(screen.getByRole('button', { name: 'Review' }));
 }
 
-async function openPreviousBlockReview(): Promise<void> {
+async function openPreviousBlockReview(
+  label: string = PREVIOUS_BLOCK_LABEL,
+): Promise<void> {
   const user = userEvent.setup();
   await openSettings();
-  await user.click(screen.getByRole('button', { name: 'View' }));
+  const previousWeekRow = screen.getByText(label).closest('button');
+  expect(previousWeekRow).not.toBeNull();
+  await user.click(previousWeekRow as HTMLElement);
 }
 
 beforeEach(() => {
@@ -368,7 +383,7 @@ describe('BlockReviewScreen — F10.6 review milestone badge', () => {
 });
 
 describe('BlockReviewScreen — WTL.F7 historical weekly focus review', () => {
-  it('shows focus title and week number in header for a historical weekly focus review', async () => {
+  it('shows calendar week range in header for a historical weekly focus review', async () => {
     mockEngine.previousBlocks = [WTL_F7_PREVIOUS_WEEK_2];
     getTrainingBlockReviewMock.mockResolvedValue({
       ...REVIEW_RESPONSE,
@@ -376,11 +391,12 @@ describe('BlockReviewScreen — WTL.F7 historical weekly focus review', () => {
     });
 
     renderApp();
-    await openPreviousBlockReview();
+    await openPreviousBlockReview(WTL_F7_PREVIOUS_WEEK_2_LABEL);
 
     const review = within(screen.getByTestId('stack-screen-overlay'));
-    expect(review.getByText(/return to walking/i)).toBeInTheDocument();
-    expect(review.getByText(/week 2/i)).toBeInTheDocument();
+    expect(review.getByText(WTL_F7_PREVIOUS_WEEK_2_LABEL)).toBeInTheDocument();
+    expect(review.queryByText(/return to walking/i)).not.toBeInTheDocument();
+    expect(review.queryByText(/week 2/i)).not.toBeInTheDocument();
   });
 
   it('fetches review by historical weekly focus block id', async () => {
@@ -391,7 +407,7 @@ describe('BlockReviewScreen — WTL.F7 historical weekly focus review', () => {
     });
 
     renderApp();
-    await openPreviousBlockReview();
+    await openPreviousBlockReview(WTL_F7_PREVIOUS_WEEK_2_LABEL);
 
     expect(getTrainingBlockReviewMock).toHaveBeenCalledWith(WTL_F7_PREVIOUS_WEEK_2.id);
   });
@@ -412,8 +428,9 @@ describe('BlockReviewScreen — WTL.F7 historical weekly focus review', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText(/return to walking/i)).toBeInTheDocument();
-      expect(screen.getByText(/week 2/i)).toBeInTheDocument();
+      expect(screen.getByText(WTL_F7_PREVIOUS_WEEK_2_LABEL)).toBeInTheDocument();
     });
+    expect(screen.queryByText(/return to walking/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/week 2/i)).not.toBeInTheDocument();
   });
 });

@@ -8,7 +8,7 @@
 import * as React from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '../../lib/cn';
-import { Card, CardHeader, CardTitle, CardMeta } from '../ui/Card';
+import { Card, CardHeader, CardTitle } from '../ui/Card';
 import { CenteredModal } from '../ui/CenteredModal';
 import { ReviewMilestoneBadge } from '../ui/ReviewMilestoneBadge';
 import { apiFetch, ApiError } from '../../lib/api/client';
@@ -58,29 +58,15 @@ function formatShortDate(iso: string): string {
   });
 }
 
-function isWeeklyFocusBlock(block: TrainingBlock): boolean {
-  return block.periodKind === 'weekly_focus';
-}
-
-function usesWeeklyFocusUi(block: TrainingBlock, previousBlocks: TrainingBlock[]): boolean {
-  if (isWeeklyFocusBlock(block)) return true;
-  if (previousBlocks.some((pb) => isWeeklyFocusBlock(pb))) return true;
-  if (block.id === '' && block.periodKind !== 'legacy') return true;
-  return false;
-}
-
-function weeklyFocusRowLabel(block: TrainingBlock): string {
-  if (block.focusTitle != null && block.weekNumber != null) {
-    return `${block.focusTitle} · Week ${block.weekNumber}`;
-  }
-  return block.name;
+function formatCalendarWeekRange(startDate: string, endDate: string): string {
+  return `${formatShortDate(startDate)} – ${formatShortDate(endDate)}`;
 }
 
 // ---------------------------------------------------------------------------
-// BlockSummaryCard
+// WeeklyRulesSummaryCard
 // ---------------------------------------------------------------------------
 
-interface BlockSummaryCardProps {
+interface WeeklyRulesSummaryCardProps {
   block: TrainingBlock;
   rules: Rule[];
   activityClasses: ActivityClass[];
@@ -91,7 +77,7 @@ interface BlockSummaryCardProps {
   onReview?: () => void;
 }
 
-function BlockSummaryCard({
+function WeeklyRulesSummaryCard({
   block,
   rules,
   activityClasses,
@@ -99,7 +85,7 @@ function BlockSummaryCard({
   showEditRules,
   onEditRules,
   onReview,
-}: BlockSummaryCardProps): React.ReactElement {
+}: WeeklyRulesSummaryCardProps): React.ReactElement {
   const classMap = new Map(activityClasses.map((c) => [c.id, c]));
   const activityMap = new Map(activities.map((activity) => [activity.id, activity]));
   const activeRules = rules.filter((r) => r.enabled);
@@ -114,11 +100,12 @@ function BlockSummaryCard({
     <Card pad="md">
       <CardHeader>
         <div className="min-w-0 flex-1">
-          <CardTitle>{block.name}</CardTitle>
-          <CardMeta>
-            Started {formatShortDate(block.startDate)}
-            {block.endDate ? ` · Ends ${formatShortDate(block.endDate)}` : ''}
-          </CardMeta>
+          <CardTitle>
+            {formatCalendarWeekRange(
+              block.startDate,
+              block.endDate ?? block.startDate,
+            )}
+          </CardTitle>
           {block.isReviewMilestoneHit ? (
             <ReviewMilestoneBadge className="mt-2" />
           ) : null}
@@ -182,464 +169,71 @@ function BlockSummaryCard({
 }
 
 // ---------------------------------------------------------------------------
-// WeeklyFocusSummaryCard
+// PreviousWeeksModal
 // ---------------------------------------------------------------------------
 
-interface WeeklyFocusSummaryCardProps {
-  block: TrainingBlock;
-  rules: Rule[];
-  activityClasses: ActivityClass[];
-  activities: Activity[];
-  showEditRules: boolean;
-  onEditRules: () => void;
-  onReview?: () => void;
-  onEditFocusTitle: () => void;
-  onResetFocus: () => void;
+interface PreviousWeeksModalProps {
+  open: boolean;
+  previousBlocks: TrainingBlock[];
+  onClose: () => void;
+  onViewBlock: (blockId: ID) => void;
 }
 
-function WeeklyFocusSummaryCard({
-  block,
-  rules,
-  activityClasses,
-  activities,
-  showEditRules,
-  onEditRules,
-  onReview,
-  onEditFocusTitle,
-  onResetFocus,
-}: WeeklyFocusSummaryCardProps): React.ReactElement {
-  const classMap = new Map(activityClasses.map((c) => [c.id, c]));
-  const activityMap = new Map(activities.map((activity) => [activity.id, activity]));
-  const activeRules = rules.filter((r) => r.enabled);
-  const visibleRecoveryRules = activeRules
-    .map((rule) => ({
-      rule,
-      summary: formatSettingsRuleSummary(rule.ruleType, rule.thresholdValue),
-    }))
-    .filter((entry): entry is { rule: Rule; summary: string } => entry.summary != null);
+function PreviousWeeksModal({
+  open,
+  previousBlocks,
+  onClose,
+  onViewBlock,
+}: PreviousWeeksModalProps): React.ReactElement | null {
+  if (!open) return null;
 
-  const focusTitle = block.focusTitle ?? block.name;
-  const weekLabel =
-    block.weekNumber != null ? `Week ${block.weekNumber}` : null;
+  const hasEarlierWeeks = previousBlocks.length > 1;
 
   return (
-    <Card pad="md">
-      <CardHeader>
-        <div className="min-w-0 flex-1">
-          <CardTitle>{focusTitle}</CardTitle>
-          {weekLabel != null ? <CardMeta>{weekLabel}</CardMeta> : null}
-          {block.isReviewMilestoneHit ? (
-            <ReviewMilestoneBadge className="mt-2" />
-          ) : null}
-        </div>
-        <span className="inline-flex items-center gap-1.5 text-caption font-medium text-safe-fg">
-          <span
-            className="h-2 w-2 rounded-full bg-safe-fg"
-            aria-hidden="true"
-          />
-          Active
-        </span>
-      </CardHeader>
-
-      <div className="mb-4 flex gap-2">
+    <CenteredModal open onClose={onClose} ariaLabel="Previous weeks">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-title font-bold text-ink">Previous weeks</h2>
         <button
           type="button"
-          onClick={onEditFocusTitle}
-          className="flex-1 h-10 rounded-md bg-bg-sunken border border-border text-body font-medium text-ink-muted transition-colors duration-snap hover:bg-bg-overlay"
+          onClick={onClose}
+          className="h-8 w-8 flex items-center justify-center rounded-full text-ink-muted hover:text-ink hover:bg-bg-overlay transition-colors duration-snap"
+          aria-label="Close"
         >
-          Edit focus title
-        </button>
-        <button
-          type="button"
-          onClick={onResetFocus}
-          className="flex-1 h-10 rounded-md bg-bg-sunken border border-border text-body font-medium text-ink-muted transition-colors duration-snap hover:bg-bg-overlay"
-        >
-          Reset focus
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path
+              d="M4 4l8 8M12 4l-8 8"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+            />
+          </svg>
         </button>
       </div>
 
-      {visibleRecoveryRules.length > 0 && (
-        <div className="mb-4 pt-3 border-t border-border-subtle">
-          <p className="text-label uppercase font-medium text-ink-faint mb-2">Recovery Rules</p>
-          <ul className="flex flex-col divide-y divide-border-subtle">
-            {visibleRecoveryRules.map(({ rule, summary }) => {
-              const cls = rule.activityClassId ? classMap.get(rule.activityClassId) : null;
-              const activity = rule.activityId ? activityMap.get(rule.activityId) : null;
-              return (
-                <li
-                  key={rule.id}
-                  className="flex items-center justify-between gap-3 py-2 text-body"
-                >
-                  <span className="text-ink-muted truncate">
-                    {activity ? activity.name : cls ? cls.name : 'All classes'}
-                  </span>
-                  <span className="text-ink shrink-0">{summary}</span>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
-
-      {showEditRules && (
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={onEditRules}
-            className="flex-1 h-10 rounded-md bg-bg-sunken border border-border text-body font-medium text-ink-muted transition-colors duration-snap hover:bg-bg-overlay"
-          >
-            Edit rules
-          </button>
-          {onReview != null && (
+      {hasEarlierWeeks ? (
+        <div className="flex flex-col divide-y divide-border-subtle -mx-1">
+          {previousBlocks.map((pb) => (
             <button
+              key={pb.id}
               type="button"
-              onClick={onReview}
-              className="flex-1 h-10 rounded-md bg-bg-sunken border border-border text-body font-medium text-ink-muted transition-colors duration-snap hover:bg-bg-overlay"
+              onClick={() => onViewBlock(pb.id)}
+              className="flex items-center justify-between gap-3 px-1 py-3 text-left transition-colors duration-snap hover:bg-bg-overlay rounded-md"
             >
-              Review
+              <span className="min-w-0 flex-1 text-body font-medium text-ink">
+                {formatCalendarWeekRange(
+                  pb.startDate,
+                  pb.endDate ?? pb.startDate,
+                )}
+              </span>
+              {pb.isReviewMilestoneHit ? <ReviewMilestoneBadge compact /> : null}
             </button>
-          )}
+          ))}
         </div>
-      )}
-    </Card>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Weekly focus dialogs
-// ---------------------------------------------------------------------------
-
-interface EditFocusTitleDialogProps {
-  open: boolean;
-  initialTitle: string;
-  onClose: () => void;
-  onSubmit: (focusTitle: string) => Promise<void>;
-}
-
-function EditFocusTitleDialog({
-  open,
-  initialTitle,
-  onClose,
-  onSubmit,
-}: EditFocusTitleDialogProps): React.ReactElement | null {
-  const [title, setTitle] = React.useState(initialTitle);
-  const [apiError, setApiError] = React.useState<string | null>(null);
-  const [submitting, setSubmitting] = React.useState(false);
-
-  React.useEffect(() => {
-    if (open) {
-      setTitle(initialTitle);
-      setApiError(null);
-      setSubmitting(false);
-    }
-  }, [open, initialTitle]);
-
-  if (!open) return null;
-
-  const trimmedTitle = title.trim();
-  const canSave = trimmedTitle.length > 0 && !submitting;
-
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>): Promise<void> {
-    e.preventDefault();
-    if (!canSave) return;
-
-    setApiError(null);
-    setSubmitting(true);
-    try {
-      await onSubmit(trimmedTitle);
-      onClose();
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setApiError(err.message);
-      } else if (err instanceof Error) {
-        setApiError(err.message);
-      } else {
-        setApiError('Could not update focus title.');
-      }
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    <CenteredModal open onClose={onClose} ariaLabel="Edit focus title">
-      <form onSubmit={(e) => { void handleSubmit(e); }}>
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-title font-bold text-ink">Edit focus title</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="h-8 w-8 flex items-center justify-center rounded-full text-ink-muted hover:text-ink hover:bg-bg-overlay transition-colors duration-snap"
-            aria-label="Close"
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <path
-                d="M4 4l8 8M12 4l-8 8"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-              />
-            </svg>
-          </button>
-        </div>
-
-        <div className="flex flex-col gap-4">
-          <label className="flex flex-col gap-1.5">
-            <span className="text-label font-medium text-ink-muted">Focus title</span>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              aria-label="Focus title"
-              className="h-11 rounded-md border border-border bg-bg px-3 text-body text-ink"
-              autoComplete="off"
-            />
-          </label>
-
-          {apiError != null && (
-            <p className="text-body text-danger-fg" role="alert">
-              {apiError}
-            </p>
-          )}
-
-          <button
-            type="submit"
-            disabled={!canSave}
-            className={cn(
-              'w-full h-11 rounded-md text-body font-medium transition-colors duration-snap',
-              canSave
-                ? 'bg-ink text-ink-inverse hover:opacity-90'
-                : 'bg-bg-sunken text-ink-faint cursor-not-allowed',
-            )}
-          >
-            Save
-          </button>
-        </div>
-      </form>
-    </CenteredModal>
-  );
-}
-
-interface ResetWeeklyFocusDialogProps {
-  open: boolean;
-  initialTitle: string;
-  onClose: () => void;
-  onSubmit: (focusTitle: string) => Promise<void>;
-}
-
-function ResetWeeklyFocusDialog({
-  open,
-  initialTitle,
-  onClose,
-  onSubmit,
-}: ResetWeeklyFocusDialogProps): React.ReactElement | null {
-  const [title, setTitle] = React.useState(initialTitle);
-  const [apiError, setApiError] = React.useState<string | null>(null);
-  const [submitting, setSubmitting] = React.useState(false);
-
-  React.useEffect(() => {
-    if (open) {
-      setTitle(initialTitle);
-      setApiError(null);
-      setSubmitting(false);
-    }
-  }, [open, initialTitle]);
-
-  if (!open) return null;
-
-  const trimmedTitle = title.trim();
-  const canReset = trimmedTitle.length > 0 && !submitting;
-
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>): Promise<void> {
-    e.preventDefault();
-    if (!canReset) return;
-
-    setApiError(null);
-    setSubmitting(true);
-    try {
-      await onSubmit(trimmedTitle);
-      onClose();
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setApiError(err.message);
-      } else if (err instanceof Error) {
-        setApiError(err.message);
-      } else {
-        setApiError('Could not reset weekly focus.');
-      }
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    <CenteredModal open onClose={onClose} ariaLabel="Reset weekly focus">
-      <form onSubmit={(e) => { void handleSubmit(e); }}>
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-title font-bold text-ink">Reset weekly focus</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="h-8 w-8 flex items-center justify-center rounded-full text-ink-muted hover:text-ink hover:bg-bg-overlay transition-colors duration-snap"
-            aria-label="Close"
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <path
-                d="M4 4l8 8M12 4l-8 8"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-              />
-            </svg>
-          </button>
-        </div>
-
-        <p className="text-body text-ink-muted mb-4">
-          Start week 1 with a new wider focus. Rules can be edited after reset.
+      ) : (
+        <p className="py-6 text-center text-body text-ink-muted">
+          No earlier weeks to show.
         </p>
-
-        <div className="flex flex-col gap-4">
-          <label className="flex flex-col gap-1.5">
-            <span className="text-label font-medium text-ink-muted">Focus title</span>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              aria-label="Focus title"
-              className="h-11 rounded-md border border-border bg-bg px-3 text-body text-ink"
-              autoComplete="off"
-            />
-          </label>
-
-          {apiError != null && (
-            <p className="text-body text-danger-fg" role="alert">
-              {apiError}
-            </p>
-          )}
-
-          <button
-            type="submit"
-            disabled={!canReset}
-            className={cn(
-              'w-full h-11 rounded-md text-body font-medium transition-colors duration-snap',
-              canReset
-                ? 'bg-ink text-ink-inverse hover:opacity-90'
-                : 'bg-bg-sunken text-ink-faint cursor-not-allowed',
-            )}
-          >
-            Reset focus
-          </button>
-        </div>
-      </form>
-    </CenteredModal>
-  );
-}
-
-interface SetupWeeklyFocusDialogProps {
-  open: boolean;
-  onClose: () => void;
-  onSubmit: (focusTitle: string) => Promise<void>;
-}
-
-function SetupWeeklyFocusDialog({
-  open,
-  onClose,
-  onSubmit,
-}: SetupWeeklyFocusDialogProps): React.ReactElement | null {
-  const [title, setTitle] = React.useState('');
-  const [apiError, setApiError] = React.useState<string | null>(null);
-  const [submitting, setSubmitting] = React.useState(false);
-
-  React.useEffect(() => {
-    if (open) {
-      setTitle('');
-      setApiError(null);
-      setSubmitting(false);
-    }
-  }, [open]);
-
-  if (!open) return null;
-
-  const trimmedTitle = title.trim();
-  const canCreate = trimmedTitle.length > 0 && !submitting;
-
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>): Promise<void> {
-    e.preventDefault();
-    if (!canCreate) return;
-
-    setApiError(null);
-    setSubmitting(true);
-    try {
-      await onSubmit(trimmedTitle);
-      onClose();
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setApiError(err.message);
-      } else if (err instanceof Error) {
-        setApiError(err.message);
-      } else {
-        setApiError('Could not create weekly focus.');
-      }
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    <CenteredModal open onClose={onClose} ariaLabel="Set up weekly focus">
-      <form onSubmit={(e) => { void handleSubmit(e); }}>
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-title font-bold text-ink">Set up weekly focus</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="h-8 w-8 flex items-center justify-center rounded-full text-ink-muted hover:text-ink hover:bg-bg-overlay transition-colors duration-snap"
-            aria-label="Close"
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <path
-                d="M4 4l8 8M12 4l-8 8"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-              />
-            </svg>
-          </button>
-        </div>
-
-        <div className="flex flex-col gap-4">
-          <label className="flex flex-col gap-1.5">
-            <span className="text-label font-medium text-ink-muted">Focus title</span>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              aria-label="Focus title"
-              className="h-11 rounded-md border border-border bg-bg px-3 text-body text-ink"
-              autoComplete="off"
-            />
-          </label>
-
-          {apiError != null && (
-            <p className="text-body text-danger-fg" role="alert">
-              {apiError}
-            </p>
-          )}
-
-          <button
-            type="submit"
-            disabled={!canCreate}
-            className={cn(
-              'w-full h-11 rounded-md text-body font-medium transition-colors duration-snap',
-              canCreate
-                ? 'bg-ink text-ink-inverse hover:opacity-90'
-                : 'bg-bg-sunken text-ink-faint cursor-not-allowed',
-            )}
-          >
-            Create focus
-          </button>
-        </div>
-      </form>
+      )}
     </CenteredModal>
   );
 }
@@ -1440,7 +1034,6 @@ export function SettingsScreen({
   engine,
   onEditRules,
   onReview,
-  onNewBlock,
   onViewBlock,
   onOpenNewActivity,
   onUnauthenticated,
@@ -1457,9 +1050,6 @@ export function SettingsScreen({
     submitNewActivityClass,
     updateActivityClass,
     deleteActivityClass,
-    setupWeeklyFocus,
-    resetWeeklyFocus,
-    patchFocusTitle,
   } = engine;
 
   const queryClient = useQueryClient();
@@ -1474,24 +1064,10 @@ export function SettingsScreen({
   const [deleteError, setDeleteError] = React.useState<string | null>(null);
   const [deleteSubmitting, setDeleteSubmitting] = React.useState(false);
   const [editingActivity, setEditingActivity] = React.useState<Activity | null>(null);
-  const [showEditFocusTitle, setShowEditFocusTitle] = React.useState(false);
-  const [showResetFocus, setShowResetFocus] = React.useState(false);
-  const [showSetupFocus, setShowSetupFocus] = React.useState(false);
+  const [showPreviousWeeksModal, setShowPreviousWeeksModal] = React.useState(false);
 
-  const weeklyFocusUi = usesWeeklyFocusUi(block, previousBlocks);
-  const currentFocusTitle = block.focusTitle ?? block.name;
-
-  async function handlePatchFocusTitle(focusTitle: string): Promise<void> {
-    await patchFocusTitle(focusTitle);
-  }
-
-  async function handleResetWeeklyFocus(focusTitle: string): Promise<void> {
-    await resetWeeklyFocus(focusTitle);
-  }
-
-  async function handleSetupWeeklyFocus(focusTitle: string): Promise<void> {
-    await setupWeeklyFocus(focusTitle);
-  }
+  const mostRecentPreviousWeek =
+    previousBlocks.length > 0 ? previousBlocks[0] : undefined;
 
   function handleResetMockData(): void {
     if (resetState === 'idle') {
@@ -1625,105 +1201,56 @@ export function SettingsScreen({
 
       <div className="flex flex-col gap-6 px-4 pb-10">
 
-        {/* ── Weekly focus / Training Block ── */}
+        {/* ── Weekly rules ── */}
         <section>
           <p className="text-label uppercase font-medium text-ink-muted mb-3">
-            {weeklyFocusUi ? 'Weekly focus' : 'Training Block'}
+            Weekly rules
           </p>
           {hasBlock ? (
-            weeklyFocusUi ? (
-              <WeeklyFocusSummaryCard
-                block={block}
-                rules={rules}
-                activityClasses={activityClasses}
-                activities={activities}
-                showEditRules={showEditRules}
-                onEditRules={() => onEditRules?.()}
-                onReview={onReview}
-                onEditFocusTitle={() => setShowEditFocusTitle(true)}
-                onResetFocus={() => setShowResetFocus(true)}
-              />
-            ) : (
-              <BlockSummaryCard
-                block={block}
-                rules={rules}
-                activityClasses={activityClasses}
-                activities={activities}
-                showEditRules={showEditRules}
-                onEditRules={() => onEditRules?.()}
-                onReview={onReview}
-              />
-            )
-          ) : weeklyFocusUi ? (
-            <Card pad="md">
-              <p className="text-body text-ink-muted mb-4">
-                Set a wider focus title to start tracking weekly rules and progress.
-              </p>
-              <button
-                type="button"
-                onClick={() => setShowSetupFocus(true)}
-                className="w-full h-10 rounded-md bg-ink text-body font-medium text-ink-inverse transition-colors duration-snap hover:opacity-90"
-              >
-                Set up weekly focus
-              </button>
-            </Card>
+            <WeeklyRulesSummaryCard
+              block={block}
+              rules={rules}
+              activityClasses={activityClasses}
+              activities={activities}
+              showEditRules={showEditRules}
+              onEditRules={() => onEditRules?.()}
+              onReview={onReview}
+            />
           ) : (
             <Card pad="md">
-              <p className="text-body text-ink-muted">No active training block</p>
+              <p className="text-body text-ink-muted">No active weekly rules</p>
             </Card>
           )}
         </section>
 
-        {/* ── Previous weeks / blocks ── */}
-        {previousBlocks.length > 0 && (
+        {/* ── Previous weeks ── */}
+        {mostRecentPreviousWeek != null && (
           <section>
-            <p className="text-label uppercase font-medium text-ink-muted mb-3">
-              {weeklyFocusUi ? 'Previous weeks' : 'Previous Blocks'}
-            </p>
+            <button
+              type="button"
+              onClick={() => setShowPreviousWeeksModal(true)}
+              className="text-label uppercase font-medium text-ink-muted mb-3 hover:text-ink transition-colors duration-snap"
+            >
+              Previous weeks
+            </button>
             <Card pad="none">
-              <div className="divide-y divide-border-subtle">
-                {previousBlocks.map((pb) => (
-                  <div
-                    key={pb.id}
-                    className="flex items-center justify-between gap-3 px-4 py-3"
-                  >
-                    {weeklyFocusUi && isWeeklyFocusBlock(pb) ? (
-                      <p className="min-w-0 flex-1 text-body font-medium text-ink">
-                        {weeklyFocusRowLabel(pb)}
-                      </p>
-                    ) : (
-                      <div className="min-w-0 flex-1">
-                        <p className="text-body font-medium text-ink">{pb.name}</p>
-                        <p className="text-caption text-ink-muted">
-                          {formatShortDate(pb.startDate)}
-                          {' – '}
-                          {pb.endDate ? formatShortDate(pb.endDate) : 'ongoing'}
-                        </p>
-                      </div>
-                    )}
-                    {pb.isReviewMilestoneHit ? <ReviewMilestoneBadge compact /> : null}
-                    <button
-                      type="button"
-                      onClick={() => onViewBlock?.(pb.id)}
-                      className="shrink-0 h-8 px-2.5 rounded-md text-caption font-medium text-ink-muted bg-bg-sunken hover:bg-bg-overlay transition-colors duration-snap"
-                    >
-                      View
-                    </button>
-                  </div>
-                ))}
-              </div>
+              <button
+                type="button"
+                onClick={() => onViewBlock?.(mostRecentPreviousWeek.id)}
+                className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors duration-snap hover:bg-bg-overlay"
+              >
+                <span className="min-w-0 flex-1 text-body font-medium text-ink">
+                  {formatCalendarWeekRange(
+                    mostRecentPreviousWeek.startDate,
+                    mostRecentPreviousWeek.endDate ?? mostRecentPreviousWeek.startDate,
+                  )}
+                </span>
+                {mostRecentPreviousWeek.isReviewMilestoneHit ? (
+                  <ReviewMilestoneBadge compact />
+                ) : null}
+              </button>
             </Card>
           </section>
-        )}
-
-        {!weeklyFocusUi && (
-          <button
-            type="button"
-            onClick={() => onNewBlock?.()}
-            className="w-full h-11 rounded-md bg-bg-raised border border-border text-body font-medium text-ink-muted transition-colors duration-snap hover:bg-bg-overlay"
-          >
-            + New Training Block
-          </button>
         )}
 
         {/* ── Activity classes ── */}
@@ -1991,24 +1518,14 @@ export function SettingsScreen({
         onSubmit={updateActivity}
       />
 
-      <EditFocusTitleDialog
-        open={showEditFocusTitle}
-        initialTitle={currentFocusTitle}
-        onClose={() => setShowEditFocusTitle(false)}
-        onSubmit={handlePatchFocusTitle}
-      />
-
-      <ResetWeeklyFocusDialog
-        open={showResetFocus}
-        initialTitle={currentFocusTitle}
-        onClose={() => setShowResetFocus(false)}
-        onSubmit={handleResetWeeklyFocus}
-      />
-
-      <SetupWeeklyFocusDialog
-        open={showSetupFocus}
-        onClose={() => setShowSetupFocus(false)}
-        onSubmit={handleSetupWeeklyFocus}
+      <PreviousWeeksModal
+        open={showPreviousWeeksModal}
+        previousBlocks={previousBlocks}
+        onClose={() => setShowPreviousWeeksModal(false)}
+        onViewBlock={(blockId) => {
+          setShowPreviousWeeksModal(false);
+          onViewBlock?.(blockId);
+        }}
       />
     </div>
   );
