@@ -7,6 +7,7 @@
  * F10.5 — Load graph title from engine.graphClassId (plans/tickets-phase-10-polish-2026-06-04.md).
  * S25.F2 — Goals dashboard card (plans/tickets-stage-2-5-usage-logic-2026-06-06.md).
  * WTL.F1 — This Week weekly progress card (plans/tickets-weekly-targets-load-risk-2026-06-07.md).
+ * WTL.F6 — Remove Recovery streaks dashboard section (plans/tickets-weekly-targets-load-risk-2026-06-07.md).
  *
  * Mocking strategy (mirrors BlockReviewScreen.test.tsx):
  *   - CalendarHeatmap: stubbed to a simple div — tests verify screen wiring, not heatmap internals
@@ -30,6 +31,7 @@ import {
 } from '../../test/goalDashboardRowFixtures';
 import {
   WTL_F1_PERIOD_END,
+  WTL_F1_PERIOD_START,
   activityScopedWeeklyProgress,
   completeWeeklyProgress,
   legacyClassWeeklyProgress,
@@ -403,56 +405,94 @@ describe('DashboardScreen — BlockSafetyMapSection: no active block', () => {
   });
 });
 
-describe('DashboardScreen — F10.1 recovery streaks section', () => {
-  it('renders a Recovery streaks section below This week with daily and weekly copy', () => {
-    mockEngine.block = ACTIVE_BLOCK;
-    mockEngine.dailyScores = DAILY_SCORES;
-    mockEngine.previousBlocks = [];
-    mockEngine.recoveryStreaks = [DAILY_RECOVERY_STREAK, WEEKLY_RECOVERY_STREAK];
+/**
+ * WTL.F6 implementer: record a future recovery-streak feature in plans/BACKLOG.md
+ * (weekly-target completion history, not the retired dashboard section).
+ */
+const recoveryWeeklyTargetProgress: WeeklyProgressWtlF1 = {
+  weeklyTargetId: 'wt-wtl-contrast',
+  activityClassId: 'cls-recovery',
+  className: 'Recovery',
+  activityId: 'act-contrast',
+  activityName: 'Contrast therapy',
+  value: 2,
+  target: 3,
+  unit: 'sessions',
+  state: 'safe',
+  periodStart: WTL_F1_PERIOD_START,
+  periodEnd: WTL_F1_PERIOD_END,
+};
 
+function setupDashboardWtlF6(options: {
+  recoveryStreaks?: RecoveryStreak[];
+  weeklyProgress?: WeeklyProgressWtlF1[];
+  cleanStreak?: number;
+} = {}): void {
+  mockEngine.block = ACTIVE_BLOCK;
+  mockEngine.dailyScores = DAILY_SCORES;
+  mockEngine.previousBlocks = [];
+  mockEngine.recoveryStreaks = options.recoveryStreaks ?? [];
+  mockEngine.weeklyProgress = (options.weeklyProgress ?? []) as WeeklyProgress[];
+  if (options.cleanStreak != null) {
+    mockEngine.cleanStreak = options.cleanStreak;
+  }
+}
+
+describe('DashboardScreen — WTL.F6 remove recovery streaks section', () => {
+  beforeEach(() => {
     useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
-
-    renderDashboard();
-
-    const weeklyLabel = screen.getByText('This week');
-    const recoveryLabel = screen.getByText('Recovery streaks');
-    assertAppearsAfter(weeklyLabel, recoveryLabel);
-
-    expect(screen.getByText(/Stretching: 4 days in a row/i)).toBeInTheDocument();
-    expect(screen.getByText(/Contrast therapy: 2 weeks in a row/i)).toBeInTheDocument();
   });
 
-  it('shows compact empty copy when recoveryStreaks is empty on an active block', () => {
-    mockEngine.block = ACTIVE_BLOCK;
-    mockEngine.dailyScores = DAILY_SCORES;
-    mockEngine.previousBlocks = [];
-    mockEngine.recoveryStreaks = [];
-
-    useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
+  it('does not render a Recovery streaks section when recoveryStreaks has entries', () => {
+    setupDashboardWtlF6({
+      recoveryStreaks: [DAILY_RECOVERY_STREAK, WEEKLY_RECOVERY_STREAK],
+    });
 
     renderDashboard();
 
-    expect(screen.getByText('Recovery streaks')).toBeInTheDocument();
+    expect(screen.queryByText('Recovery streaks')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Stretching: 4 days in a row/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Contrast therapy: 2 weeks in a row/i)).not.toBeInTheDocument();
+  });
+
+  it('does not show No recovery targets in this block empty copy', () => {
+    setupDashboardWtlF6({ recoveryStreaks: [] });
+
+    renderDashboard();
+
+    expect(screen.queryByText('Recovery streaks')).not.toBeInTheDocument();
     expect(
-      screen.getByText(/No recovery targets in this block/i),
-    ).toBeInTheDocument();
+      screen.queryByText(/No recovery targets in this block/i),
+    ).not.toBeInTheDocument();
   });
 
-  it('keeps recovery streaks separate from the clean streak section', () => {
-    mockEngine.block = ACTIVE_BLOCK;
-    mockEngine.dailyScores = DAILY_SCORES;
-    mockEngine.previousBlocks = [];
-    mockEngine.recoveryStreaks = [DAILY_RECOVERY_STREAK];
-    mockEngine.cleanStreak = 3;
-
-    useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
+  it('shows recovery weekly targets in the This week section as progress bars', () => {
+    setupDashboardWtlF6({
+      recoveryStreaks: [WEEKLY_RECOVERY_STREAK],
+      weeklyProgress: [recoveryWeeklyTargetProgress],
+    });
 
     renderDashboard();
 
-    expect(screen.getByText('Recovery streaks')).toBeInTheDocument();
+    const section = weeklyProgressSection();
+    expect(within(section).getByText('Contrast therapy')).toBeInTheDocument();
+    expect(within(section).getByText(/2 sessions \/ 3 sessions/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Contrast therapy: 2 weeks in a row/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('Recovery streaks')).not.toBeInTheDocument();
+  });
+
+  it('keeps clean streak separate and unaffected by recoveryStreaks payload', () => {
+    setupDashboardWtlF6({
+      recoveryStreaks: [DAILY_RECOVERY_STREAK],
+      cleanStreak: 3,
+    });
+
+    renderDashboard();
+
     expect(screen.getByText('Clean streak')).toBeInTheDocument();
-    expect(screen.getByText(/Stretching: 4 days in a row/i)).toBeInTheDocument();
     expect(screen.getByText(/3 clean sessions in a row/i)).toBeInTheDocument();
+    expect(screen.queryByText('Recovery streaks')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Stretching: 4 days in a row/i)).not.toBeInTheDocument();
   });
 });
 

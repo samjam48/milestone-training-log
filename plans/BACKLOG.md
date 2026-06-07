@@ -42,7 +42,7 @@ Phase 10 ticket set that closed the last gaps.
 | Log History via `GET /api/activity-logs` | `LogHistoryScreen` + hook `activityLogs` query (Phase 6 F1.3) |
 | `activityClasses` display labels (was F1.4 / `cls-foot`) | Dashboard graph title + class status; `delayedTaxDisplay`; log rows use `activities` lookup |
 | Delayed-tax / load-risk panel | `LoadRiskSection` on `DashboardScreen` (F10.3); symptom attribution on check-in/incident (F10.4) |
-| Recovery streaks UI | **Dashboard** section (F10.1) — owner D1 moved off Settings |
+| ~~Recovery streaks UI~~ | **Retired (WTL.F6)** — F10.1 dashboard section removed; recovery weekly targets live in **This week** |
 | `CalendarHeatmap` + block review | `BlockSafetyMapSection` on Dashboard; `BlockReviewScreen` from Settings **Review** / **View** |
 | Edit goal | `GoalEditorScreen` via `GoalsScreen` → `onEditGoal` |
 | Edit / deactivate activity | `ActivityManagerScreen` + Settings inline confirm; `updateActivity` / `deactivateActivity` on hook |
@@ -120,6 +120,14 @@ Recorded after S25 batch review; not in polish ticket scope unless noted.
 | Dashboard `weekly_progress` vs Goals after P25.9 | P25.9 follow-up | **Owner (2026-06-07): keep as-is** — dashboard “Last 7 days” chart still reads `weekly_targets`; Goals tab is the only place to edit aspirational targets. Monitor whether two progress surfaces confuse daily use; revisit migrate-to-goals or retire chart. |
 | `weekly_targets` API / table lifecycle | P25.9 follow-up | **Keep for now** (display-only chart). `weekly_targets` rows remain in DB/API; no Edit Rules UI. Re-seed locally does not remove table. |
 | `weekly_load_cap` in seed / local DB | Owner 2026-06-07 | Removed from `seed_data.py`; new creates blocked in API. **Production:** if legacy rows exist in Supabase, delete manually or leave disabled — engine still evaluates them if enabled. |
+
+## Weekly targets & load risk follow-ups (WTL batch)
+
+**Tickets:** `plans/tickets-weekly-targets-load-risk-2026-06-07.md`
+
+| Item | Ticket | Note |
+| --- | --- | --- |
+| Recovery streak feature (true streaks) | — | **Future** — derive consecutive-week completion from recovery-style **weekly target** history, not the retired F10.1 dashboard section or legacy `recovery_streaks` API field. Clean streak remains separate. |
 
 ## Product gaps still open (not in the list above)
 

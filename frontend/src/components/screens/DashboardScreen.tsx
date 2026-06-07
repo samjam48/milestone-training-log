@@ -15,7 +15,7 @@ import { LoadRiskSection } from '../composites/LoadRiskSection';
 import { GoalsCard } from '../composites/GoalsCard';
 import { allWeeklyTargetsComplete } from '../../lib/engine';
 import type { MilestoneEngineResult } from '../../hooks/useMilestoneEngine';
-import type { Activity, ActivityClass, RecoveryStreak, SafetyState } from '../../types';
+import type { Activity, ActivityClass, SafetyState } from '../../types';
 
 interface Props {
   engine: MilestoneEngineResult;
@@ -82,16 +82,6 @@ function classStatusLabel(
   return activityClasses.find((c) => c.id === activityClassId)?.name ?? 'Unknown class';
 }
 
-function formatRecoveryStreakCopy(streak: RecoveryStreak): string {
-  const { activityName, frequencyUnit, currentStreakDays } = streak;
-  if (frequencyUnit === 'weekly') {
-    const weekWord = currentStreakDays === 1 ? 'week' : 'weeks';
-    return `${activityName}: ${currentStreakDays} ${weekWord} in a row`;
-  }
-  const dayWord = currentStreakDays === 1 ? 'day' : 'days';
-  return `${activityName}: ${currentStreakDays} ${dayWord} in a row`;
-}
-
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
@@ -152,8 +142,8 @@ export const DashboardScreen: React.FC<Props> = ({
   const {
     todayDate, userName, hasCheckedInToday,
     suggestionBuckets, weeklyProgress, classStatuses,
-    loadSeries, graphClassId, flareUpDates, weekLoadThreshold, cleanStreak, recoveryStreaks,
-    block, activityClasses, activities, loadRiskSummary,
+    loadSeries, graphClassId, flareUpDates, weekLoadThreshold, cleanStreak,
+    activityClasses, activities, loadRiskSummary,
     goalRows,
   } = engine;
 
@@ -215,31 +205,6 @@ export const DashboardScreen: React.FC<Props> = ({
       </div>
 
       <GoalsCard goalRows={goalRows} />
-
-      {/* ── Recovery streaks ── */}
-      {block.id ? (
-        <div>
-          <SectionLabel>Recovery streaks</SectionLabel>
-          <Card pad="sm">
-            {recoveryStreaks.length === 0 ? (
-              <p className="text-caption text-ink-muted py-2.5">
-                No recovery targets in this block.
-              </p>
-            ) : (
-              <ul className="flex flex-col divide-y divide-border-subtle">
-                {recoveryStreaks.map((streak) => (
-                  <li
-                    key={streak.recoveryTargetId}
-                    className="py-2.5 text-body font-medium text-ink truncate"
-                  >
-                    {formatRecoveryStreakCopy(streak)}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
-        </div>
-      ) : null}
 
       {/* ── Load graph ── */}
       <WeeklyLoadGraph
