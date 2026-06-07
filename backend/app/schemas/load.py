@@ -34,6 +34,8 @@ class WeeklyProgressRead(BaseModel):
     target: float
     unit: str
     state: Literal["safe", "caution", "danger", "neutral"]
+    period_start: date
+    period_end: date
 
 
 class LoadSummaryRead(BaseModel):

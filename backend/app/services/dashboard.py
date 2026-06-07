@@ -46,6 +46,7 @@ from app.services.load_engine import (
     compute_weekly_progress,
     detect_delayed_tax,
     format_iso_date,
+    this_week_bounds,
 )
 from app.services.load_queries import (
     activity_class_dict,
@@ -172,7 +173,7 @@ def get_dashboard(session: Session, *, as_of: date | None = None) -> DashboardRe
             class_dicts,
             activity_dicts,
             log_dicts,
-            block_start,
+            this_week_bounds(as_of_str)[0],
             as_of_str,
         )
         if block_start is not None

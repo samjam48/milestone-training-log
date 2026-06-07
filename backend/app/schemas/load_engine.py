@@ -66,6 +66,8 @@ class WeeklyProgress(TypedDict):
     target: float
     unit: str
     state: ProgressState
+    period_start: str
+    period_end: str
 
 
 class LoadPoint(TypedDict):

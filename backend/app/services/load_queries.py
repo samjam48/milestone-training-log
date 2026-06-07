@@ -263,13 +263,16 @@ def rule_dict(rule: Rule) -> RuleDict:
 
 
 def weekly_target_dict(target: WeeklyTarget) -> WeeklyTargetDict:
-    return {
+    payload: WeeklyTargetDict = {
         "id": target.id,
         "training_block_id": target.training_block_id,
         "activity_class_id": target.activity_class_id,
         "target_value": target.target_value,
         "target_unit": target.target_unit,
     }
+    if target.activity_id is not None:
+        payload["activity_id"] = target.activity_id
+    return payload
 
 
 def check_in_dict(check_in: DailyCheckIn) -> CheckInDict:

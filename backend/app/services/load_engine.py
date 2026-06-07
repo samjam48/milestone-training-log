@@ -53,6 +53,14 @@ def add_days(iso: str, n: int) -> str:
     return format_iso_date(parse_iso_date(iso) + timedelta(days=n))
 
 
+def this_week_bounds(as_of: str) -> tuple[str, str]:
+    """Monday through Sunday of the ISO week containing ``as_of``."""
+    as_of_date = parse_iso_date(as_of)
+    week_start = as_of_date - timedelta(days=as_of_date.weekday())
+    week_end = week_start + timedelta(days=6)
+    return format_iso_date(week_start), format_iso_date(week_end)
+
+
 def diff_days(from_iso: str, to_iso: str) -> int:
     delta = parse_iso_date(to_iso) - parse_iso_date(from_iso)
     return delta.days + 1
@@ -1051,21 +1059,31 @@ def compute_weekly_progress(
     period_end: str,
 ) -> list[WeeklyProgress]:
     class_map = {cls["id"]: cls for cls in activity_classes}
+    _, week_label_end = this_week_bounds(period_start)
     progress: list[WeeklyProgress] = []
 
     for target in weekly_targets:
         class_id = target["activity_class_id"]
-        cls_activity_ids = _activity_ids_for_class(class_id, activities)
+        target_activity_id = target.get("activity_id")
+        if target_activity_id is not None:
+            scope_activity_ids = {target_activity_id}
+        else:
+            scope_activity_ids = set(_activity_ids_for_class(class_id, activities))
+
         period_logs = [
             log
             for log in logs
-            if log["activity_id"] in cls_activity_ids
+            if log["activity_id"] in scope_activity_ids
             and period_start <= log["logged_date"] <= period_end
         ]
 
         target_unit = target["target_unit"]
         if target_unit == "sessions":
             value = float(len(period_logs))
+        elif target_unit == "minutes":
+            value = float(
+                sum(log.get("duration_minutes") or 0 for log in period_logs)
+            )
         else:
             value = sum(
                 log["volume_value"]
@@ -1095,6 +1113,8 @@ def compute_weekly_progress(
                 "target": target_value,
                 "unit": target_unit,
                 "state": state,  # type: ignore[typeddict-item]
+                "period_start": period_start,
+                "period_end": week_label_end,
             }
         )
     return progress

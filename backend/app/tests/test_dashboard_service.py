@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from datetime import date, timedelta
+from typing import Any
 
 import pytest
 from fastapi import FastAPI
@@ -57,6 +58,7 @@ from app.tests.helpers.seed import (
     seed_goal,
     seed_recovery_target,
     seed_training_block,
+    seed_weekly_target,
     with_session,
 )
 
@@ -829,3 +831,196 @@ def test_get_dashboard_omits_legacy_suggestions_field(
 
     assert not hasattr(dashboard, "suggestions")
     assert dashboard.suggestion_buckets
+
+
+# ---------------------------------------------------------------------------
+# WTL.B3 — dashboard weekly_progress as This Week
+# ---------------------------------------------------------------------------
+
+
+def _weekly_progress_row(
+    dashboard: DashboardRead,
+    *,
+    weekly_target_id: str,
+) -> Any:
+    return next(
+        row for row in dashboard.weekly_progress if row.weekly_target_id == weekly_target_id
+    )
+
+
+def test_get_dashboard_weekly_progress_sunday_as_of_uses_this_week_window(
+    app_with_test_database: FastAPI,
+    session: Session,
+) -> None:
+    from app.tests.helpers.wtl_b3_fixtures import (
+        CURRENT_WEEK_END,
+        CURRENT_WEEK_MONDAY,
+        SUNDAY_AS_OF,
+        seed_wtl_b3_dashboard_graph,
+    )
+
+    seed_wtl_b3_dashboard_graph(app_with_test_database)
+    dashboard = get_dashboard(session, as_of=date.fromisoformat(SUNDAY_AS_OF))
+
+    class_row = _weekly_progress_row(dashboard, weekly_target_id="wt-wtl-class")
+    walk_row = _weekly_progress_row(dashboard, weekly_target_id="wt-wtl-walk")
+
+    assert class_row.value == pytest.approx(3)
+    assert walk_row.value == pytest.approx(4.5)
+    assert class_row.period_start == date.fromisoformat(CURRENT_WEEK_MONDAY)
+    assert class_row.period_end == date.fromisoformat(CURRENT_WEEK_END)
+
+
+def test_get_dashboard_weekly_progress_monday_as_of_starts_new_week(
+    app_with_test_database: FastAPI,
+    session: Session,
+) -> None:
+    from app.tests.helpers.wtl_b3_fixtures import (
+        MONDAY_AS_OF,
+        NEXT_WEEK_END,
+        NEXT_WEEK_MONDAY,
+        seed_wtl_b3_dashboard_graph,
+    )
+
+    seed_wtl_b3_dashboard_graph(app_with_test_database)
+    dashboard = get_dashboard(session, as_of=date.fromisoformat(MONDAY_AS_OF))
+
+    walk_row = _weekly_progress_row(dashboard, weekly_target_id="wt-wtl-walk")
+
+    assert walk_row.value == pytest.approx(4.0)
+    assert walk_row.period_start == date.fromisoformat(NEXT_WEEK_MONDAY)
+    assert walk_row.period_end == date.fromisoformat(NEXT_WEEK_END)
+
+
+def test_get_dashboard_weekly_progress_minutes_target_uses_duration_minutes(
+    app_with_test_database: FastAPI,
+    session: Session,
+) -> None:
+    from app.tests.helpers.wtl_b3_fixtures import (
+        SUNDAY_AS_OF,
+        WTL_B3_BIKE_ID,
+        seed_wtl_b3_dashboard_graph,
+    )
+
+    seed_wtl_b3_dashboard_graph(app_with_test_database)
+    seed_activity_log(
+        app_with_test_database,
+        log_id="log-wtl-bike-duration-only",
+        activity_id=WTL_B3_BIKE_ID,
+        logged_date=date(2026, 6, 5),
+        duration_minutes=20,
+        volume_value=999.0,
+        volume_unit="km",
+    )
+
+    dashboard = get_dashboard(session, as_of=date.fromisoformat(SUNDAY_AS_OF))
+
+    bike_row = _weekly_progress_row(dashboard, weekly_target_id="wt-wtl-bike-minutes")
+
+    assert bike_row.value == pytest.approx(45.0)
+    assert bike_row.unit == "minutes"
+
+
+def test_get_dashboard_weekly_progress_activity_scoped_ignores_other_class_logs(
+    app_with_test_database: FastAPI,
+    session: Session,
+) -> None:
+    from app.tests.helpers.wtl_b3_fixtures import (
+        SUNDAY_AS_OF,
+        WTL_B3_BIKE_ID,
+        WTL_B3_BLOCK_ID,
+        WTL_B3_CLASS_ID,
+        WTL_B3_WALK_ID,
+        _seed_wtl_b3_base_graph,
+    )
+
+    _seed_wtl_b3_base_graph(app_with_test_database)
+    seed_weekly_target(
+        app_with_test_database,
+        target_id="wt-wtl-walk-sessions",
+        training_block_id=WTL_B3_BLOCK_ID,
+        activity_class_id=WTL_B3_CLASS_ID,
+        activity_id=WTL_B3_WALK_ID,
+        target_value=3.0,
+        target_unit="sessions",
+    )
+    seed_activity_log(
+        app_with_test_database,
+        log_id="log-wtl-walk-a",
+        activity_id=WTL_B3_WALK_ID,
+        logged_date=date(2026, 6, 2),
+        duration_minutes=20,
+        volume_value=1.0,
+        volume_unit="km",
+    )
+    seed_activity_log(
+        app_with_test_database,
+        log_id="log-wtl-bike-a",
+        activity_id=WTL_B3_BIKE_ID,
+        logged_date=date(2026, 6, 3),
+        duration_minutes=20,
+        volume_value=20.0,
+        volume_unit="minutes",
+    )
+
+    dashboard = get_dashboard(session, as_of=date.fromisoformat(SUNDAY_AS_OF))
+    walk_sessions = _weekly_progress_row(dashboard, weekly_target_id="wt-wtl-walk-sessions")
+
+    assert walk_sessions.value == pytest.approx(1)
+
+
+def test_get_dashboard_weekly_progress_excludes_logs_before_monday(
+    app_with_test_database: FastAPI,
+    session: Session,
+) -> None:
+    from app.tests.helpers.wtl_b3_fixtures import (
+        WTL_B3_BLOCK_ID,
+        WTL_B3_CLASS_ID,
+        WTL_B3_WALK_ID,
+        _seed_wtl_b3_base_graph,
+    )
+
+    _seed_wtl_b3_base_graph(app_with_test_database)
+    seed_weekly_target(
+        app_with_test_database,
+        target_id="wt-wtl-only-prior",
+        training_block_id=WTL_B3_BLOCK_ID,
+        activity_class_id=WTL_B3_CLASS_ID,
+        target_value=2.0,
+        target_unit="sessions",
+    )
+    seed_activity_log(
+        app_with_test_database,
+        log_id="log-wtl-prior-only",
+        activity_id=WTL_B3_WALK_ID,
+        logged_date=date(2026, 5, 31),
+        duration_minutes=20,
+        volume_value=1.0,
+        volume_unit="km",
+    )
+    seed_activity_log(
+        app_with_test_database,
+        log_id="log-wtl-monday-only",
+        activity_id=WTL_B3_WALK_ID,
+        logged_date=date(2026, 6, 1),
+        duration_minutes=20,
+        volume_value=1.0,
+        volume_unit="km",
+    )
+
+    dashboard = get_dashboard(session, as_of=date(2026, 6, 3))
+    prior_only = _weekly_progress_row(dashboard, weekly_target_id="wt-wtl-only-prior")
+
+    assert prior_only.value == pytest.approx(1)
+
+
+def test_get_dashboard_weekly_progress_empty_when_no_targets(
+    app_with_test_database: FastAPI,
+    session: Session,
+) -> None:
+    from app.tests.helpers.wtl_b3_fixtures import SUNDAY_AS_OF, _seed_wtl_b3_base_graph
+
+    _seed_wtl_b3_base_graph(app_with_test_database)
+    dashboard = get_dashboard(session, as_of=date.fromisoformat(SUNDAY_AS_OF))
+
+    assert dashboard.weekly_progress == []

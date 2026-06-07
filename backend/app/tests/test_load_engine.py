@@ -1344,6 +1344,281 @@ def test_compute_weekly_progress_uses_neutral_state_when_rounded_value_is_zero()
 
 
 # ---------------------------------------------------------------------------
+# WTL.B3 — compute_weekly_progress as This Week (Monday–Sunday)
+# ---------------------------------------------------------------------------
+
+WTL_B3_CLASS = "cls-wtl-b3"
+WTL_B3_WALK = "act-wtl-walk"
+WTL_B3_BIKE = "act-wtl-bike"
+WTL_B3_STRETCH = "act-wtl-stretch"
+
+WTL_B3_ACTIVITIES: list[dict[str, Any]] = [
+    {
+        "id": WTL_B3_WALK,
+        "user_id": "local",
+        "activity_class_id": WTL_B3_CLASS,
+        "name": "Morning Walk",
+        "type": "performance",
+        "default_volume_unit": "km",
+        "is_active": True,
+        "created_at": "2026-04-07T06:00:00Z",
+    },
+    {
+        "id": WTL_B3_BIKE,
+        "user_id": "local",
+        "activity_class_id": WTL_B3_CLASS,
+        "name": "Stationary Bike",
+        "type": "performance",
+        "default_volume_unit": "minutes",
+        "is_active": True,
+        "created_at": "2026-04-07T06:00:00Z",
+    },
+    {
+        "id": WTL_B3_STRETCH,
+        "user_id": "local",
+        "activity_class_id": WTL_B3_CLASS,
+        "name": "Light Stretching",
+        "type": "recovery",
+        "default_volume_unit": "minutes",
+        "is_active": False,
+        "created_at": "2026-04-07T06:00:00Z",
+    },
+]
+
+WTL_B3_CLASSES: list[dict[str, Any]] = [
+    {
+        "id": WTL_B3_CLASS,
+        "user_id": "local",
+        "name": "WTL Foot Load",
+        "type": "performance",
+        "default_recovery_window_days": 3,
+        "created_at": "2026-04-07T06:00:00Z",
+    },
+]
+
+
+def _wtl_b3_log(
+    log_id: str,
+    activity_id: str,
+    logged_date: str,
+    *,
+    duration_minutes: int = 30,
+    volume_value: float = 1.0,
+    volume_unit: str = "km",
+) -> dict[str, Any]:
+    return {
+        "id": log_id,
+        "user_id": "local",
+        "activity_id": activity_id,
+        "logged_date": logged_date,
+        "duration_minutes": duration_minutes,
+        "volume_value": volume_value,
+        "volume_unit": volume_unit,
+        "rpe": 5,
+        "post_activity_feel": "fine",
+        "created_at": "2026-04-07T06:00:00Z",
+    }
+
+
+def _wtl_b3_target(
+    target_id: str,
+    *,
+    activity_id: str | None = None,
+    target_value: float = 3.0,
+    target_unit: str = "sessions",
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "id": target_id,
+        "training_block_id": "blk-wtl-b3",
+        "activity_class_id": WTL_B3_CLASS,
+        "target_value": target_value,
+        "target_unit": target_unit,
+        "created_at": "2026-04-07T06:00:00Z",
+    }
+    if activity_id is not None:
+        payload["activity_id"] = activity_id
+    return payload
+
+
+def test_compute_weekly_progress_sunday_as_of_uses_monday_through_sunday_window() -> None:
+    """as_of Sunday 2026-06-07 → period 2026-06-01..2026-06-07."""
+    logs = [
+        _wtl_b3_log("log-prior-sunday", WTL_B3_WALK, "2026-05-31", volume_value=9.0),
+        _wtl_b3_log("log-monday", WTL_B3_WALK, "2026-06-01", volume_value=1.0),
+        _wtl_b3_log("log-sunday", WTL_B3_WALK, "2026-06-07", volume_value=2.0),
+        _wtl_b3_log("log-next-monday", WTL_B3_WALK, "2026-06-08", volume_value=99.0),
+    ]
+    progress = compute_weekly_progress(
+        [_wtl_b3_target("wt-sessions", target_unit="sessions")],
+        WTL_B3_CLASSES,
+        WTL_B3_ACTIVITIES,
+        logs,
+        "2026-06-01",
+        "2026-06-07",
+    )
+
+    row = progress[0]
+    assert row["value"] == pytest.approx(2)
+    assert row["period_start"] == "2026-06-01"
+    assert row["period_end"] == "2026-06-07"
+
+
+def test_compute_weekly_progress_monday_as_of_uses_new_week_window() -> None:
+    """as_of Monday 2026-06-08 → period 2026-06-08..2026-06-14."""
+    logs = [
+        _wtl_b3_log("log-prior-sunday", WTL_B3_WALK, "2026-06-07", volume_value=5.0),
+        _wtl_b3_log("log-monday", WTL_B3_WALK, "2026-06-08", volume_value=1.0),
+        _wtl_b3_log("log-tuesday", WTL_B3_WALK, "2026-06-09", volume_value=1.0),
+    ]
+    progress = compute_weekly_progress(
+        [_wtl_b3_target("wt-sessions", target_unit="sessions")],
+        WTL_B3_CLASSES,
+        WTL_B3_ACTIVITIES,
+        logs,
+        "2026-06-08",
+        "2026-06-14",
+    )
+
+    row = progress[0]
+    assert row["value"] == pytest.approx(2)
+    assert row["period_start"] == "2026-06-08"
+    assert row["period_end"] == "2026-06-14"
+
+
+def test_compute_weekly_progress_activity_scoped_counts_only_that_activity() -> None:
+    logs = [
+        _wtl_b3_log("log-walk", WTL_B3_WALK, "2026-06-03", volume_value=3.0),
+        _wtl_b3_log("log-bike", WTL_B3_BIKE, "2026-06-04", volume_value=20.0, volume_unit="minutes"),
+    ]
+    progress = compute_weekly_progress(
+        [_wtl_b3_target("wt-walk", activity_id=WTL_B3_WALK, target_unit="sessions")],
+        WTL_B3_CLASSES,
+        WTL_B3_ACTIVITIES,
+        logs,
+        "2026-06-01",
+        "2026-06-07",
+    )
+
+    assert progress[0]["value"] == pytest.approx(1)
+
+
+def test_compute_weekly_progress_legacy_class_target_counts_active_class_activities() -> None:
+    logs = [
+        _wtl_b3_log("log-walk", WTL_B3_WALK, "2026-06-03", volume_value=3.0),
+        _wtl_b3_log("log-bike", WTL_B3_BIKE, "2026-06-04", volume_value=20.0, volume_unit="minutes"),
+        _wtl_b3_log("log-stretch", WTL_B3_STRETCH, "2026-06-05", volume_value=15.0, volume_unit="minutes"),
+    ]
+    progress = compute_weekly_progress(
+        [_wtl_b3_target("wt-class", target_unit="sessions")],
+        WTL_B3_CLASSES,
+        WTL_B3_ACTIVITIES,
+        logs,
+        "2026-06-01",
+        "2026-06-07",
+    )
+
+    assert progress[0]["value"] == pytest.approx(2)
+
+
+def test_compute_weekly_progress_minutes_target_sums_duration_minutes() -> None:
+    logs = [
+        _wtl_b3_log(
+            "log-bike-a",
+            WTL_B3_BIKE,
+            "2026-06-03",
+            duration_minutes=25,
+            volume_value=999.0,
+            volume_unit="km",
+        ),
+        _wtl_b3_log(
+            "log-bike-b",
+            WTL_B3_BIKE,
+            "2026-06-05",
+            duration_minutes=20,
+            volume_value=20.0,
+            volume_unit="minutes",
+        ),
+    ]
+    progress = compute_weekly_progress(
+        [
+            _wtl_b3_target(
+                "wt-bike-minutes",
+                activity_id=WTL_B3_BIKE,
+                target_value=60.0,
+                target_unit="minutes",
+            )
+        ],
+        WTL_B3_CLASSES,
+        WTL_B3_ACTIVITIES,
+        logs,
+        "2026-06-01",
+        "2026-06-07",
+    )
+
+    assert progress[0]["value"] == pytest.approx(45.0)
+    assert progress[0]["unit"] == "minutes"
+
+
+def test_compute_weekly_progress_volume_target_sums_matching_volume_unit_only() -> None:
+    logs = [
+        _wtl_b3_log("log-km", WTL_B3_WALK, "2026-06-03", volume_value=3.0, volume_unit="km"),
+        _wtl_b3_log("log-miles", WTL_B3_WALK, "2026-06-04", volume_value=5.0, volume_unit="miles"),
+    ]
+    progress = compute_weekly_progress(
+        [
+            _wtl_b3_target(
+                "wt-walk-km",
+                activity_id=WTL_B3_WALK,
+                target_value=8.0,
+                target_unit="km",
+            )
+        ],
+        WTL_B3_CLASSES,
+        WTL_B3_ACTIVITIES,
+        logs,
+        "2026-06-01",
+        "2026-06-07",
+    )
+
+    assert progress[0]["value"] == pytest.approx(3.0)
+
+
+def test_compute_weekly_progress_excludes_logs_before_week_monday_even_in_rolling_window() -> None:
+    """Sunday prior week is inside rolling last-7 from Wednesday but outside This Week."""
+    logs = [
+        _wtl_b3_log("log-prior-sunday", WTL_B3_WALK, "2026-05-31", volume_value=1.0),
+        _wtl_b3_log("log-wednesday", WTL_B3_WALK, "2026-06-03", volume_value=1.0),
+    ]
+    progress = compute_weekly_progress(
+        [_wtl_b3_target("wt-sessions", target_unit="sessions")],
+        WTL_B3_CLASSES,
+        WTL_B3_ACTIVITIES,
+        logs,
+        "2026-06-01",
+        "2026-06-03",
+    )
+
+    assert progress[0]["value"] == pytest.approx(1)
+
+
+def test_compute_weekly_progress_excludes_logs_after_as_of_in_same_week() -> None:
+    logs = [
+        _wtl_b3_log("log-wednesday", WTL_B3_WALK, "2026-06-03", volume_value=1.0),
+        _wtl_b3_log("log-friday", WTL_B3_WALK, "2026-06-05", volume_value=1.0),
+    ]
+    progress = compute_weekly_progress(
+        [_wtl_b3_target("wt-sessions", target_unit="sessions")],
+        WTL_B3_CLASSES,
+        WTL_B3_ACTIVITIES,
+        logs,
+        "2026-06-01",
+        "2026-06-03",
+    )
+
+    assert progress[0]["value"] == pytest.approx(1)
+
+
+# ---------------------------------------------------------------------------
 # compute_clean_streak
 # ---------------------------------------------------------------------------
 

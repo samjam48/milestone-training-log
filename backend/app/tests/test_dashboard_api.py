@@ -735,3 +735,80 @@ async def test_patch_logged_date_across_week_boundary_updates_dashboard_derivati
     assert _foot_weekly_progress(followup_payload)["value"] == baseline_foot_progress["value"]
     assert followup_foot_actual < baseline_foot_actual
     assert followup_payload["load_risk_summary"] != baseline_summary
+
+
+# ---------------------------------------------------------------------------
+# WTL.B3 — dashboard weekly_progress as This Week
+# ---------------------------------------------------------------------------
+
+
+def _weekly_progress_api_row(payload: dict[str, Any], weekly_target_id: str) -> dict[str, Any]:
+    return next(
+        row for row in payload["weekly_progress"] if row["weekly_target_id"] == weekly_target_id
+    )
+
+
+async def test_get_dashboard_weekly_progress_sunday_as_of_uses_this_week_window(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    from app.tests.helpers.wtl_b3_fixtures import (
+        CURRENT_WEEK_END,
+        CURRENT_WEEK_MONDAY,
+        SUNDAY_AS_OF,
+        seed_wtl_b3_dashboard_graph,
+    )
+
+    seed_wtl_b3_dashboard_graph(app_with_test_database)
+
+    response = await client.get(DASHBOARD_URL, params={"as_of": SUNDAY_AS_OF})
+    assert response.status_code == 200
+    payload = response.json()
+
+    class_row = _weekly_progress_api_row(payload, "wt-wtl-class")
+    walk_row = _weekly_progress_api_row(payload, "wt-wtl-walk")
+
+    assert class_row["value"] == pytest.approx(3)
+    assert walk_row["value"] == pytest.approx(4.5)
+    assert class_row["period_start"] == CURRENT_WEEK_MONDAY
+    assert class_row["period_end"] == CURRENT_WEEK_END
+
+
+async def test_get_dashboard_weekly_progress_monday_as_of_starts_new_week(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    from app.tests.helpers.wtl_b3_fixtures import (
+        MONDAY_AS_OF,
+        NEXT_WEEK_END,
+        NEXT_WEEK_MONDAY,
+        seed_wtl_b3_dashboard_graph,
+    )
+
+    seed_wtl_b3_dashboard_graph(app_with_test_database)
+
+    response = await client.get(DASHBOARD_URL, params={"as_of": MONDAY_AS_OF})
+    assert response.status_code == 200
+    payload = response.json()
+
+    walk_row = _weekly_progress_api_row(payload, "wt-wtl-walk")
+
+    assert walk_row["value"] == pytest.approx(4.0)
+    assert walk_row["period_start"] == NEXT_WEEK_MONDAY
+    assert walk_row["period_end"] == NEXT_WEEK_END
+
+
+async def test_get_dashboard_weekly_progress_includes_period_metadata_on_each_row(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    from app.tests.helpers.wtl_b3_fixtures import SUNDAY_AS_OF, seed_wtl_b3_dashboard_graph
+
+    seed_wtl_b3_dashboard_graph(app_with_test_database)
+
+    response = await client.get(DASHBOARD_URL, params={"as_of": SUNDAY_AS_OF})
+    assert response.status_code == 200
+
+    for row in response.json()["weekly_progress"]:
+        assert "period_start" in row
+        assert "period_end" in row
