@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlmodel import Session
 
 from app.database import get_session
@@ -11,11 +11,16 @@ from app.schemas.weekly_targets import (
 )
 from app.services.weekly_targets import (
     ActivityClassNotFoundError,
+    ActivityInactiveError,
+    ActivityNotFoundError,
+    InvalidTargetValueError,
     TrainingBlockNotFoundError,
+    UnsupportedTargetUnitError,
     WeeklyTargetAlreadyExistsError,
     WeeklyTargetNotFoundError,
     WeeklyTargetPairAlreadyExistsError,
     create_weekly_target,
+    delete_weekly_target,
     list_weekly_targets,
     update_weekly_target,
 )
@@ -27,6 +32,12 @@ training_block_weekly_targets_router = APIRouter(
 weekly_targets_router = APIRouter(prefix="/api/weekly-targets", tags=["weekly-targets"])
 
 SessionDep = Annotated[Session, Depends(get_session)]
+
+
+def _weekly_target_pair_conflict_detail(exc: WeeklyTargetPairAlreadyExistsError) -> str:
+    if exc.pair_kind == "activity":
+        return "Weekly target for this activity already exists"
+    return "Weekly target for this activity class already exists"
 
 
 @training_block_weekly_targets_router.get(
@@ -72,7 +83,27 @@ async def post_weekly_target(
     except WeeklyTargetPairAlreadyExistsError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Weekly target for this activity class already exists",
+            detail=_weekly_target_pair_conflict_detail(exc),
+        ) from exc
+    except ActivityNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Activity not found",
+        ) from exc
+    except ActivityInactiveError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Activity is not active",
+        ) from exc
+    except UnsupportedTargetUnitError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Unsupported target unit",
+        ) from exc
+    except InvalidTargetValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="target_value must be greater than 0",
         ) from exc
     except ActivityClassNotFoundError as exc:
         raise HTTPException(
@@ -98,7 +129,27 @@ async def patch_weekly_target(
     except WeeklyTargetPairAlreadyExistsError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Weekly target for this activity class already exists",
+            detail=_weekly_target_pair_conflict_detail(exc),
+        ) from exc
+    except ActivityNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Activity not found",
+        ) from exc
+    except ActivityInactiveError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Activity is not active",
+        ) from exc
+    except UnsupportedTargetUnitError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Unsupported target unit",
+        ) from exc
+    except InvalidTargetValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="target_value must be greater than 0",
         ) from exc
     except ActivityClassNotFoundError as exc:
         raise HTTPException(
@@ -106,3 +157,15 @@ async def patch_weekly_target(
             detail="Activity class not found",
         ) from exc
     return WeeklyTargetRead.model_validate(weekly_target)
+
+
+@weekly_targets_router.delete("/{target_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_weekly_target(target_id: str, session: SessionDep) -> Response:
+    try:
+        delete_weekly_target(session, target_id)
+    except WeeklyTargetNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Weekly target not found",
+        ) from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

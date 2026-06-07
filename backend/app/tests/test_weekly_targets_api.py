@@ -610,25 +610,6 @@ async def test_patch_missing_weekly_target_returns_stable_not_found(
     assert response.json() == {"detail": "Weekly target not found"}
 
 
-async def test_delete_weekly_target_route_is_not_available(
-    app_with_test_database: FastAPI,
-    client: AsyncClient,
-) -> None:
-    _seed_weekly_target_graph(app_with_test_database)
-    seed_weekly_target(
-        app_with_test_database,
-        target_id="wt-1",
-        training_block_id="blk-1",
-        activity_class_id="cls-foot-load",
-        target_value=8.0,
-        target_unit="km",
-    )
-
-    response = await client.delete("/api/weekly-targets/wt-1")
-
-    assert response.status_code == 405
-
-
 @pytest.mark.parametrize(
     ("field_name", "null_patch"),
     [
