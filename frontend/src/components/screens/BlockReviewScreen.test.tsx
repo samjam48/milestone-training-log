@@ -5,13 +5,14 @@
  */
 
 import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest';
-import { cleanup, screen, within } from '@testing-library/react';
+import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { App } from '../../App';
 import { renderWithProviders } from '../../test/renderWithProviders';
 import { mockEngine, resetMockEngine } from '../../test/mockEngine';
 import type { ActivityLog, DailySafetyScore, ISODate, LoadPoint, TrainingBlock } from '../../types';
+import { WTL_F7_PREVIOUS_WEEK_2 } from '../../test/wtlF7WeeklyFocusFixtures';
 import { BlockReviewScreen } from './BlockReviewScreen';
 
 vi.mock('../../hooks/useMilestoneEngine', () => ({
@@ -50,6 +51,8 @@ vi.mock('../../components/composites/CalendarHeatmap', () => ({
 }));
 
 vi.mock('../../components/composites/WeeklyLoadGraph', () => ({
+  LOAD_GRAPH_WINDOW_DAYS: 30,
+  LOAD_GRAPH_SUBTITLE: 'Rolling 7-day effort load',
   WeeklyLoadGraph: ({
     startDate,
     endDate,
@@ -361,5 +364,56 @@ describe('BlockReviewScreen — F10.6 review milestone badge', () => {
     renderWithProviders(<BlockReviewScreen engine={mockEngine} onBack={vi.fn()} />);
 
     expect(screen.getByText(REVIEW_MILESTONE_BADGE)).toBeInTheDocument();
+  });
+});
+
+describe('BlockReviewScreen — WTL.F7 historical weekly focus review', () => {
+  it('shows focus title and week number in header for a historical weekly focus review', async () => {
+    mockEngine.previousBlocks = [WTL_F7_PREVIOUS_WEEK_2];
+    getTrainingBlockReviewMock.mockResolvedValue({
+      ...REVIEW_RESPONSE,
+      block: WTL_F7_PREVIOUS_WEEK_2,
+    });
+
+    renderApp();
+    await openPreviousBlockReview();
+
+    const review = within(screen.getByTestId('stack-screen-overlay'));
+    expect(review.getByText(/return to walking/i)).toBeInTheDocument();
+    expect(review.getByText(/week 2/i)).toBeInTheDocument();
+  });
+
+  it('fetches review by historical weekly focus block id', async () => {
+    mockEngine.previousBlocks = [WTL_F7_PREVIOUS_WEEK_2];
+    getTrainingBlockReviewMock.mockResolvedValue({
+      ...REVIEW_RESPONSE,
+      block: WTL_F7_PREVIOUS_WEEK_2,
+    });
+
+    renderApp();
+    await openPreviousBlockReview();
+
+    expect(getTrainingBlockReviewMock).toHaveBeenCalledWith(WTL_F7_PREVIOUS_WEEK_2.id);
+  });
+
+  it('renders historical weekly focus header when BlockReviewScreen is opened by block id', async () => {
+    mockEngine.previousBlocks = [WTL_F7_PREVIOUS_WEEK_2];
+    getTrainingBlockReviewMock.mockResolvedValue({
+      ...REVIEW_RESPONSE,
+      block: WTL_F7_PREVIOUS_WEEK_2,
+    });
+
+    renderWithProviders(
+      <BlockReviewScreen
+        engine={mockEngine}
+        blockId={WTL_F7_PREVIOUS_WEEK_2.id}
+        onBack={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/return to walking/i)).toBeInTheDocument();
+      expect(screen.getByText(/week 2/i)).toBeInTheDocument();
+    });
   });
 });

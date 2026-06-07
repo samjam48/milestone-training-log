@@ -150,6 +150,11 @@ export interface TrainingBlock extends Timestamped {
   notes?: string;
   /** True once weekly volume hit + 2 consecutive safe days. */
   isReviewMilestoneHit: boolean;
+  /** Weekly focus lifecycle; omitted on legacy month-style blocks. */
+  periodKind?: 'weekly_focus' | 'legacy';
+  focusSeriesId?: ID;
+  focusTitle?: string;
+  weekNumber?: number;
 }
 
 export type RuleType =

@@ -333,6 +333,10 @@ export function mapTrainingBlockFromApi(
     relatedGoalId: (raw.related_goal_id as string | null) ?? undefined,
     notes: (raw.notes as string | null) ?? undefined,
     isReviewMilestoneHit: Boolean(raw.is_review_milestone_hit),
+    periodKind: (raw.period_kind as TrainingBlock['periodKind']) ?? undefined,
+    focusSeriesId: (raw.focus_series_id as string | null) ?? undefined,
+    focusTitle: (raw.focus_title as string | null) ?? undefined,
+    weekNumber: raw.week_number != null ? Number(raw.week_number) : undefined,
     ...readTimestamped(raw),
   };
 }

@@ -1,12 +1,23 @@
 /**
  * B10.4 — trainingBlocks API client: /scores removed, /review is canonical.
+ * WTL.F7 — weekly focus setup, reset, and focus title patch helpers.
  *
  * Failing until getTrainingBlockScores is removed and callers use getTrainingBlockReview.
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import * as trainingBlocks from './trainingBlocks';
-import { getTrainingBlockReview } from './trainingBlocks';
+import {
+  getTrainingBlockReview,
+  setupWeeklyFocus,
+  resetWeeklyFocus,
+  patchTrainingBlock,
+} from './trainingBlocks';
+import {
+  WTL_F7_ACTIVE_WEEKLY_FOCUS,
+  WTL_F7_RESET_FOCUS_BLOCK,
+  weeklyFocusBlockSnake,
+} from '../../test/wtlF7WeeklyFocusFixtures';
 
 const originalFetch = globalThis.fetch;
 
@@ -96,6 +107,28 @@ describe('getTrainingBlockReview', () => {
     expect(result.cleanDays).toBe(1);
   });
 
+  it('maps focus_title and week_number on review block payload', async () => {
+    const snakeResponse = {
+      block: weeklyFocusBlockSnake(WTL_F7_ACTIVE_WEEKLY_FOCUS),
+      daily_scores: [],
+      load_series: [],
+      flare_up_dates: [],
+      total_sessions: 0,
+      clean_days: 0,
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse(snakeResponse));
+
+    const result = await getTrainingBlockReview(WTL_F7_ACTIVE_WEEKLY_FOCUS.id);
+
+    expect(result.block).toMatchObject({
+      id: WTL_F7_ACTIVE_WEEKLY_FOCUS.id,
+      focusTitle: WTL_F7_ACTIVE_WEEKLY_FOCUS.focusTitle,
+      weekNumber: WTL_F7_ACTIVE_WEEKLY_FOCUS.weekNumber,
+      periodKind: 'weekly_focus',
+    });
+  });
+
   it('returns empty dailyScores when review payload has no scored days', async () => {
     const snakeResponse = {
       block: {
@@ -120,5 +153,79 @@ describe('getTrainingBlockReview', () => {
     const result = await getTrainingBlockReview('blk-empty');
 
     expect(result.dailyScores).toEqual([]);
+  });
+});
+
+describe('WTL.F7 — weekly focus API helpers', () => {
+  it('exports setupWeeklyFocus and resetWeeklyFocus', () => {
+    expect(typeof setupWeeklyFocus).toBe('function');
+    expect(typeof resetWeeklyFocus).toBe('function');
+  });
+
+  it('setupWeeklyFocus POSTs /training-blocks/active/setup with focus_title', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      jsonResponse(weeklyFocusBlockSnake(WTL_F7_RESET_FOCUS_BLOCK), 201),
+    );
+
+    const result = await setupWeeklyFocus({ focusTitle: 'First weekly focus' });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/api/training-blocks/active/setup',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ focus_title: 'First weekly focus' }),
+      }),
+    );
+    expect(result).toMatchObject({
+      focusTitle: WTL_F7_RESET_FOCUS_BLOCK.focusTitle,
+      weekNumber: 1,
+      periodKind: 'weekly_focus',
+    });
+  });
+
+  it('resetWeeklyFocus POSTs /training-blocks/active/reset-focus with focus_title', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      jsonResponse(weeklyFocusBlockSnake(WTL_F7_RESET_FOCUS_BLOCK), 201),
+    );
+
+    const result = await resetWeeklyFocus({ focusTitle: 'Build running base' });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/api/training-blocks/active/reset-focus',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ focus_title: 'Build running base' }),
+      }),
+    );
+    expect(result).toMatchObject({
+      focusTitle: 'Build running base',
+      weekNumber: 1,
+    });
+  });
+
+  it('patchTrainingBlock sends focus_title in snake_case for title edits', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      jsonResponse({
+        ...weeklyFocusBlockSnake(WTL_F7_ACTIVE_WEEKLY_FOCUS),
+        focus_title: 'Stronger ankles',
+        name: 'Stronger ankles · Week 3',
+      }),
+    );
+
+    const result = await patchTrainingBlock(WTL_F7_ACTIVE_WEEKLY_FOCUS.id, {
+      focusTitle: 'Stronger ankles',
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      `/api/training-blocks/${WTL_F7_ACTIVE_WEEKLY_FOCUS.id}`,
+      expect.objectContaining({
+        method: 'PATCH',
+        body: JSON.stringify({ focus_title: 'Stronger ankles' }),
+      }),
+    );
+    expect(result).toMatchObject({
+      focusTitle: 'Stronger ankles',
+      weekNumber: 3,
+    });
   });
 });

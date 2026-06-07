@@ -25,6 +25,13 @@ interface ReviewBlock {
   endDate?: ISODate;
   status: TrainingBlock['status'];
   isReviewMilestoneHit: boolean;
+  periodKind?: TrainingBlock['periodKind'];
+  focusTitle?: string;
+  weekNumber?: number;
+}
+
+function isWeeklyFocusReviewBlock(block: ReviewBlock): boolean {
+  return block.periodKind === 'weekly_focus';
 }
 
 interface ReviewData {
@@ -134,25 +141,27 @@ export function BlockReviewScreen({
     ? undefined
     : engine.previousBlocks.find((block) => block.id === blockId);
 
+  const isHistoricalRequest = blockId !== undefined && !isActiveRequest;
+  const shouldFetchHistoricalReview =
+    isHistoricalRequest && previousBlock !== undefined;
+
   const reviewQuery = useQuery({
     queryKey: ['block-review', blockId],
     queryFn: () => getTrainingBlockReview(blockId as string),
-    enabled: blockId !== undefined && previousBlock !== undefined && !isActiveRequest,
+    enabled: shouldFetchHistoricalReview,
   });
-  const isReviewFetchEnabled =
-    blockId !== undefined && previousBlock !== undefined && !isActiveRequest;
 
   const reviewData = isActiveRequest
     ? activeReviewData(engine)
     : fetchedReviewData(reviewQuery.data);
 
   const isUnknownBlock =
-    blockId !== undefined && !isActiveRequest && previousBlock === undefined;
+    isHistoricalRequest && previousBlock === undefined;
 
   let body: React.ReactNode;
-  if (isUnknownBlock || reviewData === null && !isReviewFetchEnabled) {
+  if (isUnknownBlock || (!isHistoricalRequest && reviewData === null)) {
     body = <EmptyState />;
-  } else if (isReviewFetchEnabled && reviewQuery.isPending) {
+  } else if (shouldFetchHistoricalReview && reviewQuery.isPending) {
     body = (
       <Card pad="md">
         <p role="status" className="py-6 text-center text-body-md text-ink-muted">
@@ -160,7 +169,7 @@ export function BlockReviewScreen({
         </p>
       </Card>
     );
-  } else if (isReviewFetchEnabled && reviewQuery.isError) {
+  } else if (shouldFetchHistoricalReview && reviewQuery.isError) {
     body = (
       <Card pad="md">
         <p role="alert" className="py-6 text-center text-body-md text-danger-fg">
@@ -205,10 +214,17 @@ export function BlockReviewScreen({
             {showReviewMilestone ? <ReviewMilestoneBadge /> : null}
           </div>
           {titleBlock.id !== '' ? (
-            <p className="mt-0.5 truncate text-caption text-ink-muted">
-              {titleBlock.name} · {formatDate(titleBlock.startDate)} -{' '}
-              {formatDate(displayEndDate)}
-            </p>
+            isWeeklyFocusReviewBlock(titleBlock) ? (
+              <p className="mt-0.5 truncate text-caption text-ink-muted">
+                {titleBlock.focusTitle ?? titleBlock.name}
+                {titleBlock.weekNumber != null ? ` · Week ${titleBlock.weekNumber}` : ''}
+              </p>
+            ) : (
+              <p className="mt-0.5 truncate text-caption text-ink-muted">
+                {titleBlock.name} · {formatDate(titleBlock.startDate)} -{' '}
+                {formatDate(displayEndDate)}
+              </p>
+            )
           ) : null}
         </div>
       </header>

@@ -61,6 +61,9 @@ import {
   patchRule,
   deleteRule as deleteRuleApi,
   createTrainingBlock as createTrainingBlockApi,
+  setupWeeklyFocus as setupWeeklyFocusApi,
+  resetWeeklyFocus as resetWeeklyFocusApi,
+  patchTrainingBlock as patchTrainingBlockApi,
   createActivity,
   createActivityClass,
   patchActivityClass,
@@ -260,6 +263,9 @@ export interface MilestoneEngineResult {
   weeklyTargetMutationError: string | null;
   clearWeeklyTargetMutationError: () => void;
   createTrainingBlock: (draft: BlockDraft) => void;
+  setupWeeklyFocus: (focusTitle: string) => Promise<void>;
+  resetWeeklyFocus: (focusTitle: string) => Promise<void>;
+  patchFocusTitle: (focusTitle: string) => Promise<void>;
   // H10.2 — app shell query status (no raw React Query objects)
   isInitialLoading: boolean;
   isFatalError: boolean;
@@ -643,6 +649,38 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     },
   });
 
+  const setupWeeklyFocusMutation = useMutation({
+    mutationFn: (focusTitle: string) => setupWeeklyFocusApi({ focusTitle }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['training-blocks'] });
+    },
+  });
+
+  const resetWeeklyFocusMutation = useMutation({
+    mutationFn: (focusTitle: string) => resetWeeklyFocusApi({ focusTitle }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['training-blocks'] });
+    },
+  });
+
+  const patchFocusTitleMutation = useMutation({
+    mutationFn: (focusTitle: string) => {
+      const activeBlockId =
+        queryClient.getQueryData<Awaited<ReturnType<typeof getDashboard>>>(['dashboard'])
+          ?.block?.id ?? blockId;
+      if (activeBlockId == null || activeBlockId === '') {
+        return Promise.reject(new Error('No active block'));
+      }
+      return patchTrainingBlockApi(activeBlockId, { focusTitle });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['training-blocks'] });
+    },
+  });
+
   const checkViolations = React.useCallback((
     activityId: ID,
     volumeValue: number,
@@ -768,6 +806,18 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     createTrainingBlockMutation.mutate(draft);
   }, [createTrainingBlockMutation]);
 
+  const setupWeeklyFocus = React.useCallback(async (focusTitle: string) => {
+    await setupWeeklyFocusMutation.mutateAsync(focusTitle);
+  }, [setupWeeklyFocusMutation]);
+
+  const resetWeeklyFocus = React.useCallback(async (focusTitle: string) => {
+    await resetWeeklyFocusMutation.mutateAsync(focusTitle);
+  }, [resetWeeklyFocusMutation]);
+
+  const patchFocusTitle = React.useCallback(async (focusTitle: string) => {
+    await patchFocusTitleMutation.mutateAsync(focusTitle);
+  }, [patchFocusTitleMutation]);
+
   const isInitialLoading = dashboardQuery.isPending;
   const isUnauthorized =
     dashboardQuery.isError && isUnauthorizedError(dashboardQuery.error);
@@ -830,6 +880,9 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     weeklyTargetMutationError,
     clearWeeklyTargetMutationError,
     createTrainingBlock,
+    setupWeeklyFocus,
+    resetWeeklyFocus,
+    patchFocusTitle,
     // H10.2 — app shell query status
     isInitialLoading,
     isFatalError,

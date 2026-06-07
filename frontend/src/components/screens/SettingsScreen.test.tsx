@@ -580,6 +580,7 @@ describe('SettingsScreen — No active block fallback', () => {
     status: 'active' as const,
     isReviewMilestoneHit: false,
     createdAt: '1970-01-01T00:00:00Z',
+    periodKind: 'legacy' as const,
   };
 
   it('shows "No active training block" card when block id is empty', () => {
@@ -1782,6 +1783,7 @@ describe('SettingsScreen — edge cases', () => {
       status: 'active' as const,
       isReviewMilestoneHit: false,
       createdAt: '1970-01-01T00:00:00Z',
+      periodKind: 'legacy' as const,
     };
 
     const engine = makeEngine({

@@ -42,6 +42,30 @@ export async function patchTrainingBlock(
   return mapTrainingBlockFromApi(raw);
 }
 
+export interface WeeklyFocusTitleInput {
+  focusTitle: string;
+}
+
+export async function setupWeeklyFocus(
+  input: WeeklyFocusTitleInput,
+): Promise<TrainingBlockRead> {
+  const raw = await apiFetch<Record<string, unknown>>('/training-blocks/active/setup', {
+    method: 'POST',
+    body: JSON.stringify({ focus_title: input.focusTitle }),
+  });
+  return mapTrainingBlockFromApi(raw);
+}
+
+export async function resetWeeklyFocus(
+  input: WeeklyFocusTitleInput,
+): Promise<TrainingBlockRead> {
+  const raw = await apiFetch<Record<string, unknown>>('/training-blocks/active/reset-focus', {
+    method: 'POST',
+    body: JSON.stringify({ focus_title: input.focusTitle }),
+  });
+  return mapTrainingBlockFromApi(raw);
+}
+
 interface TrainingBlockReviewResponse {
   block: Record<string, unknown>;
   daily_scores: Record<string, unknown>[];
