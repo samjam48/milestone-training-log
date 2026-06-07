@@ -70,18 +70,30 @@ Purpose:
 
 - `id`
 - `user_id`
-- `name`
+- `name` — display label; for `weekly_focus` rows the service generates `"{focus_title} · Week {n}"`
 - `start_date`
 - `end_date` nullable
 - `status` — active, completed, archived
+- `period_kind` — `weekly_focus` or `legacy` (default `legacy`)
+- `focus_series_id` nullable — groups consecutive weekly periods under one wider focus; null on legacy rows
+- `focus_title` nullable — user-facing wider goal label (e.g. “Return to walking”); snapshotted at week creation
+- `week_number` nullable — 1-based counter within `focus_series_id`
 - `related_goal_id` nullable
 - `notes` nullable
 - `is_review_milestone_hit`
 - `created_at`
 - `updated_at`
 
+Constraints and indexes (weekly focus, WTL.B7):
+
+- Partial unique: at most one row per `user_id` where `status = active` AND `period_kind = weekly_focus`
+- Unique on (`user_id`, `focus_series_id`, `week_number`) for series lookup
+
 Purpose:
+
 - The main planning container for rules, targets, and milestone reviews
+- **Weekly focus mode (`period_kind = weekly_focus`):** each row is one Monday–Sunday planning period. Rules and `weekly_targets` are owned per week; Monday rollover copies enabled rules and targets into the next week. `focus_series_id` + `week_number` track the wider focus across weeks.
+- **Legacy mode (`period_kind = legacy`):** pre-cutover month-style blocks; read-only history after cutover. Existing production rows are backfilled as `legacy` with null focus columns.
 
 ### `activity_classes`
 
@@ -238,9 +250,12 @@ Purpose:
 
 ## Service Behaviour Notes
 
-- **Rule copy on new block:** when a new `training_block` is created via `POST /api/training-blocks`, the block creation service copies all `rules` rows from the previous active block into the new block. No schema change needed — this is a service operation, not a schema constraint.
-- **Block end_date on archive:** the service sets `end_date = today` on the outgoing block if not already set, before marking it `completed`. This ensures `BlockReviewScreen` can always scope its queries to a closed date range.
-- **Weekly progress cadence:** dashboard `weekly_progress` sums activity logs in the Monday–Sunday ISO week containing `as_of`, scoped per `weekly_targets` row (activity-scoped or legacy class-scoped). Load risk and load-tax graph use rolling seven-day windows instead — see `docs/api-map.md`.
+- **Rule copy on new block:** when a new `training_block` is created via `POST /api/training-blocks` (legacy path), the block creation service copies all `rules` rows from the previous active block into the new block. No schema change needed — this is a service operation, not a schema constraint.
+- **Weekly focus rollover (WTL.B7):** `ensure_active_weekly_focus` runs before active-block resolution. When `as_of` enters a new calendar week, the service completes the prior active `weekly_focus` (`end_date` = its Sunday) and creates the next week with `week_number + 1`, same `focus_series_id` and `focus_title`, copying enabled `rules` and all `weekly_targets` (new child ids). Multi-week gaps create one completed period per missed week.
+- **Legacy cutover:** on first `ensure_active_weekly_focus`, an active `legacy` block is converted to week 1 `weekly_focus` for the calendar week containing `as_of` (rules/targets copied; legacy row completed). Completed legacy blocks remain reviewable with original dates.
+- **Reset focus series:** `reset_focus_series` completes the current active period and starts week 1 under a new `focus_series_id` for the current calendar week, copying rules/targets from the just-completed period.
+- **Block end_date on archive:** the service sets `end_date` on the outgoing block when completing a period. For `weekly_focus`, `end_date` is always that period's Sunday. This ensures `BlockReviewScreen` can scope queries to a closed date range.
+- **Weekly progress cadence:** dashboard `weekly_progress` sums activity logs in the Monday–Sunday ISO week containing `as_of`, scoped per `weekly_targets` row (activity-scoped or legacy class-scoped). Weekly focus aligns planning ownership (which rules/targets apply) with the same Monday–Sunday window. Load risk and load-tax graph use rolling seven-day windows instead — see `docs/api-map.md`.
 
 ## Open Modeling Notes
 

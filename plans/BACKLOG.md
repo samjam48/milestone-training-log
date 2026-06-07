@@ -123,9 +123,9 @@ Recorded after S25 batch review; not in polish ticket scope unless noted.
 
 ## Weekly targets, load risk & load tax (WTL batch)
 
-**Tickets:** `plans/tickets-weekly-targets-load-risk-2026-06-07.md` (WTL.B1–B6, F1–F6, D2 implemented; **OWTL.1** owner smoke pending)
+**Tickets:** `plans/tickets-weekly-targets-load-risk-2026-06-07.md` (WTL.B1–B7, F1–F7, D1–D2 implemented; **OWTL.1** owner smoke pending)
 
-Delivered themes: activity-scoped weekly targets with migration from weekly `recovery_targets`; dashboard **This week** progress (Monday–Sunday); Goals weekly-target flow; load-tax graph (30-day series); load-risk `rule_limit_rows`; recovery streaks UI retired.
+Delivered themes: activity-scoped weekly targets with migration from weekly `recovery_targets`; dashboard **This week** progress (Monday–Sunday); Goals weekly-target flow; load-tax graph (30-day series); load-risk `rule_limit_rows`; recovery streaks UI retired; **weekly focus** lifecycle replaces month-style training block UX (`period_kind`, `focus_series_id`, Monday rollover, Settings focus UI).
 
 | Item | Ticket | Status |
 | --- | --- | --- |
@@ -137,13 +137,15 @@ Delivered themes: activity-scoped weekly targets with migration from weekly `rec
 | Load-tax formula + graph series | WTL.B5, WTL.F4 | Done |
 | Load risk rule-limit rows | WTL.B6, WTL.F5 | Done |
 | Recovery streaks UI removed | WTL.F6 | Done |
+| Weekly focus lifecycle design | WTL.D1 | Done — `plans/technical-design-weekly-focus-2026-06-07.md` |
+| Weekly focus backend lifecycle | WTL.B7 | Done |
+| Settings weekly focus UI | WTL.F7 | Done |
 | Living docs sync | WTL.D2 | Done |
 
-### WTL deferred / not implemented
+### WTL legacy / future (not weekly focus)
 
 | Item | Ticket | Note |
 | --- | --- | --- |
-| Weekly focus replaces month-style block UX | WTL.D1, WTL.B7, WTL.F7 | **Pending owner sign-off** — design at `plans/technical-design-weekly-focus-2026-06-07.md`; do not treat as shipped until B7/F7 land. |
 | Daily recovery streaks product path | — | **Legacy** — daily `recovery_targets` rows and `recovery_streaks` API field remain; no dashboard section. Owner decision still open: retire storage, or replan true streaks from weekly target history. |
 | Recovery streak feature (true streaks) | — | **Future** — derive consecutive-week completion from recovery-style **weekly target** history, not the retired F10.1 dashboard section or legacy `recovery_streaks` API field. Clean streak remains separate. |
 
