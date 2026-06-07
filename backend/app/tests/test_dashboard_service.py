@@ -38,7 +38,7 @@ from app.services.load_queries import (
 )
 from app.services.recovery_targets import list_recovery_targets
 from app.services.rules import list_rules
-from app.services.training_blocks import get_active_training_block
+from app.services.training_blocks import calendar_week_bounds, get_active_training_block
 from app.services.weekly_targets import list_weekly_targets
 from app.tests.helpers.load_api_seed import seed_dashboard_mock_graph
 from app.tests.helpers.load_engine_fixtures import (
@@ -244,10 +244,12 @@ def test_get_dashboard_recovery_streaks_populated_from_active_block_targets(
     assert stretch.current_streak_days == 5
 
 
-def test_get_dashboard_without_active_block_returns_neutral_empty_payload(
+def test_get_dashboard_without_active_block_auto_creates_weekly_focus(
     app_with_test_database: FastAPI,
     session: Session,
 ) -> None:
+    from app.services.training_blocks import calendar_week_bounds
+
     seed_activity_class(
         app_with_test_database,
         class_id="cls-foot",
@@ -262,11 +264,13 @@ def test_get_dashboard_without_active_block_returns_neutral_empty_payload(
 
     dashboard = get_dashboard(session, as_of=FROZEN_AS_OF)
 
-    assert dashboard.block is None
+    week_start, week_end = calendar_week_bounds(FROZEN_AS_OF)
+    assert dashboard.block is not None
+    assert dashboard.block.period_kind == "weekly_focus"
+    assert dashboard.block.start_date == week_start
+    assert dashboard.block.end_date == week_end
     assert dashboard.recovery_streaks == []
     assert dashboard.weekly_progress == []
-    assert dashboard.daily_scores == []
-    assert dashboard.load_series == []
     assert all(status.state == "safe" for status in dashboard.class_statuses)
 
 
@@ -274,11 +278,17 @@ def test_get_dashboard_previous_blocks_excludes_active_block_and_orders_by_end_d
     app_with_test_database: FastAPI,
     session: Session,
 ) -> None:
-    seed_training_block(
+    from app.tests.helpers.weekly_focus_fixtures import seed_weekly_focus_block
+
+    current_week_start, current_week_end = calendar_week_bounds(FROZEN_AS_OF)
+    seed_weekly_focus_block(
         app_with_test_database,
         block_id="blk-current",
-        name="Current block",
-        start_date=date(2026, 5, 20),
+        focus_series_id="fs-prev-blocks",
+        focus_title=None,
+        week_number=1,
+        start_date=current_week_start,
+        end_date=current_week_end,
         status="active",
     )
     seed_training_block(
@@ -351,7 +361,11 @@ def test_get_dashboard_empty_database_returns_neutral_payload(
 ) -> None:
     dashboard = get_dashboard(session, as_of=FROZEN_AS_OF)
 
-    assert dashboard.block is None
+    week_start, week_end = calendar_week_bounds(FROZEN_AS_OF)
+    assert dashboard.block is not None
+    assert dashboard.block.period_kind == "weekly_focus"
+    assert dashboard.block.start_date == week_start
+    assert dashboard.block.end_date == week_end
     assert dashboard.activity_classes == []
     assert dashboard.activities == []
     assert dashboard.logs == []
@@ -359,8 +373,6 @@ def test_get_dashboard_empty_database_returns_neutral_payload(
     assert dashboard.has_checked_in_today is False
     assert dashboard.recovery_streaks == []
     assert dashboard.weekly_progress == []
-    assert dashboard.daily_scores == []
-    assert dashboard.load_series == []
     assert dashboard.clean_streak == 0
     assert dashboard.week_load_threshold is None
 
@@ -566,7 +578,7 @@ def _expected_suggestion_buckets(session: Session, *, as_of: date) -> list[Sugge
         log_dict(log)
         for log in list_activity_logs(session, end_date=as_of)
     ]
-    active_block = get_active_training_block(session)
+    active_block = get_active_training_block(session, as_of=as_of)
     rules = [rule_dict(rule) for rule in list_rules(session, active_block.id)]
     recovery_targets = [
         {
@@ -606,7 +618,7 @@ def _expected_load_risk_summary(session: Session, *, as_of: date) -> LoadRiskSum
         log_dict(log)
         for log in list_activity_logs(session, end_date=as_of)
     ]
-    active_block = get_active_training_block(session)
+    active_block = get_active_training_block(session, as_of=as_of)
     rules = [rule_dict(rule) for rule in list_rules(session, active_block.id)]
     check_ins = list_daily_check_ins(session, end_date=as_of)
     incidents = [
@@ -695,11 +707,11 @@ def test_get_dashboard_load_risk_summary_matches_engine(
     assert actual_foot.limit == pytest.approx(expected_foot["limit"])
 
 
-def test_get_dashboard_load_risk_summary_null_without_active_block(
+def test_get_dashboard_load_risk_summary_empty_when_no_rules_on_auto_created_block(
     app_with_test_database: FastAPI,
     session: Session,
 ) -> None:
-    """No active block → load_risk_summary is null."""
+    """Auto-created weekly block with no rules → empty load-risk derivations."""
     seed_activity_class(
         app_with_test_database,
         class_id="cls-foot",
@@ -714,7 +726,9 @@ def test_get_dashboard_load_risk_summary_null_without_active_block(
 
     dashboard = get_dashboard(session, as_of=FROZEN_AS_OF)
 
-    assert dashboard.load_risk_summary is None
+    assert dashboard.block is not None
+    assert dashboard.load_risk_summary is not None
+    assert dashboard.load_risk_summary.rule_limit_rows == []
     assert dashboard.suggestion_buckets == []
 
 
@@ -889,13 +903,16 @@ def test_get_dashboard_weekly_progress_monday_as_of_starts_new_week(
         MONDAY_AS_OF,
         NEXT_WEEK_END,
         NEXT_WEEK_MONDAY,
+        WTL_B3_WALK_ID,
         seed_wtl_b3_dashboard_graph,
     )
 
     seed_wtl_b3_dashboard_graph(app_with_test_database)
     dashboard = get_dashboard(session, as_of=date.fromisoformat(MONDAY_AS_OF))
 
-    walk_row = _weekly_progress_row(dashboard, weekly_target_id="wt-wtl-walk")
+    walk_row = next(
+        row for row in dashboard.weekly_progress if row.activity_id == WTL_B3_WALK_ID
+    )
 
     assert walk_row.value == pytest.approx(4.0)
     assert walk_row.period_start == date.fromisoformat(NEXT_WEEK_MONDAY)
@@ -1215,7 +1232,7 @@ def test_get_dashboard_load_series_matches_load_tax_engine_series(
     as_of = date.fromisoformat(WTL_B5_AS_OF)
     graph_start = _wtl_b5_graph_start(as_of)
 
-    active_block = get_active_training_block(session)
+    active_block = get_active_training_block(session, as_of=as_of)
     assert active_block.id == WTL_B5_BLOCK_ID
 
     activity_classes = [activity_class_dict(cls) for cls in list_activity_classes(session)]
@@ -1434,11 +1451,11 @@ def test_dashboard_ensure_active_weekly_focus_monday_boundary(
     assert progress.period_end == WEEK_TWO_END
 
 
-def test_dashboard_no_active_focus_returns_neutral_payload_when_ensure_returns_none(
+def test_dashboard_auto_creates_active_week_when_no_focus_exists(
     app_with_test_database: FastAPI,
     session: Session,
 ) -> None:
-    from app.tests.helpers.weekly_focus_fixtures import SUNDAY_AS_OF
+    from app.tests.helpers.weekly_focus_fixtures import SUNDAY_AS_OF, WEEK_ONE_END, WEEK_ONE_START
 
     seed_activity_class(
         app_with_test_database,
@@ -1448,6 +1465,9 @@ def test_dashboard_no_active_focus_returns_neutral_payload_when_ensure_returns_n
 
     dashboard = get_dashboard(session, as_of=SUNDAY_AS_OF)
 
-    assert dashboard.block is None
+    assert dashboard.block is not None
+    assert dashboard.block.period_kind == "weekly_focus"
+    assert dashboard.block.start_date == WEEK_ONE_START
+    assert dashboard.block.end_date == WEEK_ONE_END
     assert dashboard.weekly_progress == []
     assert dashboard.recovery_streaks == []

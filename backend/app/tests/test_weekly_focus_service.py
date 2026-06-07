@@ -133,14 +133,17 @@ def test_calendar_week_bounds_sunday_and_monday() -> None:
     assert monday_end == WEEK_TWO_END
 
 
-def test_ensure_active_weekly_focus_returns_none_when_no_focus_exists(
+def test_ensure_active_weekly_focus_auto_creates_week_one_when_no_focus_exists(
     app_with_test_database: FastAPI,
 ) -> None:
+    from app.tests.helpers.wru_b2_fixtures import assert_auto_created_weekly_block
+
     service = require_weekly_focus_service()
     for session in with_session(app_with_test_database):
         active = service.ensure_active_weekly_focus(session, SUNDAY_AS_OF)
 
-    assert active is None
+    assert active is not None
+    assert_auto_created_weekly_block(active, as_of=SUNDAY_AS_OF, week_number=1)
 
 
 def test_ensure_active_weekly_focus_returns_current_week_when_already_active(

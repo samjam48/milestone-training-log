@@ -209,13 +209,22 @@ async def test_list_training_blocks_returns_local_blocks_in_start_date_desc_orde
     ]
 
 
-async def test_get_active_training_block_returns_not_found_when_none_active(
+async def test_get_active_training_block_auto_creates_current_week_when_none_active(
     client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from app.tests.helpers.load_api_test_utils import freeze_server_today_as
+    from app.tests.helpers.wru_b2_fixtures import (
+        WRU_B2_AS_OF,
+        assert_weekly_focus_api_payload,
+    )
+
+    freeze_server_today_as(monkeypatch, WRU_B2_AS_OF)
+
     response = await client.get("/api/training-blocks/active")
 
-    assert response.status_code == 404
-    assert response.json() == {"detail": "Active training block not found"}
+    assert response.status_code == 200
+    assert_weekly_focus_api_payload(response.json(), as_of=WRU_B2_AS_OF, week_number=1)
 
 
 async def test_create_training_block_defaults_status_to_active(
@@ -527,7 +536,9 @@ async def test_patch_active_block_to_completed_does_not_promote_another_block(
     assert response.json()["status"] == "completed"
 
     active_response = await client.get("/api/training-blocks/active")
-    assert active_response.status_code == 404
+    assert active_response.status_code == 200
+    assert active_response.json()["period_kind"] == "weekly_focus"
+    assert active_response.json()["id"] != "blk-active"
 
 
 async def test_patch_missing_training_block_returns_stable_not_found(

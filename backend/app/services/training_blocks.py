@@ -14,6 +14,10 @@ PERIOD_KIND_WEEKLY_FOCUS = "weekly_focus"
 DEFAULT_FOCUS_TITLE = "My focus"
 
 
+def _server_local_today() -> date:
+    return date.today()
+
+
 class TrainingBlockAlreadyExistsError(Exception):
     pass
 
@@ -49,10 +53,6 @@ def calendar_week_label(week_start: date, week_end: date) -> str:
     )
 
 
-def _weekly_focus_name(focus_title: str, week_number: int) -> str:
-    return f"{focus_title} · Week {week_number}"
-
-
 def list_training_blocks(session: Session) -> list[TrainingBlock]:
     statement = (
         select(TrainingBlock)
@@ -70,26 +70,14 @@ def get_active_training_block(
     *,
     as_of: date | None = None,
 ) -> TrainingBlock:
-    if as_of is not None:
-        training_block = ensure_active_weekly_focus(session, as_of)
-        if training_block is not None:
-            return training_block
-        raise TrainingBlockNotFoundError
-
-    statement = select(TrainingBlock).where(
-        TrainingBlock.user_id == LOCAL_USER_ID,
-        TrainingBlock.status == "active",
-    )
-    training_block = session.exec(statement).first()
-    if training_block is None:
-        raise TrainingBlockNotFoundError
-    return training_block
+    resolved_as_of = as_of if as_of is not None else _server_local_today()
+    return ensure_active_weekly_focus(session, resolved_as_of)
 
 
 def ensure_active_weekly_focus(
     session: Session,
     as_of: date,
-) -> TrainingBlock | None:
+) -> TrainingBlock:
     week_start, week_end = calendar_week_bounds(as_of)
     previous_expire_on_commit = session.expire_on_commit
     session.expire_on_commit = False
@@ -115,9 +103,117 @@ def ensure_active_weekly_focus(
                     return new_block
                 continue
 
-            return None
+            misaligned_source = _complete_misaligned_active_weekly_focus(
+                session,
+                week_start,
+            )
+            if misaligned_source is not None:
+                new_block = _create_week_from_completed_source(
+                    session,
+                    misaligned_source,
+                    week_start,
+                    week_end,
+                )
+                session.commit()
+                session.refresh(new_block)
+                return new_block
+
+            return _create_initial_weekly_focus(session, week_start, week_end)
     finally:
         session.expire_on_commit = previous_expire_on_commit
+
+
+def _complete_misaligned_active_weekly_focus(
+    session: Session,
+    week_start: date,
+) -> TrainingBlock | None:
+    statement = select(TrainingBlock).where(
+        TrainingBlock.user_id == LOCAL_USER_ID,
+        TrainingBlock.period_kind == PERIOD_KIND_WEEKLY_FOCUS,
+        TrainingBlock.status == "active",
+        TrainingBlock.start_date != week_start,
+    )
+    misaligned = session.exec(statement).first()
+    if misaligned is None:
+        return None
+
+    misaligned.status = "completed"
+    if misaligned.end_date is None or misaligned.end_date >= week_start:
+        misaligned.end_date = week_start - timedelta(days=1)
+    misaligned.updated_at = next_updated_at(misaligned.updated_at)
+    session.add(misaligned)
+    session.flush()
+    return misaligned
+
+
+def _create_week_from_completed_source(
+    session: Session,
+    source: TrainingBlock,
+    week_start: date,
+    week_end: date,
+) -> TrainingBlock:
+    now = datetime.now(UTC)
+    focus_title = source.focus_title or DEFAULT_FOCUS_TITLE
+    week_number = (source.week_number or 0) + 1
+    new_block = TrainingBlock(
+        id=f"blk-{uuid4()}",
+        user_id=LOCAL_USER_ID,
+        name=calendar_week_label(week_start, week_end),
+        start_date=week_start,
+        end_date=week_end,
+        status="active",
+        period_kind=PERIOD_KIND_WEEKLY_FOCUS,
+        focus_series_id=source.focus_series_id or f"fs-{uuid4()}",
+        focus_title=focus_title,
+        week_number=week_number,
+        related_goal_id=source.related_goal_id,
+        notes=source.notes,
+        is_review_milestone_hit=False,
+        created_at=now,
+        updated_at=now,
+    )
+    session.add(new_block)
+    _copy_enabled_rules_to_block(
+        session,
+        source_block_id=source.id,
+        target_block_id=new_block.id,
+    )
+    _copy_weekly_targets_to_block(
+        session,
+        source_block_id=source.id,
+        target_block_id=new_block.id,
+    )
+    session.flush()
+    return new_block
+
+
+def _create_initial_weekly_focus(
+    session: Session,
+    week_start: date,
+    week_end: date,
+) -> TrainingBlock:
+    now = datetime.now(UTC)
+    new_block = TrainingBlock(
+        id=f"blk-{uuid4()}",
+        user_id=LOCAL_USER_ID,
+        name=calendar_week_label(week_start, week_end),
+        start_date=week_start,
+        end_date=week_end,
+        status="active",
+        period_kind=PERIOD_KIND_WEEKLY_FOCUS,
+        focus_series_id=f"fs-{uuid4()}",
+        focus_title=None,
+        week_number=1,
+        related_goal_id=None,
+        notes=None,
+        is_review_milestone_hit=False,
+        created_at=now,
+        updated_at=now,
+    )
+    session.add(new_block)
+    session.commit()
+    session.refresh(new_block)
+    return new_block
 
 
 def rollover_weekly_focus(
@@ -132,7 +228,7 @@ def rollover_weekly_focus(
     new_block = TrainingBlock(
         id=f"blk-{uuid4()}",
         user_id=LOCAL_USER_ID,
-        name=_weekly_focus_name(focus_title, week_number),
+        name=calendar_week_label(week_start, week_end),
         start_date=week_start,
         end_date=week_end,
         status="active",

@@ -19,6 +19,7 @@ from app.main import create_app
 from app.tests.helpers.load_api_seed import seed_dashboard_mock_graph
 from app.tests.helpers.load_api_test_utils import FROZEN_TODAY, foot_status, freeze_server_today
 from app.tests.helpers.load_engine_fixtures import AS_OF, WEEKLY_TARGETS
+from app.services.training_blocks import calendar_week_bounds
 from app.tests.helpers.seed import (
     seed_activity,
     seed_activity_class,
@@ -26,6 +27,7 @@ from app.tests.helpers.seed import (
     seed_recovery_target,
     seed_training_block,
 )
+from app.tests.helpers.weekly_focus_fixtures import seed_weekly_focus_block
 from app.tests.test_seed_data import PROTOTYPE_TODAY, _make_migrated_engine, _run_seed
 
 DASHBOARD_URL = "/api/dashboard"
@@ -126,10 +128,12 @@ async def test_get_dashboard_recovery_streaks_from_active_block_targets(
     assert stretch["current_streak_days"] == 5
 
 
-async def test_get_dashboard_without_active_block_returns_neutral_empty_payload(
+async def test_get_dashboard_auto_creates_weekly_block_when_none_exists(
     app_with_test_database: FastAPI,
     client: AsyncClient,
 ) -> None:
+    from app.services.training_blocks import calendar_week_bounds
+
     seed_activity_class(
         app_with_test_database,
         class_id="cls-foot",
@@ -146,23 +150,31 @@ async def test_get_dashboard_without_active_block_returns_neutral_empty_payload(
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["block"] is None
+    as_of_date = date.fromisoformat(AS_OF)
+    week_start, week_end = calendar_week_bounds(as_of_date)
+    assert payload["block"] is not None
+    assert payload["block"]["period_kind"] == "weekly_focus"
+    assert payload["block"]["start_date"] == week_start.isoformat()
+    assert payload["block"]["end_date"] == week_end.isoformat()
     assert payload["previous_blocks"] == []
     assert payload["weekly_progress"] == []
-    assert payload["load_series"] == []
     assert payload["recovery_streaks"] == []
-    assert payload["graph_class_id"] is None
 
 
 async def test_get_dashboard_previous_blocks_serializes_summary_array(
     app_with_test_database: FastAPI,
     client: AsyncClient,
 ) -> None:
-    seed_training_block(
+    as_of_date = date.fromisoformat(AS_OF)
+    current_week_start, current_week_end = calendar_week_bounds(as_of_date)
+    seed_weekly_focus_block(
         app_with_test_database,
         block_id="blk-current",
-        name="Current block",
-        start_date=date(2026, 5, 20),
+        focus_series_id="fs-api-prev-blocks",
+        focus_title=None,
+        week_number=1,
+        start_date=current_week_start,
+        end_date=current_week_end,
         status="active",
     )
     seed_training_block(
@@ -246,7 +258,12 @@ async def test_get_dashboard_empty_database_returns_neutral_payload(
     assert response.status_code == 200
     payload = response.json()
     assert payload["as_of"] == AS_OF
-    assert payload["block"] is None
+    as_of_date = date.fromisoformat(AS_OF)
+    week_start, week_end = calendar_week_bounds(as_of_date)
+    assert payload["block"] is not None
+    assert payload["block"]["period_kind"] == "weekly_focus"
+    assert payload["block"]["start_date"] == week_start.isoformat()
+    assert payload["block"]["end_date"] == week_end.isoformat()
     assert payload["class_statuses"] == []
     assert payload["weekly_progress"] == []
     assert payload["load_series"] == []
@@ -368,7 +385,7 @@ async def test_get_dashboard_goals_present_when_no_active_block(
     app_with_test_database: FastAPI,
     client: AsyncClient,
 ) -> None:
-    """goals is returned even when there is no active training block."""
+    """goals is returned even when the weekly block is auto-created."""
     seed_goal(
         app_with_test_database,
         goal_id="api-goal-no-block",
@@ -382,7 +399,8 @@ async def test_get_dashboard_goals_present_when_no_active_block(
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["block"] is None
+    assert payload["block"] is not None
+    assert payload["block"]["period_kind"] == "weekly_focus"
     assert len(payload["goals"]) == 1
     assert payload["goals"][0]["id"] == "api-goal-no-block"
 
@@ -538,11 +556,11 @@ async def test_get_dashboard_load_risk_summary_week_days_and_rule_limit_rows(
     assert not any(row["activity_class_id"] == "cls-recovery" for row in summary["rule_limit_rows"])
 
 
-async def test_get_dashboard_load_risk_summary_null_without_active_block(
+async def test_get_dashboard_load_risk_summary_empty_when_no_rules_on_auto_created_block(
     app_with_test_database: FastAPI,
     client: AsyncClient,
 ) -> None:
-    """No active block → load_risk_summary is null; goal_rows still an array."""
+    """Auto-created weekly block with no rules → empty load-risk derivations."""
     seed_activity_class(
         app_with_test_database,
         class_id="cls-foot",
@@ -559,7 +577,9 @@ async def test_get_dashboard_load_risk_summary_null_without_active_block(
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["load_risk_summary"] is None
+    assert payload["block"] is not None
+    assert payload["load_risk_summary"] is not None
+    assert payload["load_risk_summary"]["rule_limit_rows"] == []
     assert payload["goal_rows"] == []
     assert payload["suggestion_buckets"] == []
 
@@ -786,6 +806,7 @@ async def test_get_dashboard_weekly_progress_monday_as_of_starts_new_week(
         MONDAY_AS_OF,
         NEXT_WEEK_END,
         NEXT_WEEK_MONDAY,
+        WTL_B3_WALK_ID,
         seed_wtl_b3_dashboard_graph,
     )
 
@@ -795,7 +816,9 @@ async def test_get_dashboard_weekly_progress_monday_as_of_starts_new_week(
     assert response.status_code == 200
     payload = response.json()
 
-    walk_row = _weekly_progress_api_row(payload, "wt-wtl-walk")
+    walk_row = next(
+        row for row in payload["weekly_progress"] if row["activity_id"] == WTL_B3_WALK_ID
+    )
 
     assert walk_row["value"] == pytest.approx(4.0)
     assert walk_row["period_start"] == NEXT_WEEK_MONDAY

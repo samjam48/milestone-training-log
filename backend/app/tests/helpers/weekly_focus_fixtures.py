@@ -108,13 +108,20 @@ def seed_weekly_focus_block(
     *,
     block_id: str,
     focus_series_id: str,
-    focus_title: str,
+    focus_title: str | None,
     week_number: int,
     start_date: date,
     end_date: date | None,
     status: str,
 ) -> None:
     require_wtl_b7_training_block_schema()
+    service = require_weekly_focus_service()
+    if end_date is not None:
+        block_name = service.calendar_week_label(start_date, end_date)
+    elif focus_title is not None:
+        block_name = f"{focus_title} · Week {week_number}"
+    else:
+        block_name = f"Week {week_number}"
     for session in with_session(app_with_test_database):
         existing = session.exec(
             select(TrainingBlock).where(TrainingBlock.id == block_id)
@@ -126,7 +133,7 @@ def seed_weekly_focus_block(
             TrainingBlock(
                 id=block_id,
                 user_id="local",
-                name=f"{focus_title} · Week {week_number}",
+                name=block_name,
                 start_date=start_date,
                 end_date=end_date,
                 status=status,

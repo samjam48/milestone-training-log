@@ -297,7 +297,9 @@ def _build_goal_rows(goals: list[Goal]) -> list[GoalDashboardRowRead]:
 
 def _build_previous_blocks(session: Session) -> list[TrainingBlockRead]:
     blocks = [
-        block for block in list_training_blocks(session) if block.status != "active"
+        block
+        for block in list_training_blocks(session)
+        if block.status != "active" and block.period_kind == "weekly_focus"
     ]
     blocks.sort(
         key=lambda block: (

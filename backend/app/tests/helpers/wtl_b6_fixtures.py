@@ -16,13 +16,14 @@ from app.tests.helpers.load_engine_fixtures import (
     USER_ID,
     CREATED_AT,
 )
+from app.services.training_blocks import calendar_week_bounds
 from app.tests.helpers.seed import (
     seed_activity,
     seed_activity_class,
     seed_activity_log,
     seed_rule,
-    seed_training_block,
 )
+from app.tests.helpers.weekly_focus_fixtures import seed_weekly_focus_block
 
 # Strip tiers documented in WTL.B6 tests — implementation must match.
 LOAD_RISK_STRIP_CAUTION_AT = 2.5
@@ -150,11 +151,15 @@ def seed_wtl_b6_dashboard_graph(app_with_test_database: FastAPI) -> None:
             is_active=activity["is_active"],
         )
 
-    seed_training_block(
+    week_start, week_end = calendar_week_bounds(date.fromisoformat(AS_OF))
+    seed_weekly_focus_block(
         app_with_test_database,
         block_id=WTL_B6_BLOCK_ID,
-        name="WTL B6 Foot Load Block",
-        start_date=date.fromisoformat(BLOCK_START),
+        focus_series_id="fs-wtl-b6",
+        focus_title=None,
+        week_number=1,
+        start_date=week_start,
+        end_date=week_end,
         status="active",
     )
 

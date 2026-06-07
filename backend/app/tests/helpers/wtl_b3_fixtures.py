@@ -7,13 +7,14 @@ from typing import Any
 
 from fastapi import FastAPI
 
+from app.services.training_blocks import calendar_week_bounds
 from app.tests.helpers.seed import (
     seed_activity,
     seed_activity_class,
     seed_activity_log,
-    seed_training_block,
     seed_weekly_target,
 )
+from app.tests.helpers.weekly_focus_fixtures import seed_weekly_focus_block
 
 SUNDAY_AS_OF = "2026-06-07"
 MONDAY_AS_OF = "2026-06-08"
@@ -67,11 +68,15 @@ WTL_B3_CLASSES: list[dict[str, Any]] = [
 
 
 def _seed_wtl_b3_base_graph(app_with_test_database: FastAPI) -> None:
-    seed_training_block(
+    week_start, week_end = calendar_week_bounds(date.fromisoformat(SUNDAY_AS_OF))
+    seed_weekly_focus_block(
         app_with_test_database,
         block_id=WTL_B3_BLOCK_ID,
-        name="WTL B3 Block",
-        start_date=date(2026, 4, 7),
+        focus_series_id="fs-wtl-b3",
+        focus_title=None,
+        week_number=1,
+        start_date=week_start,
+        end_date=week_end,
         status="active",
     )
     for cls in WTL_B3_CLASSES:

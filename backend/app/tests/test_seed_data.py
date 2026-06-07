@@ -25,7 +25,7 @@ ALEMBIC_INI = BACKEND_ROOT / "alembic.ini"
 ALEMBIC_ROOT = BACKEND_ROOT / "alembic"
 SEED_SCRIPT = BACKEND_ROOT / "scripts" / "seed.py"
 
-PROTOTYPE_TODAY = date(2026, 5, 25)
+PROTOTYPE_TODAY = date(2026, 6, 7)
 EXPECTED_COUNTS = {
     "activity_classes": 3,
     "activities": 5,
