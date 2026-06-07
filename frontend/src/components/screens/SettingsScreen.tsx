@@ -66,6 +66,7 @@ interface BlockSummaryCardProps {
   block: TrainingBlock;
   rules: Rule[];
   activityClasses: ActivityClass[];
+  activities: Activity[];
   /** Whether the Edit rules CTA should be rendered. */
   showEditRules: boolean;
   onEditRules: () => void;
@@ -76,11 +77,13 @@ function BlockSummaryCard({
   block,
   rules,
   activityClasses,
+  activities,
   showEditRules,
   onEditRules,
   onReview,
 }: BlockSummaryCardProps): React.ReactElement {
   const classMap = new Map(activityClasses.map((c) => [c.id, c]));
+  const activityMap = new Map(activities.map((activity) => [activity.id, activity]));
   const activeRules = rules.filter((r) => r.enabled);
   const visibleRecoveryRules = activeRules
     .map((rule) => ({
@@ -118,13 +121,14 @@ function BlockSummaryCard({
           <ul className="flex flex-col divide-y divide-border-subtle">
             {visibleRecoveryRules.map(({ rule, summary }) => {
               const cls = rule.activityClassId ? classMap.get(rule.activityClassId) : null;
+              const activity = rule.activityId ? activityMap.get(rule.activityId) : null;
               return (
                 <li
                   key={rule.id}
                   className="flex items-center justify-between gap-3 py-2 text-body"
                 >
                   <span className="text-ink-muted truncate">
-                    {cls ? cls.name : 'All classes'}
+                    {activity ? activity.name : cls ? cls.name : 'All classes'}
                   </span>
                   <span className="text-ink shrink-0">{summary}</span>
                 </li>
@@ -1129,6 +1133,7 @@ export function SettingsScreen({
               block={block}
               rules={rules}
               activityClasses={activityClasses}
+              activities={activities}
               showEditRules={showEditRules}
               onEditRules={() => onEditRules?.()}
               onReview={onReview}

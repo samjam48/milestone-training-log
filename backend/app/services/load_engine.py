@@ -220,11 +220,8 @@ def _class_effective_rest_rule(
     activities: list[ActivityDict],
     rules: list[RuleDict],
 ) -> RuleDict | None:
-    rest_rules: list[RuleDict] = []
-    for activity_id in _activity_ids_for_class(class_id, activities):
-        for rule in effective_rules_for_activity(activity_id, class_id, rules):
-            if rule["rule_type"] == "rest_between_class":
-                rest_rules.append(rule)
+    del activities
+    rest_rules = _enabled_class_scoped_rules(class_id, rules, "rest_between_class")
     if not rest_rules:
         return None
     return _pick_strictest_rule(rest_rules)
@@ -294,26 +291,13 @@ def _class_load_cap_violation(
     class_logs = _class_logs_up_to(class_id, activities, logs, as_of)
 
     class_caps = _enabled_class_scoped_rules(class_id, rules, "weekly_load_cap")
-    if class_caps:
-        cap_rule = _pick_strictest_rule(class_caps)
-        window = int(cap_rule["window_days"])
-        cur_load = rolling_load(class_logs, as_of, window)
-        if cur_load >= float(cap_rule["threshold_value"]):
-            return cap_rule, cur_load
-
-    for activity_id in _activity_ids_for_class(class_id, activities):
-        exercise_caps = _enabled_exercise_scoped_rules(
-            class_id, activity_id, rules, "weekly_load_cap"
-        )
-        if not exercise_caps:
-            continue
-        cap_rule = _pick_strictest_rule(exercise_caps)
-        activity_logs = _activity_logs_up_to(activity_id, logs, as_of)
-        cur_load = rolling_load(
-            activity_logs, as_of, int(cap_rule["window_days"])
-        )
-        if cur_load >= float(cap_rule["threshold_value"]):
-            return cap_rule, cur_load
+    if not class_caps:
+        return None
+    cap_rule = _pick_strictest_rule(class_caps)
+    window = int(cap_rule["window_days"])
+    cur_load = rolling_load(class_logs, as_of, window)
+    if cur_load >= float(cap_rule["threshold_value"]):
+        return cap_rule, cur_load
     return None
 
 
@@ -324,53 +308,28 @@ def _class_frequency_violation(
     rules: list[RuleDict],
     as_of: str,
 ) -> tuple[ViolationSeverity, RuleDict] | None:
-    worst: tuple[ViolationSeverity, RuleDict] | None = None
     class_activity_ids = set(_activity_ids_for_class(class_id, activities))
 
     class_freq_rules = _enabled_class_scoped_rules(
         class_id, rules, "frequency_limit"
     )
-    if class_freq_rules:
-        freq_rule = _pick_strictest_rule(class_freq_rules)
-        window = int(freq_rule["window_days"])
-        win_start = add_days(as_of, -(window - 1))
-        count = float(
-            sum(
-                1
-                for log in logs
-                if log["activity_id"] in class_activity_ids
-                and win_start <= log["logged_date"] <= as_of
-            )
+    if not class_freq_rules:
+        return None
+    freq_rule = _pick_strictest_rule(class_freq_rules)
+    window = int(freq_rule["window_days"])
+    win_start = add_days(as_of, -(window - 1))
+    count = float(
+        sum(
+            1
+            for log in logs
+            if log["activity_id"] in class_activity_ids
+            and win_start <= log["logged_date"] <= as_of
         )
-        severity = _severity_from_ratio(count, float(freq_rule["threshold_value"]))
-        if severity is not None:
-            worst = (severity, freq_rule)
-
-    for activity_id in class_activity_ids:
-        exercise_freq_rules = _enabled_exercise_scoped_rules(
-            class_id, activity_id, rules, "frequency_limit"
-        )
-        if not exercise_freq_rules:
-            continue
-        freq_rule = _pick_strictest_rule(exercise_freq_rules)
-        window = int(freq_rule["window_days"])
-        win_start = add_days(as_of, -(window - 1))
-        count = float(
-            sum(
-                1
-                for log in logs
-                if log["activity_id"] == activity_id
-                and win_start <= log["logged_date"] <= as_of
-            )
-        )
-        severity = _severity_from_ratio(count, float(freq_rule["threshold_value"]))
-        if severity is None:
-            continue
-        if worst is None or (
-            severity == "danger" and worst[0] != "danger"
-        ):
-            worst = (severity, freq_rule)
-    return worst
+    )
+    severity = _severity_from_ratio(count, float(freq_rule["threshold_value"]))
+    if severity is None:
+        return None
+    return severity, freq_rule
 
 
 def _class_consecutive_violation(
@@ -390,16 +349,6 @@ def _class_consecutive_violation(
         if _violations_consecutive_day_limit(
             rule, class_activity_ids, logs, as_of
         ):
-            return rule
-
-    for activity_id in class_activity_ids:
-        exercise_rules = _enabled_exercise_scoped_rules(
-            class_id, activity_id, rules, "consecutive_day_limit"
-        )
-        if not exercise_rules:
-            continue
-        rule = _pick_strictest_rule(exercise_rules)
-        if _violations_consecutive_day_limit(rule, {activity_id}, logs, as_of):
             return rule
     return None
 
@@ -460,12 +409,9 @@ def _class_volume_cap_violation(
     as_of: str,
 ) -> tuple[ViolationSeverity, RuleDict, str] | None:
     worst: tuple[ViolationSeverity, RuleDict, str] | None = None
-    for activity_id in _activity_ids_for_class(class_id, activities):
-        effective = effective_rules_for_activity(activity_id, class_id, rules)
-        for rule in effective:
-            rule_type = rule["rule_type"]
-            if rule_type not in _VOLUME_CAP_RULE_TYPES:
-                continue
+    class_activity_ids = set(_activity_ids_for_class(class_id, activities))
+    for rule_type in _VOLUME_CAP_RULE_TYPES:
+        for rule in _enabled_class_scoped_rules(class_id, rules, rule_type):
             limit_unit = rule.get("limit_unit")
             if not limit_unit:
                 continue
@@ -474,7 +420,7 @@ def _class_volume_cap_violation(
             activity_logs = [
                 log
                 for log in logs
-                if log["activity_id"] == activity_id
+                if log["activity_id"] in class_activity_ids
                 and win_start <= log["logged_date"] <= as_of
             ]
             if rule_type == "daily_volume_cap":
@@ -497,9 +443,7 @@ def _class_volume_cap_violation(
                     f"of {int(threshold)} cap"
                 ),
             )
-            if worst is None or (
-                severity == "danger" and worst[0] != "danger"
-            ):
+            if worst is None or severity == "danger" and worst[0] != "danger":
                 worst = candidate
     return worst
 
@@ -922,6 +866,29 @@ def _build_class_rest_row(
     return row
 
 
+def _worst_violation(
+    violations: list[RuleViolationSnapshot],
+) -> RuleViolationSnapshot | None:
+    if not violations:
+        return None
+    return max(
+        violations,
+        key=lambda violation: _STATE_SAFE_ORDER.get(violation["severity"], 0),
+    )
+
+
+def _status_from_violation(
+    class_id: str,
+    violation: RuleViolationSnapshot,
+) -> ActivityClassStatus:
+    return {
+        "activity_class_id": class_id,
+        "state": violation["severity"],
+        "label": "Rest" if violation["severity"] == "danger" else "Pushing it",
+        "reason": violation["message"],
+    }
+
+
 def compute_suggestion_buckets(
     as_of: str,
     activity_classes: list[ActivityClassDict],
@@ -938,6 +905,16 @@ def compute_suggestion_buckets(
         as_of, activity_classes, activities, logs, rules
     )
     status_map = {status["activity_class_id"]: status for status in class_statuses}
+    class_wide_statuses = compute_class_statuses(
+        as_of,
+        activity_classes,
+        activities,
+        logs,
+        [rule for rule in rules if not rule.get("activity_id")],
+    )
+    class_wide_status_map = {
+        status["activity_class_id"]: status for status in class_wide_statuses
+    }
     class_map = {cls["id"]: cls for cls in activity_classes}
 
     done_rows: list[Suggestion] = []
@@ -951,7 +928,22 @@ def compute_suggestion_buckets(
 
         activity_id = activity["id"]
         class_id = activity["activity_class_id"]
-        status = status_map.get(class_id)
+        class_wide_status = class_wide_status_map.get(class_id)
+        activity_violations = check_violations(
+            activity_id,
+            volume_value=0,
+            rpe=5,
+            activities=activities,
+            logs=logs,
+            rules=rules,
+            as_of=as_of,
+            duration_minutes=1,
+        )
+        activity_status = None
+        worst_violation = _worst_violation(activity_violations)
+        if worst_violation is not None:
+            activity_status = _status_from_violation(class_id, worst_violation)
+        status = activity_status or class_wide_status or status_map.get(class_id)
         cls = class_map.get(class_id)
 
         logged_today = any(
@@ -983,14 +975,22 @@ def compute_suggestion_buckets(
         ):
             continue
 
-        if status is not None and status["state"] in {"caution", "danger"}:
+        rest_status = activity_status
+        if (
+            rest_status is None
+            and class_wide_status is not None
+            and class_wide_status["state"] in {"caution", "danger"}
+        ):
+            rest_status = class_wide_status
+
+        if rest_status is not None and rest_status["state"] in {"caution", "danger"}:
             rest_rows.append(
                 _build_suggestion_row(
                     activity=activity,
                     bucket="rest",
-                    status=status,
+                    status=rest_status,
                     cls=cls,
-                    description=status["reason"],
+                    description=rest_status["reason"],
                 )
             )
             rest_by_class.setdefault(class_id, []).append(activity["name"])
@@ -1396,21 +1396,19 @@ def _violations_loop_rules(
     enabled_rules: list[RuleDict],
 ) -> list[RuleViolationSnapshot]:
     violations: list[RuleViolationSnapshot] = []
-    for rule in enabled_rules:
-        if (
-            rule["rule_type"] == "frequency_limit"
-            and rule["activity_class_id"] == class_id
-        ):
+    del activities
+    for rule in effective_rules_for_activity(activity["id"], class_id, enabled_rules):
+        scoped_activity_ids = (
+            {activity["id"]} if rule.get("activity_id") == activity["id"] else class_activity_ids
+        )
+        if rule["rule_type"] == "frequency_limit":
             violations.extend(
-                _violations_frequency_limit(rule, class_activity_ids, logs, as_of)
+                _violations_frequency_limit(rule, scoped_activity_ids, logs, as_of)
             )
-        elif (
-            rule["rule_type"] == "consecutive_day_limit"
-            and rule["activity_class_id"] == class_id
-        ):
+        elif rule["rule_type"] == "consecutive_day_limit":
             violations.extend(
                 _violations_consecutive_day_limit(
-                    rule, class_activity_ids, logs, as_of
+                    rule, scoped_activity_ids, logs, as_of
                 )
             )
     return violations
@@ -1439,14 +1437,14 @@ def check_violations(
     enabled_rules = [rule for rule in rules if rule.get("enabled", True)]
     violations: list[RuleViolationSnapshot] = []
 
-    rest_rule = _enabled_class_rule(
-        enabled_rules, class_id, "rest_between_class"
-    )
-    if rest_rule is not None:
+    for rule in effective_rules_for_activity(activity_id, class_id, enabled_rules):
+        if rule["rule_type"] != "rest_between_class":
+            continue
+        scoped_activity_ids = (
+            {activity_id} if rule.get("activity_id") == activity_id else class_activity_ids
+        )
         violations.extend(
-            _violations_rest_between_class(
-                rest_rule, class_activity_ids, logs, as_of
-            )
+            _violations_rest_between_class(rule, scoped_activity_ids, logs, as_of)
         )
 
     if volume_value > 0 and rpe > 0:

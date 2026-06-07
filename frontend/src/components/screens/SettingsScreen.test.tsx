@@ -522,6 +522,29 @@ describe('SettingsScreen — Recovery Rules', () => {
     expect(screen.getByText(/all classes/i)).toBeInTheDocument();
   });
 
+  it('labels exercise-specific rules with the exercise name', () => {
+    const exerciseRule: Rule = {
+      ...RULE_FREQ,
+      id: 'rule-run-frequency',
+      activityId: ACTIVITY_RUNNING.id,
+    };
+
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      rules: [exerciseRule],
+      weeklyTargets: [],
+      activityClasses: [CLASS_RUNNING],
+      activities: [ACTIVITY_RUNNING],
+    });
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    const recoveryRules = screen.getByText(/recovery rules/i).parentElement;
+    expect(recoveryRules).not.toBeNull();
+    expect(within(recoveryRules!).getByText(ACTIVITY_RUNNING.name)).toBeInTheDocument();
+    expect(within(recoveryRules!).queryByText(CLASS_RUNNING.name)).not.toBeInTheDocument();
+  });
+
   it('falls back to raw ruleType when rule type is not in taxonomy map', () => {
     const unknownRule: Rule = {
       ...RULE_REST,

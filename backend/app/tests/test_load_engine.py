@@ -423,8 +423,8 @@ def test_effective_rules_for_activity_separates_volume_caps_by_limit_unit() -> N
     assert walk_km[0]["id"] == "exercise-km"
 
 
-def test_compute_class_statuses_uses_exercise_cap_when_stricter_than_class() -> None:
-    """log-25 walk load 4.5 in 7d window; exercise cap 4 should beat class cap 120."""
+def test_compute_class_statuses_does_not_elevate_exercise_load_cap_to_class() -> None:
+    """Exercise-specific caps do not make the whole class look capped."""
     rules = [
         rule
         for rule in RULES
@@ -448,8 +448,7 @@ def test_compute_class_statuses_uses_exercise_cap_when_stricter_than_class() -> 
         AS_OF, ACTIVITY_CLASSES, ACTIVITIES, LOGS, rules
     )
     foot = next(s for s in statuses if s["activity_class_id"] == "cls-foot")
-    assert foot["state"] == "danger"
-    assert "cap" in foot["reason"].lower()
+    assert foot["label"] != "Load Cap Hit"
 
 
 def test_compute_class_statuses_uses_class_cap_when_no_exercise_rule() -> None:
@@ -480,7 +479,7 @@ def test_compute_class_statuses_no_cap_means_no_cap_violation() -> None:
     assert foot["label"] != "Load Cap Hit"
 
 
-def test_compute_class_statuses_flags_frequency_with_effective_rules() -> None:
+def test_compute_class_statuses_does_not_elevate_exercise_frequency_to_class() -> None:
     rules = [
         rule for rule in RULES if rule["rule_type"] != "frequency_limit"
     ] + [
@@ -496,8 +495,7 @@ def test_compute_class_statuses_flags_frequency_with_effective_rules() -> None:
         AS_OF, ACTIVITY_CLASSES, ACTIVITIES, LOGS, rules
     )
     foot = next(s for s in statuses if s["activity_class_id"] == "cls-foot")
-    assert foot["state"] in {"caution", "danger"}
-    assert "frequen" in foot["reason"].lower()
+    assert foot["label"] != "Frequency Limit"
 
 
 def test_compute_class_statuses_recovery_without_enabled_cap_rules_stays_safe() -> None:
@@ -609,8 +607,8 @@ def test_compute_class_statuses_class_load_cap_uses_aggregate_across_activities(
     assert "104" in foot["reason"] or "105" in foot["reason"]
 
 
-def test_compute_class_statuses_exercise_load_cap_stays_per_activity() -> None:
-    """Exercise cap ignores other activities' load in the same class."""
+def test_compute_class_statuses_exercise_load_cap_does_not_mark_class() -> None:
+    """Exercise caps are evaluated per activity, not promoted to the class."""
     logs = [
         {
             "id": "log-walk-only",
@@ -636,7 +634,7 @@ def test_compute_class_statuses_exercise_load_cap_stays_per_activity() -> None:
             id="rule-cap-foot-high",
             activity_class_id="cls-foot",
             rule_type="weekly_load_cap",
-            threshold_value=500,
+            threshold_value=600,
         ),
         _make_rule(
             id="rule-cap-walk-low",
@@ -650,8 +648,7 @@ def test_compute_class_statuses_exercise_load_cap_stays_per_activity() -> None:
         AS_OF, ACTIVITY_CLASSES, ACTIVITIES, logs, rules
     )
     foot = next(s for s in statuses if s["activity_class_id"] == "cls-foot")
-    assert foot["state"] == "danger"
-    assert "5" in foot["reason"] or "4" in foot["reason"]
+    assert foot["label"] != "Load Cap Hit"
 
 
 def test_compute_class_statuses_class_frequency_counts_all_activities() -> None:
@@ -692,8 +689,8 @@ def test_compute_class_statuses_class_frequency_counts_all_activities() -> None:
     assert "frequen" in foot["reason"].lower()
 
 
-def test_compute_class_statuses_exercise_frequency_stays_per_activity() -> None:
-    """Exercise frequency counts only that activity; bike sessions do not count."""
+def test_compute_class_statuses_exercise_frequency_does_not_mark_class() -> None:
+    """Exercise frequency counts only that activity and does not cap siblings."""
     logs = [
         {
             "id": "log-walk",
@@ -733,8 +730,7 @@ def test_compute_class_statuses_exercise_frequency_stays_per_activity() -> None:
         AS_OF, ACTIVITY_CLASSES, ACTIVITIES, logs, rules
     )
     foot = next(s for s in statuses if s["activity_class_id"] == "cls-foot")
-    assert foot["state"] in {"caution", "danger"}
-    assert "frequen" in foot["reason"].lower()
+    assert foot["label"] != "Frequency Limit"
 
 
 def test_compute_class_statuses_class_consecutive_across_activities() -> None:
@@ -1007,6 +1003,57 @@ def test_compute_suggestion_buckets_class_rest_blacklists_class() -> None:
         description = class_rows[0].get("description")
         assert description
         assert len(description) <= 80
+
+
+def test_compute_suggestion_buckets_exercise_rule_does_not_blacklist_sibling_activity() -> None:
+    """A capped exercise belongs in rest without moving unrestricted siblings there."""
+    as_of = "2026-05-25"
+    no_impact_class = {
+        "id": "cls-no-impact",
+        "name": "No impact",
+        "type": "performance",
+    }
+    swim = {
+        "id": "act-swim",
+        "activity_class_id": no_impact_class["id"],
+        "name": "Swimming",
+        "type": "performance",
+        "is_active": True,
+    }
+    cross_trainer = {
+        "id": "act-cross-trainer",
+        "activity_class_id": no_impact_class["id"],
+        "name": "Cross trainer",
+        "type": "performance",
+        "is_active": True,
+    }
+    logs = [
+        _make_log("act-cross-trainer", f"2026-05-{19 + index}")
+        for index in range(0, 6)
+    ]
+    rules = [
+        _make_rule(
+            id="rule-cross-frequency",
+            activity_class_id=no_impact_class["id"],
+            activity_id="act-cross-trainer",
+            rule_type="frequency_limit",
+            threshold_value=6,
+            window_days=7,
+        )
+    ]
+
+    buckets = _call_suggestion_buckets(
+        as_of=as_of,
+        classes=[no_impact_class],
+        activities=[swim, cross_trainer],
+        logs=logs,
+        rules=rules,
+        weekly_targets=[],
+    )
+
+    assert "act-cross-trainer" in _bucket_ids(buckets, "rest")
+    assert "act-swim" in _bucket_ids(buckets, "do")
+    assert "act-swim" not in _bucket_ids(buckets, "rest")
 
 
 def test_compute_suggestion_buckets_achieved_goal_activity_skipped_from_do() -> None:
@@ -1478,6 +1525,75 @@ def test_check_violations_flags_frequency_limit_at_threshold() -> None:
     )
     freq = next(v for v in violations if v["rule_type"] == "frequency_limit")
     assert freq["severity"] == "danger"
+
+
+def test_check_violations_exercise_frequency_does_not_apply_to_sibling_activity() -> None:
+    """An exercise-only frequency rule must not block other activities in the class."""
+    no_impact_class = {
+        "id": "cls-no-impact",
+        "name": "No impact",
+        "type": "performance",
+    }
+    swim = {
+        "id": "act-swim",
+        "activity_class_id": no_impact_class["id"],
+        "name": "Swimming",
+        "type": "performance",
+        "is_active": True,
+    }
+    cross_trainer = {
+        "id": "act-cross-trainer",
+        "activity_class_id": no_impact_class["id"],
+        "name": "Cross trainer",
+        "type": "performance",
+        "is_active": True,
+    }
+    logs = [
+        {
+            "id": f"log-cross-{index}",
+            "activity_id": "act-cross-trainer",
+            "logged_date": f"2026-05-2{index}",
+            "volume_value": 20.0,
+            "rpe": 5,
+        }
+        for index in range(0, 6)
+    ]
+    rules = [
+        {
+            "id": "rule-cross-frequency",
+            "activity_class_id": no_impact_class["id"],
+            "activity_id": "act-cross-trainer",
+            "rule_type": "frequency_limit",
+            "threshold_value": 6,
+            "window_days": 7,
+            "enabled": True,
+        }
+    ]
+
+    swim_violations = check_violations(
+        "act-swim",
+        volume_value=20.0,
+        rpe=3,
+        activities=[swim, cross_trainer],
+        logs=logs,
+        rules=rules,
+        as_of=AS_OF,
+    )
+    cross_violations = check_violations(
+        "act-cross-trainer",
+        volume_value=20.0,
+        rpe=3,
+        activities=[swim, cross_trainer],
+        logs=logs,
+        rules=rules,
+        as_of=AS_OF,
+    )
+
+    assert all(v["rule_type"] != "frequency_limit" for v in swim_violations)
+    cross_freq = next(
+        v for v in cross_violations if v["rule_type"] == "frequency_limit"
+    )
+    assert cross_freq["severity"] == "danger"
 
 
 def test_check_violations_flags_consecutive_day_limit_danger() -> None:
