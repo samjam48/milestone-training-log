@@ -764,55 +764,72 @@ def _goal_achieved_in_live_period(
     return False
 
 
-def _recovery_target_met_on_day(
-    target: RecoveryTargetDict,
-    logs: list[LogDict],
-    as_of: str,
-) -> bool:
-    activity_id = target["activity_id"]
-    target_frequency = int(target["target_frequency"])
-    if target.get("frequency_unit") == "weekly":
-        week_start = add_days(as_of, -(parse_iso_date(as_of).weekday()))
-        count = sum(
-            1
-            for log in logs
-            if log["activity_id"] == activity_id
-            and week_start <= log["logged_date"] <= as_of
-        )
-        return count >= target_frequency
-
-    count = sum(
-        1
-        for log in logs
-        if log["activity_id"] == activity_id and log["logged_date"] == as_of
-    )
-    return count >= target_frequency
-
-
-def _recovery_daily_target_met(
-    activity_id: str,
-    class_id: str,
-    activity_classes: list[ActivityClassDict],
-    recovery_targets: list[RecoveryTargetDict],
-    logs: list[LogDict],
-    as_of: str,
-) -> bool:
-    class_map = {cls["id"]: cls for cls in activity_classes}
-    cls = class_map.get(class_id)
-    if cls is None or cls.get("type") != "recovery":
-        return False
-    for target in recovery_targets:
-        if target.get("activity_id") != activity_id:
-            continue
-        if _recovery_target_met_on_day(target, logs, as_of):
-            return True
-    return False
-
-
 def _truncate_description(text: str, max_len: int = _DESCRIPTION_MAX_LEN) -> str:
     if len(text) <= max_len:
         return text
     return text[: max_len - 1] + "…"
+
+
+def _weekly_target_remaining_reason(remaining: float, unit: str) -> str:
+    if unit == "sessions":
+        count = int(remaining) if remaining == int(remaining) else remaining
+        label = "session" if count == 1 else "sessions"
+        return f"{count} {label} left this week"
+    display = int(remaining) if remaining == int(remaining) else round(remaining, 1)
+    return f"{display} {unit} left this week"
+
+
+def _incomplete_weekly_target_reasons(
+    weekly_targets: list[WeeklyTargetDict],
+    activity_classes: list[ActivityClassDict],
+    activities: list[ActivityDict],
+    logs: list[LogDict],
+    as_of: str,
+) -> dict[str, str]:
+    if not weekly_targets:
+        return {}
+
+    week_start, _week_end = this_week_bounds(as_of)
+    progress_rows = compute_weekly_progress(
+        weekly_targets,
+        activity_classes,
+        activities,
+        logs,
+        week_start,
+        as_of,
+    )
+    reasons: dict[str, str] = {}
+    activity_scoped_ids: set[str] = set()
+
+    for row in progress_rows:
+        if row["value"] >= row["target"]:
+            continue
+        remaining = row["target"] - row["value"]
+        reason = _weekly_target_remaining_reason(remaining, row["unit"])
+        activity_id = row.get("activity_id")
+        if activity_id is not None:
+            reasons[activity_id] = reason
+            activity_scoped_ids.add(activity_id)
+
+    for row in progress_rows:
+        if row["value"] >= row["target"]:
+            continue
+        if row.get("activity_id") is not None:
+            continue
+        remaining = row["target"] - row["value"]
+        reason = _weekly_target_remaining_reason(remaining, row["unit"])
+        class_id = row["activity_class_id"]
+        for activity in activities:
+            if not activity.get("is_active", True):
+                continue
+            if activity["activity_class_id"] != class_id:
+                continue
+            activity_id = activity["id"]
+            if activity_id in activity_scoped_ids:
+                continue
+            reasons.setdefault(activity_id, reason)
+
+    return reasons
 
 
 def _build_suggestion_row(
@@ -822,20 +839,22 @@ def _build_suggestion_row(
     status: ActivityClassStatus | None,
     cls: ActivityClassDict | None,
     description: str | None = None,
+    reason: str | None = None,
 ) -> Suggestion:
     class_id = activity["activity_class_id"]
+    default_reason = (
+        status["reason"]
+        if status
+        else (
+            f"Ready — {cls['name'] if cls else 'this class'} "
+            "has no active restrictions."
+        )
+    )
     row: Suggestion = {
         "id": activity["id"],
         "label": activity["name"],
         "state": status["state"] if status else "safe",
-        "reason": (
-            status["reason"]
-            if status
-            else (
-                f"Ready — {cls['name'] if cls else 'this class'} "
-                "has no active restrictions."
-            )
-        ),
+        "reason": reason if reason is not None else default_reason,
         "bucket": bucket,
         "scope": "activity",
         "activity_class_id": class_id,
@@ -907,7 +926,15 @@ def compute_suggestion_buckets(
     goals: list[GoalDict],
     weekly_targets: list[WeeklyTargetDict],
 ) -> list[Suggestion]:
-    del weekly_targets  # context only for callers; bucket logic does not use it
+    del recovery_targets  # legacy storage; weekly targets drive Do suggestions
+
+    weekly_do_reasons = _incomplete_weekly_target_reasons(
+        weekly_targets,
+        activity_classes,
+        activities,
+        logs,
+        as_of,
+    )
 
     class_statuses = compute_class_statuses(
         as_of, activity_classes, activities, logs, rules
@@ -973,15 +1000,7 @@ def compute_suggestion_buckets(
         if _goal_achieved_in_live_period(goals, activity_id, as_of):
             continue
 
-        if _recovery_daily_target_met(
-            activity_id,
-            class_id,
-            activity_classes,
-            recovery_targets,
-            logs,
-            as_of,
-        ):
-            continue
+        weekly_reason = weekly_do_reasons.get(activity_id)
 
         rest_status = activity_status
         if (
@@ -1004,6 +1023,9 @@ def compute_suggestion_buckets(
             rest_by_class.setdefault(class_id, []).append(activity["name"])
             continue
 
+        if weekly_reason is None:
+            continue
+
         do_rows.append(
             _build_suggestion_row(
                 activity=activity,
@@ -1011,6 +1033,7 @@ def compute_suggestion_buckets(
                 status=status,
                 cls=cls,
                 description=None,
+                reason=weekly_reason,
             )
         )
 

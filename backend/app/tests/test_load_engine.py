@@ -1041,6 +1041,16 @@ def test_compute_suggestion_buckets_exercise_rule_does_not_blacklist_sibling_act
             window_days=7,
         )
     ]
+    weekly_targets = [
+        {
+            "id": "wt-swim",
+            "training_block_id": "blk-1",
+            "activity_class_id": no_impact_class["id"],
+            "activity_id": "act-swim",
+            "target_value": 3,
+            "target_unit": "sessions",
+        },
+    ]
 
     buckets = _call_suggestion_buckets(
         as_of=as_of,
@@ -1048,7 +1058,7 @@ def test_compute_suggestion_buckets_exercise_rule_does_not_blacklist_sibling_act
         activities=[swim, cross_trainer],
         logs=logs,
         rules=rules,
-        weekly_targets=[],
+        weekly_targets=weekly_targets,
     )
 
     assert "act-cross-trainer" in _bucket_ids(buckets, "rest")
@@ -1076,8 +1086,8 @@ def test_compute_suggestion_buckets_achieved_goal_activity_skipped_from_do() -> 
     assert "act-bike" not in _bucket_ids(buckets, "do")
 
 
-def test_compute_suggestion_buckets_recovery_target_unmet_still_in_do() -> None:
-    """Recovery activity with unmet daily target remains in do."""
+def test_compute_suggestion_buckets_recovery_daily_target_alone_not_in_do() -> None:
+    """WTL.B4: daily recovery targets no longer drive Do; weekly targets do."""
     as_of = "2026-05-25"
     stretch = next(activity for activity in ACTIVITIES if activity["id"] == "act-stretch")
     recovery_class = next(cls for cls in ACTIVITY_CLASSES if cls["id"] == "cls-recovery")
@@ -1093,11 +1103,7 @@ def test_compute_suggestion_buckets_recovery_target_unmet_still_in_do() -> None:
         weekly_targets=[],
     )
 
-    assert "act-stretch" in _bucket_ids(buckets, "do")
-    do_row = next(row for row in buckets if row["id"] == "act-stretch")
-    assert do_row["bucket"] == "do"
-    assert do_row["scope"] == "activity"
-    assert do_row["activity_class_id"] == "cls-recovery"
+    assert "act-stretch" not in _bucket_ids(buckets, "do")
 
 
 def test_compute_suggestion_buckets_rows_include_bucket_scope_and_description_fields() -> None:
@@ -1110,6 +1116,358 @@ def test_compute_suggestion_buckets_rows_include_bucket_scope_and_description_fi
         assert row.get("scope") in {"activity", "class"}
         assert "activity_class_id" in row
         assert "description" in row
+
+
+# ---------------------------------------------------------------------------
+# WTL.B4 — compute_suggestion_buckets use weekly target completion
+# ---------------------------------------------------------------------------
+
+
+def _wtl_b4_target(
+    target_id: str,
+    *,
+    activity_id: str | None = None,
+    target_value: float = 3.0,
+    target_unit: str = "sessions",
+) -> dict[str, Any]:
+    return _wtl_b3_target(
+        target_id,
+        activity_id=activity_id,
+        target_value=target_value,
+        target_unit=target_unit,
+    )
+
+
+def _wtl_b4_row(buckets: list[Suggestion], activity_id: str, bucket: str) -> Suggestion | None:
+    return next(
+        (row for row in buckets if row["id"] == activity_id and row.get("bucket") == bucket),
+        None,
+    )
+
+
+def test_compute_suggestion_buckets_incomplete_weekly_target_in_do_with_sessions_reason() -> None:
+    """Incomplete activity-scoped weekly target appears in Do with remaining sessions."""
+    as_of = "2026-06-07"
+    logs = [
+        _wtl_b3_log("log-monday", WTL_B3_WALK, "2026-06-01"),
+        _wtl_b3_log("log-wednesday", WTL_B3_WALK, "2026-06-03"),
+    ]
+    weekly_targets = [
+        _wtl_b4_target("wt-walk", activity_id=WTL_B3_WALK, target_value=4, target_unit="sessions"),
+    ]
+
+    buckets = _call_suggestion_buckets(
+        as_of=as_of,
+        classes=WTL_B3_CLASSES,
+        activities=WTL_B3_ACTIVITIES,
+        logs=logs,
+        rules=[],
+        recovery_targets=[],
+        goals=[],
+        weekly_targets=weekly_targets,
+    )
+
+    do_row = _wtl_b4_row(buckets, WTL_B3_WALK, "do")
+    assert do_row is not None
+    assert "2 sessions left this week" in do_row["reason"]
+
+
+def test_compute_suggestion_buckets_incomplete_weekly_target_reason_km_remaining() -> None:
+    """Incomplete km weekly target reason names remaining distance."""
+    as_of = "2026-06-07"
+    logs = [
+        _wtl_b3_log("log-monday", WTL_B3_WALK, "2026-06-01", volume_value=3.0),
+        _wtl_b3_log("log-saturday", WTL_B3_WALK, "2026-06-06", volume_value=1.5),
+    ]
+    weekly_targets = [
+        _wtl_b4_target("wt-walk", activity_id=WTL_B3_WALK, target_value=8, target_unit="km"),
+    ]
+
+    buckets = _call_suggestion_buckets(
+        as_of=as_of,
+        classes=WTL_B3_CLASSES,
+        activities=WTL_B3_ACTIVITIES,
+        logs=logs,
+        rules=[],
+        recovery_targets=[],
+        goals=[],
+        weekly_targets=weekly_targets,
+    )
+
+    do_row = _wtl_b4_row(buckets, WTL_B3_WALK, "do")
+    assert do_row is not None
+    assert "3.5 km left this week" in do_row["reason"]
+
+
+def test_compute_suggestion_buckets_completed_weekly_target_not_in_do() -> None:
+    """Exactly complete weekly target is absent from Do until next Monday."""
+    as_of = "2026-06-07"
+    logs = [
+        _wtl_b3_log("log-monday", WTL_B3_WALK, "2026-06-01", volume_value=4.0),
+        _wtl_b3_log("log-saturday", WTL_B3_WALK, "2026-06-06", volume_value=4.0),
+    ]
+    weekly_targets = [
+        _wtl_b4_target("wt-walk", activity_id=WTL_B3_WALK, target_value=8, target_unit="km"),
+    ]
+
+    buckets = _call_suggestion_buckets(
+        as_of=as_of,
+        classes=WTL_B3_CLASSES,
+        activities=WTL_B3_ACTIVITIES,
+        logs=logs,
+        rules=[],
+        recovery_targets=[],
+        goals=[],
+        weekly_targets=weekly_targets,
+    )
+
+    assert WTL_B3_WALK not in _bucket_ids(buckets, "do")
+
+
+def test_compute_suggestion_buckets_over_complete_weekly_target_not_in_do() -> None:
+    """Over-complete weekly target is absent from Do."""
+    as_of = "2026-06-07"
+    logs = [
+        _wtl_b3_log("log-monday", WTL_B3_WALK, "2026-06-01", volume_value=6.0),
+        _wtl_b3_log("log-saturday", WTL_B3_WALK, "2026-06-06", volume_value=5.0),
+    ]
+    weekly_targets = [
+        _wtl_b4_target("wt-walk", activity_id=WTL_B3_WALK, target_value=8, target_unit="km"),
+    ]
+
+    buckets = _call_suggestion_buckets(
+        as_of=as_of,
+        classes=WTL_B3_CLASSES,
+        activities=WTL_B3_ACTIVITIES,
+        logs=logs,
+        rules=[],
+        recovery_targets=[],
+        goals=[],
+        weekly_targets=weekly_targets,
+    )
+
+    assert WTL_B3_WALK not in _bucket_ids(buckets, "do")
+
+
+def test_compute_suggestion_buckets_completed_target_reappears_in_do_on_monday() -> None:
+    """Completed target on Sunday is absent; new week on Tuesday returns incomplete target to Do."""
+    sunday_logs = [
+        _wtl_b3_log("log-monday", WTL_B3_WALK, "2026-06-01", volume_value=4.0),
+        _wtl_b3_log("log-saturday", WTL_B3_WALK, "2026-06-06", volume_value=4.0),
+    ]
+    tuesday_logs = sunday_logs + [
+        _wtl_b3_log("log-new-monday", WTL_B3_WALK, "2026-06-08", volume_value=2.0),
+    ]
+    weekly_targets = [
+        _wtl_b4_target("wt-walk", activity_id=WTL_B3_WALK, target_value=8, target_unit="km"),
+    ]
+
+    sunday_buckets = _call_suggestion_buckets(
+        as_of="2026-06-07",
+        classes=WTL_B3_CLASSES,
+        activities=WTL_B3_ACTIVITIES,
+        logs=sunday_logs,
+        rules=[],
+        recovery_targets=[],
+        goals=[],
+        weekly_targets=weekly_targets,
+    )
+    tuesday_buckets = _call_suggestion_buckets(
+        as_of="2026-06-09",
+        classes=WTL_B3_CLASSES,
+        activities=WTL_B3_ACTIVITIES,
+        logs=tuesday_logs,
+        rules=[],
+        recovery_targets=[],
+        goals=[],
+        weekly_targets=weekly_targets,
+    )
+
+    assert WTL_B3_WALK not in _bucket_ids(sunday_buckets, "do")
+    tuesday_do = _wtl_b4_row(tuesday_buckets, WTL_B3_WALK, "do")
+    assert tuesday_do is not None
+    assert "6 km left this week" in tuesday_do["reason"]
+
+
+def test_compute_suggestion_buckets_sunday_uses_monday_through_sunday_week() -> None:
+    """Prior-Sunday logs do not count toward the current week's target completion."""
+    as_of = "2026-06-07"
+    logs = [
+        _wtl_b3_log("log-prior-sunday", WTL_B3_WALK, "2026-05-31", volume_value=9.0),
+        _wtl_b3_log("log-monday", WTL_B3_WALK, "2026-06-01", volume_value=1.0),
+    ]
+    weekly_targets = [
+        _wtl_b4_target("wt-walk", activity_id=WTL_B3_WALK, target_value=4, target_unit="sessions"),
+    ]
+
+    buckets = _call_suggestion_buckets(
+        as_of=as_of,
+        classes=WTL_B3_CLASSES,
+        activities=WTL_B3_ACTIVITIES,
+        logs=logs,
+        rules=[],
+        recovery_targets=[],
+        goals=[],
+        weekly_targets=weekly_targets,
+    )
+
+    do_row = _wtl_b4_row(buckets, WTL_B3_WALK, "do")
+    assert do_row is not None
+    assert "3 sessions left this week" in do_row["reason"]
+
+
+def test_compute_suggestion_buckets_rest_overrides_incomplete_weekly_target() -> None:
+    """Rest rules win over incomplete weekly targets."""
+    as_of = "2026-06-07"
+    logs = [_wtl_b3_log("log-saturday", WTL_B3_WALK, "2026-06-06")]
+    rules = [
+        _make_rule(
+            id="rule-rest-foot",
+            activity_class_id=WTL_B3_CLASS,
+            rule_type="rest_between_class",
+            threshold_value=3,
+            window_days=3,
+        ),
+    ]
+    weekly_targets = [
+        _wtl_b4_target("wt-walk", activity_id=WTL_B3_WALK, target_value=4, target_unit="sessions"),
+    ]
+
+    buckets = _call_suggestion_buckets(
+        as_of=as_of,
+        classes=WTL_B3_CLASSES,
+        activities=WTL_B3_ACTIVITIES,
+        logs=logs,
+        rules=rules,
+        recovery_targets=[],
+        goals=[],
+        weekly_targets=weekly_targets,
+    )
+
+    assert WTL_B3_WALK not in _bucket_ids(buckets, "do")
+    assert WTL_B3_WALK in _bucket_ids(buckets, "rest")
+
+
+def test_compute_suggestion_buckets_big_goal_excludes_from_do_with_weekly_target() -> None:
+    """Achieved Big goal exclusions continue when a weekly target exists."""
+    as_of = "2026-06-07"
+    bike = next(activity for activity in WTL_B3_ACTIVITIES if activity["id"] == WTL_B3_BIKE)
+    goals = [_make_goal(WTL_B3_BIKE, status="achieved")]
+    weekly_targets = [
+        _wtl_b4_target("wt-bike", activity_id=WTL_B3_BIKE, target_value=60, target_unit="minutes"),
+    ]
+
+    buckets = _call_suggestion_buckets(
+        as_of=as_of,
+        classes=WTL_B3_CLASSES,
+        activities=[bike],
+        logs=[],
+        rules=[],
+        recovery_targets=[],
+        goals=goals,
+        weekly_targets=weekly_targets,
+    )
+
+    assert WTL_B3_BIKE not in _bucket_ids(buckets, "do")
+
+
+def test_compute_suggestion_buckets_inactive_activity_not_suggested() -> None:
+    """Inactive activities are not suggested even with an incomplete weekly target."""
+    as_of = "2026-06-07"
+    stretch = next(activity for activity in WTL_B3_ACTIVITIES if activity["id"] == WTL_B3_STRETCH)
+    weekly_targets = [
+        _wtl_b4_target(
+            "wt-stretch",
+            activity_id=WTL_B3_STRETCH,
+            target_value=4,
+            target_unit="sessions",
+        ),
+    ]
+
+    buckets = _call_suggestion_buckets(
+        as_of=as_of,
+        classes=WTL_B3_CLASSES,
+        activities=[stretch],
+        logs=[],
+        rules=[],
+        recovery_targets=[],
+        goals=[],
+        weekly_targets=weekly_targets,
+    )
+
+    assert WTL_B3_STRETCH not in _bucket_ids(buckets, "do")
+    assert WTL_B3_STRETCH not in _bucket_ids(buckets, "rest")
+    assert WTL_B3_STRETCH not in _bucket_ids(buckets, "done")
+
+
+def test_compute_suggestion_buckets_logged_today_in_done_with_incomplete_weekly_target() -> None:
+    """Activity logged today appears in Done, not Do, even when the weekly target is incomplete."""
+    as_of = "2026-06-07"
+    logs = [_wtl_b3_log("log-today", WTL_B3_WALK, as_of, volume_value=1.0)]
+    weekly_targets = [
+        _wtl_b4_target("wt-walk", activity_id=WTL_B3_WALK, target_value=8, target_unit="km"),
+    ]
+
+    buckets = _call_suggestion_buckets(
+        as_of=as_of,
+        classes=WTL_B3_CLASSES,
+        activities=WTL_B3_ACTIVITIES,
+        logs=logs,
+        rules=[],
+        recovery_targets=[],
+        goals=[],
+        weekly_targets=weekly_targets,
+    )
+
+    assert WTL_B3_WALK in _bucket_ids(buckets, "done")
+    assert WTL_B3_WALK not in _bucket_ids(buckets, "do")
+
+
+def test_compute_suggestion_buckets_no_weekly_target_activity_not_in_do() -> None:
+    """Activities without a weekly target are not suggested in Do."""
+    as_of = "2026-06-07"
+    walk = next(activity for activity in WTL_B3_ACTIVITIES if activity["id"] == WTL_B3_WALK)
+    bike = next(activity for activity in WTL_B3_ACTIVITIES if activity["id"] == WTL_B3_BIKE)
+    weekly_targets = [
+        _wtl_b4_target("wt-bike", activity_id=WTL_B3_BIKE, target_value=60, target_unit="minutes"),
+    ]
+
+    buckets = _call_suggestion_buckets(
+        as_of=as_of,
+        classes=WTL_B3_CLASSES,
+        activities=[walk, bike],
+        logs=[],
+        rules=[],
+        recovery_targets=[],
+        goals=[],
+        weekly_targets=weekly_targets,
+    )
+
+    assert WTL_B3_WALK not in _bucket_ids(buckets, "do")
+    assert WTL_B3_BIKE in _bucket_ids(buckets, "do")
+
+
+def test_compute_suggestion_buckets_legacy_class_weekly_target_in_do_when_incomplete() -> None:
+    """Legacy class-scoped weekly targets can drive Do for active class activities."""
+    as_of = "2026-06-07"
+    logs = [_wtl_b3_log("log-monday", WTL_B3_WALK, "2026-06-01")]
+    weekly_targets = [_wtl_b4_target("wt-class", target_value=4, target_unit="sessions")]
+
+    buckets = _call_suggestion_buckets(
+        as_of=as_of,
+        classes=WTL_B3_CLASSES,
+        activities=WTL_B3_ACTIVITIES,
+        logs=logs,
+        rules=[],
+        recovery_targets=[],
+        goals=[],
+        weekly_targets=weekly_targets,
+    )
+
+    assert WTL_B3_WALK in _bucket_ids(buckets, "do")
+    do_row = _wtl_b4_row(buckets, WTL_B3_WALK, "do")
+    assert do_row is not None
+    assert "3 sessions left this week" in do_row["reason"]
 
 
 # ---------------------------------------------------------------------------

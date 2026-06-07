@@ -1024,3 +1024,134 @@ def test_get_dashboard_weekly_progress_empty_when_no_targets(
     dashboard = get_dashboard(session, as_of=date.fromisoformat(SUNDAY_AS_OF))
 
     assert dashboard.weekly_progress == []
+
+
+# ---------------------------------------------------------------------------
+# WTL.B4 — suggestion_buckets driven by weekly target completion
+# ---------------------------------------------------------------------------
+
+
+def _suggestion_row(
+    dashboard: DashboardRead,
+    *,
+    row_id: str,
+    bucket: str,
+) -> Any:
+    return next(
+        row for row in dashboard.suggestion_buckets if row.id == row_id and row.bucket == bucket
+    )
+
+
+def test_get_dashboard_suggestion_buckets_incomplete_weekly_target_in_do_with_reason(
+    app_with_test_database: FastAPI,
+    session: Session,
+) -> None:
+    from app.tests.helpers.wtl_b3_fixtures import SUNDAY_AS_OF, seed_wtl_b3_dashboard_graph
+
+    seed_wtl_b3_dashboard_graph(app_with_test_database)
+    dashboard = get_dashboard(session, as_of=date.fromisoformat(SUNDAY_AS_OF))
+
+    walk_do = _suggestion_row(dashboard, row_id="act-wtl-walk", bucket="do")
+    assert "km left this week" in walk_do.reason
+
+
+def test_get_dashboard_suggestion_buckets_completed_weekly_target_absent_from_do(
+    app_with_test_database: FastAPI,
+    session: Session,
+) -> None:
+    from app.tests.helpers.wtl_b3_fixtures import SUNDAY_AS_OF
+    from app.tests.helpers.wtl_b4_fixtures import seed_wtl_b4_completed_walk_target_graph
+
+    seed_wtl_b4_completed_walk_target_graph(app_with_test_database)
+    dashboard = get_dashboard(session, as_of=date.fromisoformat(SUNDAY_AS_OF))
+
+    do_ids = _bucket_ids(dashboard.suggestion_buckets, "do")
+    assert "act-wtl-walk" not in do_ids
+
+
+def test_get_dashboard_suggestion_buckets_rest_overrides_weekly_target(
+    app_with_test_database: FastAPI,
+    session: Session,
+) -> None:
+    from app.tests.helpers.wtl_b3_fixtures import SUNDAY_AS_OF
+    from app.tests.helpers.wtl_b4_fixtures import seed_wtl_b4_rest_overrides_target_graph
+
+    seed_wtl_b4_rest_overrides_target_graph(app_with_test_database)
+    dashboard = get_dashboard(session, as_of=date.fromisoformat(SUNDAY_AS_OF))
+
+    do_ids = _bucket_ids(dashboard.suggestion_buckets, "do")
+    rest_ids = _bucket_ids(dashboard.suggestion_buckets, "rest")
+    assert "act-wtl-walk" not in do_ids
+    assert "act-wtl-walk" in rest_ids
+
+
+def test_get_dashboard_suggestion_buckets_logged_today_in_done_not_do(
+    app_with_test_database: FastAPI,
+    session: Session,
+) -> None:
+    from app.tests.helpers.seed import seed_activity_log
+    from app.tests.helpers.wtl_b3_fixtures import SUNDAY_AS_OF, seed_wtl_b3_dashboard_graph
+
+    seed_wtl_b3_dashboard_graph(app_with_test_database)
+    seed_activity_log(
+        app_with_test_database,
+        log_id="log-wtl-b4-sunday-walk",
+        activity_id="act-wtl-walk",
+        logged_date=date.fromisoformat(SUNDAY_AS_OF),
+        duration_minutes=20,
+        volume_value=1.0,
+        volume_unit="km",
+    )
+
+    dashboard = get_dashboard(session, as_of=date.fromisoformat(SUNDAY_AS_OF))
+
+    assert "act-wtl-walk" in _bucket_ids(dashboard.suggestion_buckets, "done")
+    assert "act-wtl-walk" not in _bucket_ids(dashboard.suggestion_buckets, "do")
+
+
+def test_get_dashboard_suggestion_buckets_recovery_daily_target_alone_not_in_do(
+    app_with_test_database: FastAPI,
+    session: Session,
+) -> None:
+    from app.tests.helpers.wtl_b3_fixtures import SUNDAY_AS_OF
+    from app.tests.helpers.wtl_b4_fixtures import (
+        WTL_B4_STRETCH_ID,
+        seed_wtl_b4_recovery_daily_only_graph,
+    )
+
+    seed_wtl_b4_recovery_daily_only_graph(app_with_test_database)
+    dashboard = get_dashboard(session, as_of=date.fromisoformat(SUNDAY_AS_OF))
+
+    do_ids = _bucket_ids(dashboard.suggestion_buckets, "do")
+    assert WTL_B4_STRETCH_ID not in do_ids
+
+
+def test_get_dashboard_suggestion_buckets_monday_new_week_returns_incomplete_target_to_do(
+    app_with_test_database: FastAPI,
+    session: Session,
+) -> None:
+    from app.tests.helpers.wtl_b4_fixtures import (
+        WTL_B4_TUESDAY_AS_OF,
+        seed_wtl_b4_monday_new_week_graph,
+    )
+
+    seed_wtl_b4_monday_new_week_graph(app_with_test_database)
+    dashboard = get_dashboard(session, as_of=date.fromisoformat(WTL_B4_TUESDAY_AS_OF))
+
+    walk_do = _suggestion_row(dashboard, row_id="act-wtl-walk", bucket="do")
+    assert "km left this week" in walk_do.reason
+
+
+def test_get_dashboard_suggestion_buckets_no_weekly_target_activity_not_in_do(
+    app_with_test_database: FastAPI,
+    session: Session,
+) -> None:
+    from app.tests.helpers.wtl_b3_fixtures import SUNDAY_AS_OF
+    from app.tests.helpers.wtl_b4_fixtures import seed_wtl_b4_bike_only_weekly_target_graph
+
+    seed_wtl_b4_bike_only_weekly_target_graph(app_with_test_database)
+    dashboard = get_dashboard(session, as_of=date.fromisoformat(SUNDAY_AS_OF))
+
+    do_ids = _bucket_ids(dashboard.suggestion_buckets, "do")
+    assert "act-wtl-walk" not in do_ids
+    assert "act-wtl-bike" in do_ids
