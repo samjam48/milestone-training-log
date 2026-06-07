@@ -41,6 +41,28 @@ function progressLabel(value: number, unit: string): string {
   return `${value} ${unit}`;
 }
 
+function weeklyProgressRowLabel(
+  activityName: string | null | undefined,
+  className: string,
+): string {
+  return activityName ?? className;
+}
+
+function weeklyProgressDisplayState(
+  value: number,
+  target: number,
+  state: SafetyState | 'neutral',
+): SafetyState | 'neutral' {
+  if (target > 0 && value >= target) {
+    return 'safe';
+  }
+  return state;
+}
+
+function formatWeekPeriod(start: string, end: string): string {
+  return `${formatShort(start)} – ${formatShort(end)}`;
+}
+
 function loadGraphTitle(
   graphClassId: string | null,
   activityClasses: ActivityClass[],
@@ -160,22 +182,31 @@ export const DashboardScreen: React.FC<Props> = ({
         asOf="Today"
       />
 
-      {/* ── Last 7 days: weekly targets ── */}
+      {/* ── This week: weekly targets ── */}
       <div>
-        <SectionLabel>Last 7 days</SectionLabel>
+        <SectionLabel>This week</SectionLabel>
+        {weeklyProgress[0]?.periodStart != null && weeklyProgress[0]?.periodEnd != null ? (
+          <p className="text-caption text-ink-muted -mt-1 mb-2">
+            {formatWeekPeriod(weeklyProgress[0].periodStart, weeklyProgress[0].periodEnd)}
+          </p>
+        ) : null}
         <Card pad="md">
-          <div className="flex flex-col gap-4">
-            {weeklyProgress.map(wp => (
-              <ProgressBar
-                key={wp.weeklyTargetId}
-                value={wp.value}
-                target={wp.target}
-                state={wp.state as SafetyState | 'neutral'}
-                label={wp.className}
-                valueText={`${progressLabel(wp.value, wp.unit)} / ${progressLabel(wp.target, wp.unit)}`}
-              />
-            ))}
-          </div>
+          {weeklyProgress.length === 0 ? (
+            <p className="text-caption text-ink-muted">No weekly targets configured.</p>
+          ) : (
+            <div className="flex flex-col gap-4">
+              {weeklyProgress.map((wp) => (
+                <ProgressBar
+                  key={wp.weeklyTargetId}
+                  value={wp.value}
+                  target={wp.target}
+                  state={weeklyProgressDisplayState(wp.value, wp.target, wp.state)}
+                  label={weeklyProgressRowLabel(wp.activityName, wp.className)}
+                  valueText={`${progressLabel(wp.value, wp.unit)} / ${progressLabel(wp.target, wp.unit)}`}
+                />
+              ))}
+            </div>
+          )}
         </Card>
       </div>
 

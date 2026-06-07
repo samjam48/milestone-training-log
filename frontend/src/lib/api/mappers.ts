@@ -539,10 +539,15 @@ function mapWeeklyProgressFromApi(raw: Record<string, unknown>): WeeklyProgress 
     weeklyTargetId: String(raw.weekly_target_id),
     activityClassId: String(raw.activity_class_id),
     className: String(raw.class_name),
+    activityId: raw.activity_id != null ? String(raw.activity_id) : null,
+    activityName: raw.activity_name != null ? String(raw.activity_name) : null,
     value: Number(raw.value),
     target: Number(raw.target),
     unit: raw.unit as WeeklyProgress['unit'],
     state: raw.state as WeeklyProgress['state'],
+    periodStart:
+      raw.period_start != null ? (String(raw.period_start) as ISODate) : undefined,
+    periodEnd: raw.period_end != null ? (String(raw.period_end) as ISODate) : undefined,
   };
 }
 

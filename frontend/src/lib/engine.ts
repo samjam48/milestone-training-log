@@ -26,10 +26,14 @@ export interface WeeklyProgress {
   weeklyTargetId: ID;
   activityClassId: ID;
   className: string;
+  activityId?: ID | null;
+  activityName?: string | null;
   value: number;
   target: number;
   unit: VolumeUnit | 'sessions';
   state: SafetyState | 'neutral';
+  periodStart?: ISODate;
+  periodEnd?: ISODate;
 }
 
 export type SuggestionBucket = 'do' | 'rest' | 'done';

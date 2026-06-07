@@ -812,3 +812,27 @@ async def test_get_dashboard_weekly_progress_includes_period_metadata_on_each_ro
     for row in response.json()["weekly_progress"]:
         assert "period_start" in row
         assert "period_end" in row
+
+
+async def test_get_dashboard_weekly_progress_includes_activity_fields_when_scoped(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    from app.tests.helpers.wtl_b3_fixtures import (
+        SUNDAY_AS_OF,
+        WTL_B3_WALK_ID,
+        seed_wtl_b3_dashboard_graph,
+    )
+
+    seed_wtl_b3_dashboard_graph(app_with_test_database)
+
+    response = await client.get(DASHBOARD_URL, params={"as_of": SUNDAY_AS_OF})
+    assert response.status_code == 200
+
+    walk_row = _weekly_progress_api_row(response.json(), "wt-wtl-walk")
+    class_row = _weekly_progress_api_row(response.json(), "wt-wtl-class")
+
+    assert walk_row["activity_id"] == WTL_B3_WALK_ID
+    assert walk_row["activity_name"] == "Morning Walk"
+    assert class_row["activity_id"] is None
+    assert class_row["activity_name"] is None

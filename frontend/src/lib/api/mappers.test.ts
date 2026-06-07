@@ -20,6 +20,12 @@ import {
   fastApiDetailErrorBody,
   fastApiValidationErrorBody,
 } from './testFixtures';
+import {
+  weeklyProgressActivityScopedSnake,
+  weeklyProgressLegacyClassSnake,
+  WTL_F1_PERIOD_END,
+  WTL_F1_PERIOD_START,
+} from '../../test/wtlF1WeeklyProgressFixtures';
 import { parseApiError } from './client';
 import {
   buildQuery,
@@ -596,5 +602,62 @@ describe('parseApiError', () => {
     expect(error.message).toBeTruthy();
     expect(error.message).not.toBe('');
     expect(error.detail).toBeUndefined();
+  });
+});
+
+describe('mapDashboardFromApi — WTL.F1 weekly progress period and activity fields', () => {
+  it('maps period_start and period_end on each weekly progress row', () => {
+    const mapped = mapDashboardFromApi({
+      ...dashboardReadSnake,
+      weekly_progress: [weeklyProgressActivityScopedSnake],
+    });
+
+    expect(mapped.weeklyProgress[0]).toMatchObject({
+      periodStart: WTL_F1_PERIOD_START,
+      periodEnd: WTL_F1_PERIOD_END,
+    });
+  });
+
+  it('maps activity_id and activity_name for activity-scoped weekly targets', () => {
+    const mapped = mapDashboardFromApi({
+      ...dashboardReadSnake,
+      weekly_progress: [weeklyProgressActivityScopedSnake],
+    });
+
+    expect(mapped.weeklyProgress[0]).toMatchObject({
+      activityId: weeklyProgressActivityScopedSnake.activity_id,
+      activityName: weeklyProgressActivityScopedSnake.activity_name,
+    });
+  });
+
+  it('maps legacy class-scoped rows with null activity fields', () => {
+    const mapped = mapDashboardFromApi({
+      ...dashboardReadSnake,
+      weekly_progress: [weeklyProgressLegacyClassSnake],
+    });
+
+    expect(mapped.weeklyProgress[0]).toMatchObject({
+      className: weeklyProgressLegacyClassSnake.class_name,
+      activityId: null,
+      activityName: null,
+    });
+  });
+});
+
+describe('mapLoadSummaryFromApi — WTL.F1 weekly progress metadata', () => {
+  it('maps period and activity fields on weekly_progress rows', () => {
+    const mapped = mapLoadSummaryFromApi({
+      as_of: WTL_F1_PERIOD_END,
+      class_statuses: [],
+      suggestions: [],
+      weekly_progress: [weeklyProgressActivityScopedSnake],
+    });
+
+    expect(mapped.weeklyProgress[0]).toMatchObject({
+      periodStart: WTL_F1_PERIOD_START,
+      periodEnd: WTL_F1_PERIOD_END,
+      activityId: weeklyProgressActivityScopedSnake.activity_id,
+      activityName: weeklyProgressActivityScopedSnake.activity_name,
+    });
   });
 });

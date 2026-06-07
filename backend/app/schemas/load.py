@@ -30,6 +30,8 @@ class WeeklyProgressRead(BaseModel):
     weekly_target_id: str
     activity_class_id: str
     class_name: str
+    activity_id: str | None = None
+    activity_name: str | None = None
     value: float
     target: float
     unit: str

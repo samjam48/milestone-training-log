@@ -6,6 +6,7 @@
  * Load-risk panel removed from dashboard (owner feedback 2026-06-04); delayed tax kept on incident/check-in flows.
  * F10.5 — Load graph title from engine.graphClassId (plans/tickets-phase-10-polish-2026-06-04.md).
  * S25.F2 — Goals dashboard card (plans/tickets-stage-2-5-usage-logic-2026-06-06.md).
+ * WTL.F1 — This Week weekly progress card (plans/tickets-weekly-targets-load-risk-2026-06-07.md).
  *
  * Mocking strategy (mirrors BlockReviewScreen.test.tsx):
  *   - CalendarHeatmap: stubbed to a simple div — tests verify screen wiring, not heatmap internals
@@ -14,7 +15,7 @@
  *   - DashboardScreen receives engine directly as a prop
  */
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { screen, cleanup, within } from '@testing-library/react';
 import { renderWithProviders } from '../../test/renderWithProviders';
 import { mockEngine, resetMockEngine } from '../../test/mockEngine';
@@ -27,6 +28,15 @@ import {
   goalDashboardRowQualitative,
   type GoalDashboardRow,
 } from '../../test/goalDashboardRowFixtures';
+import {
+  WTL_F1_PERIOD_END,
+  activityScopedWeeklyProgress,
+  completeWeeklyProgress,
+  legacyClassWeeklyProgress,
+  overCompleteWeeklyProgress,
+  type WeeklyProgressWtlF1,
+} from '../../test/wtlF1WeeklyProgressFixtures';
+import type { WeeklyProgress } from '../../lib/engine';
 import { DashboardScreen } from './DashboardScreen';
 
 type EngineWithGoalRows = MilestoneEngineResult & { goalRows: GoalDashboardRow[] };
@@ -235,6 +245,35 @@ function renderDashboard() {
   );
 }
 
+function setupDashboardWeeklyProgress(
+  weeklyProgress: WeeklyProgressWtlF1[],
+  options: { todayDate?: string } = {},
+): void {
+  mockEngine.block = ACTIVE_BLOCK;
+  mockEngine.dailyScores = DAILY_SCORES;
+  mockEngine.previousBlocks = [];
+  mockEngine.recoveryStreaks = [];
+  mockEngine.weeklyProgress = weeklyProgress as WeeklyProgress[];
+  if (options.todayDate != null) {
+    mockEngine.todayDate = options.todayDate;
+  }
+}
+
+function weeklyProgressSection(): HTMLElement {
+  const heading = screen.getByText('This week');
+  const section = heading.closest('div');
+  if (section == null) {
+    throw new Error('Expected weekly progress section wrapper');
+  }
+  return section;
+}
+
+function progressBarFillForLabel(label: string): HTMLElement | null {
+  const labelEl = within(weeklyProgressSection()).getByText(label);
+  const barRoot = labelEl.closest('.w-full');
+  return barRoot?.querySelector<HTMLElement>('[role="progressbar"] > div') ?? null;
+}
+
 describe('DashboardScreen — BlockSafetyMapSection: active block heatmap', () => {
   it('renders a CalendarHeatmap for the active block without firing a useQuery for that block id', () => {
     mockEngine.block = ACTIVE_BLOCK;
@@ -351,7 +390,7 @@ describe('DashboardScreen — BlockSafetyMapSection: no active block', () => {
 });
 
 describe('DashboardScreen — F10.1 recovery streaks section', () => {
-  it('renders a Recovery streaks section below Last 7 days with daily and weekly copy', () => {
+  it('renders a Recovery streaks section below This week with daily and weekly copy', () => {
     mockEngine.block = ACTIVE_BLOCK;
     mockEngine.dailyScores = DAILY_SCORES;
     mockEngine.previousBlocks = [];
@@ -361,7 +400,7 @@ describe('DashboardScreen — F10.1 recovery streaks section', () => {
 
     renderDashboard();
 
-    const weeklyLabel = screen.getByText('Last 7 days');
+    const weeklyLabel = screen.getByText('This week');
     const recoveryLabel = screen.getByText('Recovery streaks');
     assertAppearsAfter(weeklyLabel, recoveryLabel);
 
@@ -533,7 +572,7 @@ describe('DashboardScreen — S25.F2 Goals card', () => {
     assignGoalRows(goalRows);
   }
 
-  it('renders GoalsCard below Last 7 days when engine.goalRows has entries', () => {
+  it('renders GoalsCard below This week when engine.goalRows has entries', () => {
     setupDashboardWithGoalRows([
       goalDashboardRowNumeric,
       goalDashboardRowQualitative,
@@ -543,7 +582,7 @@ describe('DashboardScreen — S25.F2 Goals card', () => {
 
     renderDashboard();
 
-    const weeklyLabel = screen.getByText('Last 7 days');
+    const weeklyLabel = screen.getByText('This week');
     const goalsCard = screen.getByTestId('goals-card');
     assertAppearsAfter(weeklyLabel, goalsCard);
 
@@ -604,6 +643,76 @@ describe('DashboardScreen — S25.F2 Goals card', () => {
     const row = screen.getByTestId(`goals-card-row-${goalDashboardRowAchieved.goalId}`);
     expect(row).toHaveAttribute('data-achieved', 'true');
     expect(row.className).toMatch(/opacity-|text-ink-muted|text-ink-faint/);
+  });
+});
+
+describe('DashboardScreen — WTL.F1 This Week weekly progress card', () => {
+  beforeEach(() => {
+    useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
+  });
+
+  it('labels the weekly targets section This week instead of Last 7 days', () => {
+    setupDashboardWeeklyProgress([]);
+    renderDashboard();
+
+    expect(screen.getByText('This week')).toBeInTheDocument();
+    expect(screen.queryByText('Last 7 days')).not.toBeInTheDocument();
+  });
+
+  it('shows neutral empty copy when no weekly targets are configured', () => {
+    setupDashboardWeeklyProgress([]);
+    renderDashboard();
+
+    expect(
+      within(weeklyProgressSection()).getByText(/No weekly targets configured/i),
+    ).toBeInTheDocument();
+  });
+
+  it('shows activity names for activity-scoped targets and class names for legacy targets', () => {
+    setupDashboardWeeklyProgress([
+      activityScopedWeeklyProgress,
+      legacyClassWeeklyProgress,
+    ]);
+    renderDashboard();
+
+    const section = weeklyProgressSection();
+    expect(within(section).getByText('Morning Walk')).toBeInTheDocument();
+    expect(within(section).getByText('WTL Foot Load')).toBeInTheDocument();
+    expect(within(section).queryAllByText('WTL Foot Load')).toHaveLength(1);
+  });
+
+  it('shows the Monday–Sunday period instead of rolling seven-day copy', () => {
+    setupDashboardWeeklyProgress([activityScopedWeeklyProgress], {
+      todayDate: WTL_F1_PERIOD_END,
+    });
+    renderDashboard();
+
+    const section = weeklyProgressSection();
+    expect(within(section).queryByText(/last 7 days/i)).not.toBeInTheDocument();
+    expect(within(section).queryByText(/rolling/i)).not.toBeInTheDocument();
+    expect(within(section).queryByText(/past 7/i)).not.toBeInTheDocument();
+    expect(within(section).getByText(/Jun 1.*Jun 7/i)).toBeInTheDocument();
+  });
+
+  it('renders a met minimum target as safe, not danger', () => {
+    setupDashboardWeeklyProgress([completeWeeklyProgress]);
+    renderDashboard();
+
+    const fill = progressBarFillForLabel('Stationary Bike');
+    expect(fill).not.toBeNull();
+    expect(fill?.className).toMatch(/bg-safe/);
+    expect(fill?.className).not.toMatch(/bg-danger/);
+  });
+
+  it('does not render an over-complete minimum target as danger', () => {
+    setupDashboardWeeklyProgress([overCompleteWeeklyProgress]);
+    renderDashboard();
+
+    const fill = progressBarFillForLabel('Morning Walk');
+    expect(fill).not.toBeNull();
+    expect(fill?.className).toMatch(/bg-safe/);
+    expect(fill?.className).not.toMatch(/bg-danger/);
+    expect(fill?.className).not.toMatch(/bg-caution/);
   });
 });
 

@@ -1059,12 +1059,18 @@ def compute_weekly_progress(
     period_end: str,
 ) -> list[WeeklyProgress]:
     class_map = {cls["id"]: cls for cls in activity_classes}
+    activity_map = {activity["id"]: activity for activity in activities}
     _, week_label_end = this_week_bounds(period_start)
     progress: list[WeeklyProgress] = []
 
     for target in weekly_targets:
         class_id = target["activity_class_id"]
         target_activity_id = target.get("activity_id")
+        activity_name = (
+            activity_map.get(target_activity_id, {}).get("name")
+            if target_activity_id is not None
+            else None
+        )
         if target_activity_id is not None:
             scope_activity_ids = {target_activity_id}
         else:
@@ -1109,6 +1115,8 @@ def compute_weekly_progress(
                 "weekly_target_id": target["id"],
                 "activity_class_id": class_id,
                 "class_name": class_map.get(class_id, {}).get("name", "Unknown"),
+                "activity_id": target_activity_id,
+                "activity_name": activity_name,
                 "value": rounded,
                 "target": target_value,
                 "unit": target_unit,

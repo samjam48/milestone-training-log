@@ -62,6 +62,8 @@ class WeeklyProgress(TypedDict):
     weekly_target_id: str
     activity_class_id: str
     class_name: str
+    activity_id: str | None
+    activity_name: str | None
     value: float
     target: float
     unit: str

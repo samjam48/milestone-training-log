@@ -1502,6 +1502,36 @@ def test_compute_weekly_progress_activity_scoped_counts_only_that_activity() -> 
     assert progress[0]["value"] == pytest.approx(1)
 
 
+def test_compute_weekly_progress_activity_scoped_includes_activity_id_and_name() -> None:
+    progress = compute_weekly_progress(
+        [_wtl_b3_target("wt-walk", activity_id=WTL_B3_WALK, target_unit="km")],
+        WTL_B3_CLASSES,
+        WTL_B3_ACTIVITIES,
+        [],
+        "2026-06-01",
+        "2026-06-07",
+    )
+
+    row = progress[0]
+    assert row["activity_id"] == WTL_B3_WALK
+    assert row["activity_name"] == "Morning Walk"
+
+
+def test_compute_weekly_progress_legacy_class_target_has_null_activity_fields() -> None:
+    progress = compute_weekly_progress(
+        [_wtl_b3_target("wt-class", target_unit="sessions")],
+        WTL_B3_CLASSES,
+        WTL_B3_ACTIVITIES,
+        [],
+        "2026-06-01",
+        "2026-06-07",
+    )
+
+    row = progress[0]
+    assert row["activity_id"] is None
+    assert row["activity_name"] is None
+
+
 def test_compute_weekly_progress_legacy_class_target_counts_active_class_activities() -> None:
     logs = [
         _wtl_b3_log("log-walk", WTL_B3_WALK, "2026-06-03", volume_value=3.0),
