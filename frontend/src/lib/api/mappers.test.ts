@@ -26,6 +26,12 @@ import {
   WTL_F1_PERIOD_END,
   WTL_F1_PERIOD_START,
 } from '../../test/wtlF1WeeklyProgressFixtures';
+import {
+  WTL_F4_AS_OF,
+  WTL_F4_GRAPH_START,
+  WTL_F4_GRAPH_WINDOW_DAYS,
+  wtlF4LoadSeriesSnake,
+} from '../../test/wtlF4LoadGraphFixtures';
 import { parseApiError } from './client';
 import {
   buildQuery,
@@ -640,6 +646,38 @@ describe('mapDashboardFromApi — WTL.F1 weekly progress period and activity fie
       className: weeklyProgressLegacyClassSnake.class_name,
       activityId: null,
       activityName: null,
+    });
+  });
+});
+
+describe('mapDashboardFromApi — WTL.F4 load-tax graph contract', () => {
+  it('maps week_load_threshold null to null instead of coercing to zero', () => {
+    const mapped = mapDashboardFromApi({
+      ...dashboardReadSnake,
+      week_load_threshold: null,
+    });
+
+    expect(mapped.weekLoadThreshold).toBeNull();
+  });
+
+  it('maps a 30-day load_series with load-tax daily_load fields', () => {
+    const mapped = mapDashboardFromApi({
+      ...dashboardReadSnake,
+      as_of: WTL_F4_AS_OF,
+      load_series: wtlF4LoadSeriesSnake,
+      week_load_threshold: null,
+    });
+
+    expect(mapped.loadSeries).toHaveLength(WTL_F4_GRAPH_WINDOW_DAYS);
+    expect(mapped.loadSeries[0]).toMatchObject({
+      date: WTL_F4_GRAPH_START,
+      load: expect.any(Number),
+      dailyLoad: expect.any(Number),
+    });
+    expect(mapped.loadSeries.at(-1)).toMatchObject({
+      date: WTL_F4_AS_OF,
+      load: expect.any(Number),
+      dailyLoad: expect.any(Number),
     });
   });
 });

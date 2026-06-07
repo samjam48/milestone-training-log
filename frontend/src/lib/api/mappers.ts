@@ -602,7 +602,7 @@ export interface DashboardPayload {
   loadSeries: LoadPoint[];
   graphClassId: string | null;
   flareUpDates: ISODate[];
-  weekLoadThreshold: number;
+  weekLoadThreshold: number | null;
   cleanStreak: number;
   recoveryStreaks: RecoveryStreak[];
   goals: WithoutUserId<Goal>[];
@@ -643,7 +643,8 @@ export function mapDashboardFromApi(raw: Record<string, unknown>): DashboardPayl
     flareUpDates: Array.isArray(raw.flare_up_dates)
       ? raw.flare_up_dates.map((date) => String(date) as ISODate)
       : [],
-    weekLoadThreshold: Number(raw.week_load_threshold),
+    weekLoadThreshold:
+      raw.week_load_threshold == null ? null : Number(raw.week_load_threshold),
     cleanStreak: Number(raw.clean_streak),
     recoveryStreaks: mapList(raw.recovery_streaks, mapRecoveryStreakFromApi),
     goals: mapList(raw.goals, mapGoalFromApi),

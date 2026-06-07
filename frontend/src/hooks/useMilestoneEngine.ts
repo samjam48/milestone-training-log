@@ -225,7 +225,7 @@ export interface MilestoneEngineResult {
   loadSeries: LoadPoint[];
   graphClassId: string | null;
   flareUpDates: ISODate[];
-  weekLoadThreshold: number;
+  weekLoadThreshold: number | null;
   cleanStreak: number;
   recoveryStreaks: RecoveryStreak[];
   delayedTax?: DelayedTaxResponse;
@@ -798,7 +798,7 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     loadSeries: dashboard?.loadSeries ?? [],
     graphClassId: dashboard?.graphClassId ?? null,
     flareUpDates: dashboard?.flareUpDates ?? [],
-    weekLoadThreshold: dashboard?.weekLoadThreshold ?? 0,
+    weekLoadThreshold: dashboard?.weekLoadThreshold ?? null,
     cleanStreak: dashboard?.cleanStreak ?? 0,
     recoveryStreaks: dashboard?.recoveryStreaks ?? [],
     delayedTax: delayedTaxQuery.data,

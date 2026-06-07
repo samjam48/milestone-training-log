@@ -8,7 +8,8 @@ import { Card } from '../ui/Card';
 import { ProgressBar } from '../ui/ProgressBar';
 import { StatusDot } from '../ui/StatusDot';
 import { SuggestedActivityCard } from '../composites/SuggestedActivityCard';
-import { WeeklyLoadGraph } from '../composites/WeeklyLoadGraph';
+import { WeeklyLoadGraph, LOAD_GRAPH_SUBTITLE, LOAD_GRAPH_WINDOW_DAYS } from '../composites/WeeklyLoadGraph';
+import { addDays } from '../../lib/load';
 import { BlockSafetyMapSection } from '../composites/BlockSafetyMapSection';
 import { LoadRiskSection } from '../composites/LoadRiskSection';
 import { GoalsCard } from '../composites/GoalsCard';
@@ -157,6 +158,7 @@ export const DashboardScreen: React.FC<Props> = ({
   } = engine;
 
   const weeklyLoadGraphTitle = loadGraphTitle(graphClassId, activityClasses);
+  const loadGraphStartDate = addDays(todayDate, -(LOAD_GRAPH_WINDOW_DAYS - 1));
 
   return (
     <div className="flex flex-col gap-5 px-4 pt-5 pb-4">
@@ -241,13 +243,13 @@ export const DashboardScreen: React.FC<Props> = ({
 
       {/* ── Load graph ── */}
       <WeeklyLoadGraph
-        startDate={block.startDate}
+        startDate={loadGraphStartDate}
         endDate={todayDate}
         series={loadSeries}
         threshold={weekLoadThreshold}
         flareUpDates={flareUpDates}
         title={weeklyLoadGraphTitle}
-        subtitle="Rolling 7-day · full block"
+        subtitle={LOAD_GRAPH_SUBTITLE}
       />
 
       <LoadRiskSection loadRiskSummary={loadRiskSummary} />

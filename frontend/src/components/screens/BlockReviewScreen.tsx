@@ -232,7 +232,7 @@ function EmptyState(): React.ReactElement {
 interface ReviewContentProps {
   data: ReviewData;
   endDate: ISODate;
-  threshold: number;
+  threshold: number | null;
 }
 
 function ReviewContent({
