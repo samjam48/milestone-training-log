@@ -14,6 +14,8 @@ class GoalCreate(BaseModel):
     target_date: date
     timeframe: GoalTimeframe
     activity_class_id: str | None = None
+    activity_id: str | None = None
+    auto_track_progress: bool = False
     progress_value: float | None = None
     progress_target: float | None = None
     progress_unit: str | None = None
@@ -28,6 +30,8 @@ class GoalPatch(BaseModel):
     target_date: date | None = None
     timeframe: GoalTimeframe | None = None
     activity_class_id: str | None = None
+    activity_id: str | None = None
+    auto_track_progress: bool | None = None
     progress_value: float | None = None
     progress_target: float | None = None
     progress_unit: str | None = None
@@ -50,6 +54,8 @@ class GoalRead(BaseModel):
     target_date: date
     timeframe: str
     activity_class_id: str | None
+    activity_id: str | None
+    auto_track_progress: bool
     progress_value: float | None
     progress_target: float | None
     progress_unit: str | None

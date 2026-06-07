@@ -9,13 +9,17 @@ import * as React from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '../../lib/cn';
 import { Card, CardHeader, CardTitle, CardMeta } from '../ui/Card';
+import { CenteredModal } from '../ui/CenteredModal';
 import { ReviewMilestoneBadge } from '../ui/ReviewMilestoneBadge';
 import { apiFetch, ApiError } from '../../lib/api/client';
 import type {
   MilestoneEngineResult,
   NewActivityClassDraft,
   NewActivityDraft,
+  ActivityClassPatch,
 } from '../../hooks/useMilestoneEngine';
+import { ACTIVITY_VOLUME_UNIT_OPTIONS } from './activityVolumeUnits';
+import { formatSettingsRuleSummary } from '../../lib/ruleTaxonomy';
 import type {
   Activity,
   ActivityClass,
@@ -23,8 +27,7 @@ import type {
   ActivityType,
   ID,
   Rule,
-  RuleType,
-  WeeklyTarget,
+  VolumeUnit,
   TrainingBlock,
 } from '../../types';
 
@@ -56,27 +59,12 @@ function formatShortDate(iso: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Rule label map
-// ---------------------------------------------------------------------------
-
-type RuleLabelFn = (v: number) => string;
-
-const RULE_LABEL: Partial<Record<RuleType, RuleLabelFn>> = {
-  rest_between_class:    (v) => `Min ${v}-day rest`,
-  frequency_limit:       (v) => `Max ${v}× / week`,
-  weekly_load_cap:       (v) => `Load cap ${v} / week`,
-  consecutive_day_limit: (v) => `Max ${v} consecutive days`,
-  weekly_activity_count: (v) => `Max ${v} sessions / week`,
-};
-
-// ---------------------------------------------------------------------------
 // BlockSummaryCard
 // ---------------------------------------------------------------------------
 
 interface BlockSummaryCardProps {
   block: TrainingBlock;
   rules: Rule[];
-  weeklyTargets: WeeklyTarget[];
   activityClasses: ActivityClass[];
   /** Whether the Edit rules CTA should be rendered. */
   showEditRules: boolean;
@@ -87,7 +75,6 @@ interface BlockSummaryCardProps {
 function BlockSummaryCard({
   block,
   rules,
-  weeklyTargets,
   activityClasses,
   showEditRules,
   onEditRules,
@@ -95,6 +82,12 @@ function BlockSummaryCard({
 }: BlockSummaryCardProps): React.ReactElement {
   const classMap = new Map(activityClasses.map((c) => [c.id, c]));
   const activeRules = rules.filter((r) => r.enabled);
+  const visibleRecoveryRules = activeRules
+    .map((rule) => ({
+      rule,
+      summary: formatSettingsRuleSummary(rule.ruleType, rule.thresholdValue),
+    }))
+    .filter((entry): entry is { rule: Rule; summary: string } => entry.summary != null);
 
   return (
     <Card pad="md">
@@ -118,39 +111,13 @@ function BlockSummaryCard({
         </span>
       </CardHeader>
 
-      {/* Weekly targets */}
-      {weeklyTargets.length > 0 && (
-        <div className="mb-4">
-          <p className="text-label uppercase font-medium text-ink-faint mb-2">Weekly Targets</p>
-          <ul className="flex flex-col gap-1.5">
-            {weeklyTargets.map((wt) => {
-              const cls = classMap.get(wt.activityClassId);
-              return (
-                <li
-                  key={wt.id}
-                  className="flex items-center justify-between gap-3 text-body"
-                >
-                  <span className="text-ink-muted truncate">
-                    {cls ? cls.name : wt.activityClassId}
-                  </span>
-                  <span className="font-medium tabular-nums text-ink shrink-0">
-                    {wt.targetValue} {wt.targetUnit}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
-
       {/* Recovery rules */}
-      {activeRules.length > 0 && (
+      {visibleRecoveryRules.length > 0 && (
         <div className="mb-4 pt-3 border-t border-border-subtle">
           <p className="text-label uppercase font-medium text-ink-faint mb-2">Recovery Rules</p>
           <ul className="flex flex-col divide-y divide-border-subtle">
-            {activeRules.map((rule) => {
+            {visibleRecoveryRules.map(({ rule, summary }) => {
               const cls = rule.activityClassId ? classMap.get(rule.activityClassId) : null;
-              const labelFn = RULE_LABEL[rule.ruleType];
               return (
                 <li
                   key={rule.id}
@@ -159,9 +126,7 @@ function BlockSummaryCard({
                   <span className="text-ink-muted truncate">
                     {cls ? cls.name : 'All classes'}
                   </span>
-                  <span className="text-ink shrink-0">
-                    {labelFn ? labelFn(rule.thresholdValue) : rule.ruleType}
-                  </span>
+                  <span className="text-ink shrink-0">{summary}</span>
                 </li>
               );
             })}
@@ -430,44 +395,28 @@ function NewActivityClassForm({
   }
 
   return (
-    <>
-      <div
-        className="fixed inset-0 z-50 bg-black/60"
-        style={{ backdropFilter: 'blur(4px)' }}
-        onClick={onClose}
-        aria-hidden="true"
-      />
-      <div
-        className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-[440px] rounded-t-2xl bg-bg-raised border-t border-border pb-safe-bottom"
-        role="dialog"
-        aria-modal="true"
-        aria-label="New activity class"
-      >
-        <div className="flex justify-center pt-3 pb-1">
-          <div className="h-1 w-10 rounded-full bg-border" aria-hidden="true" />
+    <CenteredModal open={open} onClose={onClose} ariaLabel="New activity class">
+      <form onSubmit={(e) => { void handleSubmit(e); }}>
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-title font-bold text-ink">New Activity Class</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-8 w-8 flex items-center justify-center rounded-full text-ink-muted hover:text-ink hover:bg-bg-overlay transition-colors duration-snap"
+            aria-label="Close"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path
+                d="M4 4l8 8M12 4l-8 8"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
         </div>
 
-        <form className="px-4 pb-8 pt-2" onSubmit={(e) => { void handleSubmit(e); }}>
-          <div className="flex items-center justify-between mb-5">
-            <h2 className="text-title font-bold text-ink">New Activity Class</h2>
-            <button
-              type="button"
-              onClick={onClose}
-              className="h-8 w-8 flex items-center justify-center rounded-full text-ink-muted hover:text-ink hover:bg-bg-overlay transition-colors duration-snap"
-              aria-label="Close"
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <path
-                  d="M4 4l8 8M12 4l-8 8"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-              </svg>
-            </button>
-          </div>
-
-          <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4">
             <label className="flex flex-col gap-1.5">
               <span className="text-label font-medium text-ink-muted">Class name</span>
               <input
@@ -531,22 +480,470 @@ function NewActivityClassForm({
               </p>
             )}
 
-            <button
-              type="submit"
-              disabled={!canCreate}
-              className={cn(
-                'w-full h-11 rounded-md text-body font-medium transition-colors duration-snap',
-                canCreate
-                  ? 'bg-ink text-ink-inverse hover:opacity-90'
-                  : 'bg-bg-sunken text-ink-faint cursor-not-allowed',
+          <button
+            type="submit"
+            disabled={!canCreate}
+            className={cn(
+              'w-full h-11 rounded-md text-body font-medium transition-colors duration-snap',
+              canCreate
+                ? 'bg-ink text-ink-inverse hover:opacity-90'
+                : 'bg-bg-sunken text-ink-faint cursor-not-allowed',
+            )}
+          >
+            Create class
+          </button>
+        </div>
+      </form>
+    </CenteredModal>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// EditActivityClassForm — rename + type
+// ---------------------------------------------------------------------------
+
+interface EditActivityClassFormProps {
+  activityClass: ActivityClass | null;
+  onClose: () => void;
+  onSubmit: (classId: ID, patch: ActivityClassPatch) => Promise<void>;
+}
+
+function EditActivityClassForm({
+  activityClass,
+  onClose,
+  onSubmit,
+}: EditActivityClassFormProps): React.ReactElement | null {
+  const [name, setName] = React.useState('');
+  const [type, setType] = React.useState<ActivityType>('performance');
+  const [apiError, setApiError] = React.useState<string | null>(null);
+  const [submitting, setSubmitting] = React.useState(false);
+
+  React.useEffect(() => {
+    if (activityClass != null) {
+      setName(activityClass.name);
+      setType(activityClass.type);
+      setApiError(null);
+      setSubmitting(false);
+    }
+  }, [activityClass]);
+
+  if (activityClass == null) return null;
+
+  const classId = activityClass.id;
+  const trimmedName = name.trim();
+  const canSave = trimmedName.length > 0 && !submitting;
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>): Promise<void> {
+    e.preventDefault();
+    if (!canSave) return;
+
+    setApiError(null);
+    setSubmitting(true);
+
+    try {
+      await onSubmit(classId, { name: trimmedName, type });
+      onClose();
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setApiError(err.message);
+      } else if (err instanceof Error) {
+        setApiError(err.message);
+      } else {
+        setApiError('Could not update activity class.');
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <CenteredModal open ariaLabel="Edit activity class" onClose={onClose}>
+      <form onSubmit={(e) => { void handleSubmit(e); }}>
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-title font-bold text-ink">Edit Activity Class</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-8 w-8 flex items-center justify-center rounded-full text-ink-muted hover:text-ink hover:bg-bg-overlay transition-colors duration-snap"
+            aria-label="Close"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path
+                d="M4 4l8 8M12 4l-8 8"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
+        </div>
+
+        <div className="flex flex-col gap-4">
+            <label className="flex flex-col gap-1.5">
+              <span className="text-label font-medium text-ink-muted">Class name</span>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="h-11 rounded-md border border-border bg-bg px-3 text-body text-ink"
+                autoComplete="off"
+              />
+            </label>
+
+            <fieldset className="flex flex-col gap-2 border-0 p-0 m-0">
+              <legend className="text-label font-medium text-ink-muted mb-1">Type</legend>
+              <label className="flex items-center gap-2 text-body text-ink">
+                <input
+                  type="radio"
+                  name="editActivityClassType"
+                  value="performance"
+                  checked={type === 'performance'}
+                  onChange={() => setType('performance')}
+                />
+                Performance
+              </label>
+              <label className="flex items-center gap-2 text-body text-ink">
+                <input
+                  type="radio"
+                  name="editActivityClassType"
+                  value="recovery"
+                  checked={type === 'recovery'}
+                  onChange={() => setType('recovery')}
+                  aria-label="Recovery"
+                />
+                <span aria-hidden="true">Recovery</span>
+              </label>
+            </fieldset>
+
+            {apiError != null && (
+              <p className="text-body text-danger-fg" role="alert">
+                {apiError}
+              </p>
+            )}
+
+          <button
+            type="submit"
+            disabled={!canSave}
+            className={cn(
+              'w-full h-11 rounded-md text-body font-medium transition-colors duration-snap',
+              canSave
+                ? 'bg-ink text-ink-inverse hover:opacity-90'
+                : 'bg-bg-sunken text-ink-faint cursor-not-allowed',
+            )}
+          >
+            Save
+          </button>
+        </div>
+      </form>
+    </CenteredModal>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// DeleteActivityClassDialog — two-step confirm
+// ---------------------------------------------------------------------------
+
+interface DeleteActivityClassDialogProps {
+  activityClass: ActivityClass | null;
+  step: 1 | 2 | null;
+  activitiesToDelete: Activity[];
+  errorMessage: string | null;
+  submitting: boolean;
+  onCancel: () => void;
+  onConfirmStep1: () => void;
+  onConfirmStep2: () => void;
+}
+
+function DeleteActivityClassDialog({
+  activityClass,
+  step,
+  activitiesToDelete,
+  errorMessage,
+  submitting,
+  onCancel,
+  onConfirmStep1,
+  onConfirmStep2,
+}: DeleteActivityClassDialogProps): React.ReactElement | null {
+  if (activityClass == null || step == null) return null;
+
+  return (
+    <CenteredModal
+      open
+      onClose={onCancel}
+      ariaLabel="Delete activity class"
+    >
+      {step === 1 ? (
+            <>
+              <h2 className="text-title font-bold text-ink mb-2">Delete class?</h2>
+              <p className="text-body text-ink-muted mb-5">
+                Are you sure you want to delete &ldquo;{activityClass.name}&rdquo;?
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={onCancel}
+                  className="flex-1 h-11 rounded-md bg-bg-sunken border border-border text-body font-medium text-ink-muted"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={onConfirmStep1}
+                  disabled={submitting}
+                  className="flex-1 h-11 rounded-md bg-danger text-body font-medium text-ink-inverse"
+                >
+                  Delete class
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <h2 className="text-title font-bold text-ink mb-2">Delete activities too?</h2>
+              <p className="text-body text-ink-muted mb-3">
+                These activities will be deleted if you continue:
+              </p>
+              <ul className="mb-4 list-disc pl-5 text-body text-ink">
+                {activitiesToDelete.map((activity) => (
+                  <li key={activity.id}>{activity.name}</li>
+                ))}
+              </ul>
+              {errorMessage != null && (
+                <p className="text-body text-danger-fg mb-3" role="alert">
+                  {errorMessage}
+                </p>
               )}
-            >
-              Create class
-            </button>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={onCancel}
+                  className="flex-1 h-11 rounded-md bg-bg-sunken border border-border text-body font-medium text-ink-muted"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={onConfirmStep2}
+                  disabled={submitting}
+                  className="flex-1 h-11 rounded-md bg-danger text-body font-medium text-ink-inverse"
+                >
+                  Delete anyway
+                </button>
+              </div>
+        </>
+      )}
+    </CenteredModal>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// EditActivityForm — name, class, type, default volume unit
+// ---------------------------------------------------------------------------
+
+interface EditActivityFormProps {
+  activity: Activity | null;
+  activityClasses: ActivityClass[];
+  onClose: () => void;
+  onSubmit: (activityId: ID, patch: Partial<NewActivityDraft>) => void;
+}
+
+function EditActivityForm({
+  activity,
+  activityClasses,
+  onClose,
+  onSubmit,
+}: EditActivityFormProps): React.ReactElement | null {
+  const [name, setName] = React.useState('');
+  const [classId, setClassId] = React.useState<ID>('');
+  const [type, setType] = React.useState<ActivityType>('performance');
+  const [unit, setUnit] = React.useState<VolumeUnit>('km');
+
+  React.useEffect(() => {
+    if (activity != null) {
+      setName(activity.name);
+      setClassId(activity.activityClassId);
+      setType(activity.type);
+      setUnit(activity.defaultVolumeUnit ?? 'km');
+    }
+  }, [activity]);
+
+  if (activity == null) return null;
+
+  const activityId = activity.id;
+  const trimmedName = name.trim();
+  const canSave = trimmedName.length > 0 && classId !== '';
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>): void {
+    e.preventDefault();
+    if (!canSave) return;
+
+    onSubmit(activityId, {
+      name: trimmedName,
+      activityClassId: classId,
+      type,
+      defaultVolumeUnit: unit,
+    });
+    onClose();
+  }
+
+  return (
+    <CenteredModal open ariaLabel="Edit activity" onClose={onClose}>
+      <form onSubmit={handleSubmit}>
+        <div className="flex items-center justify-between mb-5">
+          <p className="text-title font-bold text-ink">Edit Activity</p>
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-8 w-8 flex items-center justify-center rounded-full text-ink-muted hover:text-ink hover:bg-bg-overlay transition-colors duration-snap"
+            aria-label="Close"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path
+                d="M4 4l8 8M12 4l-8 8"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
+        </div>
+
+        <div className="flex flex-col gap-4">
+          <label className="flex flex-col gap-1.5">
+            <span className="text-label font-medium text-ink-muted">Activity name</span>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              aria-label="Activity name"
+              className="h-11 rounded-md border border-border bg-bg px-3 text-body text-ink"
+              autoComplete="off"
+            />
+          </label>
+
+          <div>
+            <p className="mb-2 text-label font-medium text-ink-muted">Activity class</p>
+            {activityClasses.length === 0 ? (
+              <p className="py-2 text-body text-ink-faint">No activity classes</p>
+            ) : (
+              <div className="flex flex-col divide-y divide-border-subtle overflow-hidden rounded-md border border-border">
+                {activityClasses.map((activityClass) => {
+                  const isSelected = classId === activityClass.id;
+                  return (
+                    <button
+                      key={activityClass.id}
+                      type="button"
+                      aria-pressed={isSelected}
+                      onClick={() => setClassId(activityClass.id)}
+                      className={cn(
+                        'flex items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors duration-snap',
+                        isSelected ? 'bg-ink/10' : 'bg-bg-sunken hover:bg-bg-overlay',
+                      )}
+                    >
+                      <span className="min-w-0">
+                        <span
+                          className={cn(
+                            'block text-body font-medium',
+                            isSelected ? 'text-ink' : 'text-ink-muted',
+                          )}
+                        >
+                          {activityClass.name}
+                        </span>
+                        <span className="block text-caption capitalize text-ink-faint">
+                          {activityClass.type}
+                        </span>
+                      </span>
+                      {isSelected ? (
+                        <svg
+                          width="16"
+                          height="16"
+                          viewBox="0 0 16 16"
+                          fill="none"
+                          className="shrink-0"
+                          aria-hidden="true"
+                        >
+                          <path
+                            d="M3 8l3.5 3.5L13 4"
+                            stroke="#E8ECF1"
+                            strokeWidth="1.75"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
-        </form>
-      </div>
-    </>
+
+          <fieldset className="flex flex-col gap-2 border-0 p-0 m-0">
+            <legend className="text-label font-medium text-ink-muted mb-1">Type</legend>
+            <label className="flex items-center gap-2 text-body text-ink">
+              <input
+                type="radio"
+                name="editActivityType"
+                value="performance"
+                checked={type === 'performance'}
+                aria-checked={type === 'performance'}
+                onChange={() => setType('performance')}
+              />
+              Performance
+            </label>
+            <label className="flex items-center gap-2 text-body text-ink">
+              <input
+                type="radio"
+                name="editActivityType"
+                value="recovery"
+                checked={type === 'recovery'}
+                aria-checked={type === 'recovery'}
+                onChange={() => setType('recovery')}
+                aria-label="Recovery"
+              />
+              <span aria-hidden="true">Recovery</span>
+            </label>
+          </fieldset>
+
+          <div>
+            <p className="mb-2 text-label font-medium text-ink-muted">Default volume unit</p>
+            <div className="grid grid-cols-3 gap-1.5">
+              {ACTIVITY_VOLUME_UNIT_OPTIONS.map((option) => {
+                const isSelected = unit === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    aria-pressed={isSelected}
+                    onClick={() => setUnit(option.value)}
+                    className={cn(
+                      'h-9 rounded-md border text-body font-medium transition-colors duration-snap',
+                      isSelected
+                        ? 'border-transparent bg-ink text-ink-inverse'
+                        : 'border-border bg-bg-sunken text-ink-muted hover:bg-bg-overlay',
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={!canSave}
+            className={cn(
+              'w-full h-11 rounded-md text-body font-medium transition-colors duration-snap',
+              canSave
+                ? 'bg-ink text-ink-inverse hover:opacity-90'
+                : 'bg-bg-sunken text-ink-faint cursor-not-allowed',
+            )}
+          >
+            Save
+          </button>
+        </div>
+      </form>
+    </CenteredModal>
   );
 }
 
@@ -560,14 +957,12 @@ export function SettingsScreen({
   onReview,
   onNewBlock,
   onViewBlock,
-  onEditActivity,
   onOpenNewActivity,
   onUnauthenticated,
 }: SettingsScreenProps): React.ReactElement {
   const {
     block,
     rules,
-    weeklyTargets,
     activityClasses,
     activities,
     logs,
@@ -575,6 +970,8 @@ export function SettingsScreen({
     deactivateActivity,
     updateActivity,
     submitNewActivityClass,
+    updateActivityClass,
+    deleteActivityClass,
   } = engine;
 
   const queryClient = useQueryClient();
@@ -583,6 +980,12 @@ export function SettingsScreen({
   const [resetState, setResetState] = React.useState<'idle' | 'confirming' | 'done'>('idle');
   const [pendingDeactivateId, setPendingDeactivateId] = React.useState<string | null>(null);
   const [showNewClassForm, setShowNewClassForm] = React.useState(false);
+  const [editingClass, setEditingClass] = React.useState<ActivityClass | null>(null);
+  const [deleteTarget, setDeleteTarget] = React.useState<ActivityClass | null>(null);
+  const [deleteStep, setDeleteStep] = React.useState<1 | 2 | null>(null);
+  const [deleteError, setDeleteError] = React.useState<string | null>(null);
+  const [deleteSubmitting, setDeleteSubmitting] = React.useState(false);
+  const [editingActivity, setEditingActivity] = React.useState<Activity | null>(null);
 
   function handleResetMockData(): void {
     if (resetState === 'idle') {
@@ -662,6 +1065,51 @@ export function SettingsScreen({
 
   const showEditRules = hasBlock;
 
+  const deleteActivities = React.useMemo(() => {
+    if (deleteTarget == null) return [];
+    return activities.filter((activity) => activity.activityClassId === deleteTarget.id);
+  }, [activities, deleteTarget]);
+
+  function resetDeleteDialog(): void {
+    setDeleteTarget(null);
+    setDeleteStep(null);
+    setDeleteError(null);
+    setDeleteSubmitting(false);
+  }
+
+  async function performDeleteClass(classId: ID): Promise<void> {
+    setDeleteSubmitting(true);
+    setDeleteError(null);
+    try {
+      await deleteActivityClass(classId);
+      resetDeleteDialog();
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setDeleteError(err.message);
+      } else if (err instanceof Error) {
+        setDeleteError(err.message);
+      } else {
+        setDeleteError('Could not delete activity class.');
+      }
+    } finally {
+      setDeleteSubmitting(false);
+    }
+  }
+
+  function handleDeleteStep1Confirm(): void {
+    if (deleteTarget == null) return;
+    if (deleteActivities.length === 0) {
+      void performDeleteClass(deleteTarget.id);
+      return;
+    }
+    setDeleteStep(2);
+  }
+
+  function handleDeleteStep2Confirm(): void {
+    if (deleteTarget == null) return;
+    void performDeleteClass(deleteTarget.id);
+  }
+
   return (
     <div className="flex flex-col h-full overflow-y-auto">
       {/* Header */}
@@ -680,7 +1128,6 @@ export function SettingsScreen({
             <BlockSummaryCard
               block={block}
               rules={rules}
-              weeklyTargets={weeklyTargets}
               activityClasses={activityClasses}
               showEditRules={showEditRules}
               onEditRules={() => onEditRules?.()}
@@ -758,9 +1205,33 @@ export function SettingsScreen({
                 {activityClasses.map((cls) => (
                   <li
                     key={cls.id}
-                    className="px-4 py-3 text-body font-medium text-ink"
+                    className="flex items-center justify-between gap-3 px-4 py-3"
                   >
-                    {cls.name}
+                    <span className="text-body font-medium text-ink min-w-0 truncate">
+                      {cls.name}
+                    </span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        aria-label={`Edit ${cls.name}`}
+                        onClick={() => setEditingClass(cls)}
+                        className="h-8 px-2.5 rounded-md text-caption font-medium text-ink-muted bg-bg-sunken hover:bg-bg-overlay transition-colors duration-snap"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Delete ${cls.name}`}
+                        onClick={() => {
+                          setDeleteTarget(cls);
+                          setDeleteStep(1);
+                          setDeleteError(null);
+                        }}
+                        className="h-8 px-2.5 rounded-md text-caption font-medium text-danger-fg hover:bg-danger/10 transition-colors duration-snap"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -799,7 +1270,7 @@ export function SettingsScreen({
                         key={act.id}
                         activity={act}
                         lastLogDate={lastByAct[act.id] ?? null}
-                        onEdit={() => onEditActivity?.(act)}
+                        onEdit={() => setEditingActivity(act)}
                         onDeactivate={() => setPendingDeactivateId(act.id)}
                         deactivateConfirming={pendingDeactivateId === act.id}
                         onCancelDeactivate={() => setPendingDeactivateId(null)}
@@ -953,6 +1424,30 @@ export function SettingsScreen({
         open={showNewClassForm}
         onClose={() => setShowNewClassForm(false)}
         onSubmit={submitNewActivityClass}
+      />
+
+      <EditActivityClassForm
+        activityClass={editingClass}
+        onClose={() => setEditingClass(null)}
+        onSubmit={updateActivityClass}
+      />
+
+      <DeleteActivityClassDialog
+        activityClass={deleteTarget}
+        step={deleteStep}
+        activitiesToDelete={deleteActivities}
+        errorMessage={deleteError}
+        submitting={deleteSubmitting}
+        onCancel={resetDeleteDialog}
+        onConfirmStep1={handleDeleteStep1Confirm}
+        onConfirmStep2={handleDeleteStep2Confirm}
+      />
+
+      <EditActivityForm
+        activity={editingActivity}
+        activityClasses={activityClasses}
+        onClose={() => setEditingActivity(null)}
+        onSubmit={updateActivity}
       />
     </div>
   );

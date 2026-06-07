@@ -22,8 +22,13 @@ import { screen, cleanup, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders';
 import { mockEngine, resetMockEngine } from '../../test/mockEngine';
-import type { Goal, ActivityClass, ISODate } from '../../types';
+import type { Goal, Activity, ActivityClass, ISODate } from '../../types';
 import type { GoalDraft, GoalPatch, MilestoneEngineResult } from '../../hooks/useMilestoneEngine';
+import {
+  BOTTOM_ACTION_BAR_TEST_ID,
+  expectSafeBottomOnlyInset,
+  findSafeBottomOnlyRegion,
+} from '../../test/bottomInsetLayout';
 import { GoalEditorScreen } from './GoalEditorScreen';
 
 // ---------------------------------------------------------------------------
@@ -48,6 +53,39 @@ const CLASS_STRENGTH: ActivityClass = {
   createdAt: '2026-01-01T00:00:00Z',
 };
 
+const ACTIVITY_WALK: Activity = {
+  id: 'act-walk',
+  userId: 'user-1',
+  activityClassId: CLASS_RUNNING.id,
+  name: 'Morning Walk',
+  type: 'performance',
+  defaultVolumeUnit: 'km',
+  isActive: true,
+  createdAt: '2026-01-01T00:00:00Z',
+};
+
+const ACTIVITY_JOG: Activity = {
+  id: 'act-jog',
+  userId: 'user-1',
+  activityClassId: CLASS_RUNNING.id,
+  name: 'Easy Jog',
+  type: 'performance',
+  defaultVolumeUnit: 'km',
+  isActive: true,
+  createdAt: '2026-01-01T00:00:00Z',
+};
+
+const ACTIVITY_SQUAT: Activity = {
+  id: 'act-squat',
+  userId: 'user-1',
+  activityClassId: CLASS_STRENGTH.id,
+  name: 'Bodyweight Squat',
+  type: 'performance',
+  defaultVolumeUnit: 'reps',
+  isActive: true,
+  createdAt: '2026-01-01T00:00:00Z',
+};
+
 /** A goal with numeric progress — used for edit pre-fill tests. */
 const GOAL_WITH_PROGRESS: Omit<Goal, 'userId'> = {
   id: 'goal-edit-1',
@@ -55,6 +93,7 @@ const GOAL_WITH_PROGRESS: Omit<Goal, 'userId'> = {
   targetDate: '2026-06-30' as ISODate,
   timeframe: 'monthly',
   status: 'active',
+  activityId: ACTIVITY_WALK.id,
   activityClassId: CLASS_RUNNING.id,
   progressValue: 20,
   progressTarget: 50,
@@ -157,7 +196,11 @@ describe('GoalEditorScreen — Create: numeric progress', () => {
     const onComplete = vi.fn<() => void>();
     const onBack = vi.fn<() => void>();
 
-    const engine = makeEngine({ createGoal, activityClasses: [] });
+    const engine = makeEngine({
+      createGoal,
+      activityClasses: [CLASS_RUNNING],
+      activities: [ACTIVITY_WALK],
+    });
 
     renderWithProviders(
       <GoalEditorScreen
@@ -195,6 +238,8 @@ describe('GoalEditorScreen — Create: numeric progress', () => {
       await user.click(kmButton);
     }
 
+    await user.click(screen.getByRole('radio', { name: ACTIVITY_WALK.name }));
+
     // Save
     const saveButton = screen.getByRole('button', { name: /save|create/i });
     await user.click(saveButton);
@@ -203,6 +248,7 @@ describe('GoalEditorScreen — Create: numeric progress', () => {
     const draft = (createGoal as ReturnType<typeof vi.fn>).mock.calls[0]![0] as GoalDraft;
     expect(draft.progressTarget).toBe(100);
     expect(draft.progressUnit).toBe('km');
+    expect(draft.activityId).toBe(ACTIVITY_WALK.id);
     expect(draft.status).toBe('active');
     expect((draft as unknown as Record<string, unknown>).id).toBeUndefined();
 
@@ -320,7 +366,11 @@ describe('GoalEditorScreen — Edit: save sends only changed fields', () => {
     const onComplete = vi.fn<() => void>();
     const onBack = vi.fn<() => void>();
 
-    const engine = makeEngine({ updateGoal, activityClasses: [CLASS_RUNNING] });
+    const engine = makeEngine({
+      updateGoal,
+      activityClasses: [CLASS_RUNNING],
+      activities: [ACTIVITY_WALK, ACTIVITY_JOG],
+    });
 
     renderWithProviders(
       <GoalEditorScreen
@@ -720,5 +770,252 @@ describe('GoalEditorScreen — F10.9 loading and error polish', () => {
     expect(screenRoot).not.toBeNull();
     expect(screenRoot).not.toHaveClass('h-screen', 'min-h-screen');
     expect(screenRoot?.getAttribute('style') ?? '').not.toMatch(/100vh/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// S25.F1 — Goal editor UX (plans/tickets-stage-2-5-usage-logic-2026-06-06.md)
+// ---------------------------------------------------------------------------
+
+describe('GoalEditorScreen — S25.F1 Goal editor UX', () => {
+  function getStickySaveRegion(): HTMLElement {
+    const saveButton = screen.getByRole('button', { name: /^(save|create)$/i });
+    const byTestId = screen.queryByTestId(BOTTOM_ACTION_BAR_TEST_ID);
+    if (byTestId !== null && byTestId.contains(saveButton)) {
+      return byTestId;
+    }
+    const region = findSafeBottomOnlyRegion(saveButton);
+    expect(region).not.toBeNull();
+    return region as HTMLElement;
+  }
+
+  function makeGoalEditorEngine(
+    overrides: Partial<MilestoneEngineResult> = {},
+  ): MilestoneEngineResult {
+    return makeEngine({
+      activityClasses: [CLASS_RUNNING, CLASS_STRENGTH],
+      activities: [ACTIVITY_WALK, ACTIVITY_JOG, ACTIVITY_SQUAT],
+      ...overrides,
+    });
+  }
+
+  it('places primary Save/Create CTA in a sticky bottom bar with safe-bottom inset', () => {
+    const engine = makeGoalEditorEngine();
+
+    renderWithProviders(
+      <GoalEditorScreen
+        engine={engine}
+        onBack={vi.fn()}
+        onComplete={vi.fn()}
+      />,
+    );
+
+    const region = getStickySaveRegion();
+    expectSafeBottomOnlyInset(region);
+    expect(region.className).toMatch(/shrink-0/);
+    expect(
+      within(region).getByRole('button', { name: /^(save|create)$/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('does not render Save/Create in the header', () => {
+    const engine = makeGoalEditorEngine();
+
+    renderWithProviders(
+      <GoalEditorScreen
+        engine={engine}
+        onBack={vi.fn()}
+        onComplete={vi.fn()}
+      />,
+    );
+
+    const header = screen.getByRole('heading', { name: /new goal/i }).closest('header');
+    expect(header).not.toBeNull();
+    expect(
+      within(header as HTMLElement).queryByRole('button', { name: /^(save|create)$/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('renders selectable activities grouped under class headings instead of a class-only picker', () => {
+    const engine = makeGoalEditorEngine();
+
+    renderWithProviders(
+      <GoalEditorScreen
+        engine={engine}
+        onBack={vi.fn()}
+        onComplete={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByText(/activity class/i)).not.toBeInTheDocument();
+
+    expect(screen.getByRole('group', { name: CLASS_RUNNING.name })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: CLASS_STRENGTH.name })).toBeInTheDocument();
+
+    expect(screen.getByRole('radio', { name: ACTIVITY_WALK.name })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: ACTIVITY_JOG.name })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: ACTIVITY_SQUAT.name })).toBeInTheDocument();
+    expect(screen.queryByRole('radio', { name: CLASS_RUNNING.name })).not.toBeInTheDocument();
+  });
+
+  it('defaults Track automatically toggle to off on new goals', () => {
+    const engine = makeGoalEditorEngine();
+
+    renderWithProviders(
+      <GoalEditorScreen
+        engine={engine}
+        onBack={vi.fn()}
+        onComplete={vi.fn()}
+      />,
+    );
+
+    const toggle = screen.getByRole('switch', { name: /track automatically/i });
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
+  });
+
+  it('cannot save when auto-track is on without a selected activity', async () => {
+    const user = userEvent.setup();
+    const createGoal = vi.fn<() => void>();
+    const onComplete = vi.fn<() => void>();
+    const engine = makeGoalEditorEngine({ createGoal });
+
+    renderWithProviders(
+      <GoalEditorScreen
+        engine={engine}
+        onBack={vi.fn()}
+        onComplete={onComplete}
+      />,
+    );
+
+    await user.type(screen.getByRole('textbox', { name: /title|goal/i }), 'Auto-tracked km goal');
+    await user.type(screen.getByLabelText(/target date/i), '2026-06-30');
+
+    await user.click(screen.getByRole('switch', { name: /track automatically/i }));
+
+    const targetInput =
+      screen.getByRole('spinbutton', { name: /target/i }) ??
+      screen.getByLabelText(/^target$/i);
+    await user.clear(targetInput);
+    await user.type(targetInput, '50');
+
+    const kmUnit =
+      screen.queryByRole('radio', { name: /^km$/i }) ??
+      screen.queryByRole('button', { name: /^km$/i });
+    if (kmUnit) {
+      await user.click(kmUnit);
+    }
+
+    const saveButton = screen.getByRole('button', { name: /^(save|create)$/i });
+    expect(saveButton).toBeDisabled();
+    expect(screen.getByText(/select an activity/i)).toBeInTheDocument();
+
+    await user.click(saveButton);
+
+    expect(createGoal).not.toHaveBeenCalled();
+    expect(onComplete).not.toHaveBeenCalled();
+  });
+
+  it('shows inline validation when auto-track is on but target is missing', async () => {
+    const user = userEvent.setup();
+    const createGoal = vi.fn<() => void>();
+    const engine = makeGoalEditorEngine({ createGoal });
+
+    renderWithProviders(
+      <GoalEditorScreen
+        engine={engine}
+        onBack={vi.fn()}
+        onComplete={vi.fn()}
+      />,
+    );
+
+    await user.type(screen.getByRole('textbox', { name: /title|goal/i }), 'Auto-tracked goal');
+    await user.type(screen.getByLabelText(/target date/i), '2026-06-30');
+    await user.click(screen.getByRole('switch', { name: /track automatically/i }));
+    await user.click(screen.getByRole('radio', { name: ACTIVITY_WALK.name }));
+
+    const saveButton = screen.getByRole('button', { name: /^(save|create)$/i });
+    expect(saveButton).toBeDisabled();
+    expect(screen.getByText(/enter a target/i)).toBeInTheDocument();
+    expect(createGoal).not.toHaveBeenCalled();
+  });
+
+  it('cannot save numeric progress goal without a selected activity', async () => {
+    const user = userEvent.setup();
+    const createGoal = vi.fn<() => void>();
+    const onComplete = vi.fn<() => void>();
+    const engine = makeGoalEditorEngine({ createGoal });
+
+    renderWithProviders(
+      <GoalEditorScreen
+        engine={engine}
+        onBack={vi.fn()}
+        onComplete={onComplete}
+      />,
+    );
+
+    await user.type(screen.getByRole('textbox', { name: /title|goal/i }), 'Manual km goal');
+    await user.type(screen.getByLabelText(/target date/i), '2026-06-30');
+    await user.click(screen.getByRole('switch', { name: /track numeric progress/i }));
+
+    const targetInput =
+      screen.getByRole('spinbutton', { name: /target/i }) ??
+      screen.getByLabelText(/^target$/i);
+    await user.clear(targetInput);
+    await user.type(targetInput, '50');
+
+    const saveButton = screen.getByRole('button', { name: /^(save|create)$/i });
+    expect(saveButton).toBeDisabled();
+    expect(screen.getByText(/select an activity/i)).toBeInTheDocument();
+
+    await user.click(saveButton);
+
+    expect(createGoal).not.toHaveBeenCalled();
+    expect(onComplete).not.toHaveBeenCalled();
+  });
+
+  it('createGoal payload includes activityId and autoTrackProgress when both are set', async () => {
+    const user = userEvent.setup();
+    const createGoal = vi.fn<() => void>();
+    const onComplete = vi.fn<() => void>();
+    const engine = makeGoalEditorEngine({ createGoal });
+
+    renderWithProviders(
+      <GoalEditorScreen
+        engine={engine}
+        onBack={vi.fn()}
+        onComplete={onComplete}
+      />,
+    );
+
+    await user.type(screen.getByRole('textbox', { name: /title|goal/i }), 'Auto-tracked walk goal');
+    await user.type(screen.getByLabelText(/target date/i), '2026-06-30');
+    await user.click(screen.getByRole('switch', { name: /track automatically/i }));
+    await user.click(screen.getByRole('radio', { name: ACTIVITY_WALK.name }));
+
+    const targetInput =
+      screen.getByRole('spinbutton', { name: /target/i }) ??
+      screen.getByLabelText(/^target$/i);
+    await user.clear(targetInput);
+    await user.type(targetInput, '50');
+
+    const kmUnit =
+      screen.queryByRole('radio', { name: /^km$/i }) ??
+      screen.queryByRole('button', { name: /^km$/i });
+    if (kmUnit) {
+      await user.click(kmUnit);
+    }
+
+    const saveButton = screen.getByRole('button', { name: /^(save|create)$/i });
+    expect(saveButton).not.toBeDisabled();
+    await user.click(saveButton);
+
+    expect(createGoal).toHaveBeenCalledTimes(1);
+    const draft = (createGoal as ReturnType<typeof vi.fn>).mock.calls[0]![0] as GoalDraft;
+    expect(draft.activityId).toBe(ACTIVITY_WALK.id);
+    expect(draft.autoTrackProgress).toBe(true);
+    expect(draft.progressTarget).toBe(50);
+    expect(draft.progressUnit).toBe('km');
+    expect(draft.activityClassId).toBe(CLASS_RUNNING.id);
+    expect(onComplete).toHaveBeenCalledTimes(1);
   });
 });

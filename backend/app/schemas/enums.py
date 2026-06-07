@@ -8,6 +8,8 @@ RuleType = Literal[
     "frequency_limit",
     "weekly_load_cap",
     "consecutive_day_limit",
+    "weekly_volume_cap",
+    "daily_volume_cap",
     "weekly_activity_count",
 ]
 FrequencyUnit = Literal["daily", "weekly"]

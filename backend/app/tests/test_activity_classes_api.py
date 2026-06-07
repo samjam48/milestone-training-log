@@ -1,13 +1,22 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
 
-from app.tests.helpers.seed import seed_activity_class, utc_datetime
+from app.tests.helpers.seed import (
+    seed_activity,
+    seed_activity_class,
+    seed_activity_log,
+    seed_goal,
+    seed_rule,
+    seed_training_block,
+    seed_weekly_target,
+    utc_datetime,
+)
 
 
 def _assert_activity_class_payload(
@@ -275,3 +284,270 @@ async def test_patch_missing_activity_class_returns_stable_not_found(
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Activity class not found"}
+
+
+async def test_delete_empty_activity_class_returns_no_content_and_removes_row(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    seed_activity_class(
+        app_with_test_database,
+        class_id="cls-empty",
+        name="Empty Class",
+    )
+
+    response = await client.delete("/api/activity-classes/cls-empty")
+
+    assert response.status_code == 204
+    assert response.content == b""
+
+    list_response = await client.get("/api/activity-classes")
+    assert list_response.status_code == 200
+    assert list_response.json() == []
+
+
+async def test_delete_activity_class_cascades_unlogged_activities_in_one_transaction(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    seed_activity_class(
+        app_with_test_database,
+        class_id="cls-foot-load",
+        name="Foot Load",
+    )
+    seed_activity_class(
+        app_with_test_database,
+        class_id="cls-recovery",
+        name="Recovery",
+    )
+    seed_activity(
+        app_with_test_database,
+        activity_id="act-walk",
+        activity_class_id="cls-foot-load",
+        name="Walk",
+    )
+    seed_activity(
+        app_with_test_database,
+        activity_id="act-run",
+        activity_class_id="cls-foot-load",
+        name="Run",
+        is_active=False,
+    )
+    seed_activity(
+        app_with_test_database,
+        activity_id="act-stretch",
+        activity_class_id="cls-recovery",
+        name="Stretch",
+    )
+
+    response = await client.delete("/api/activity-classes/cls-foot-load")
+
+    assert response.status_code == 204
+    assert response.content == b""
+
+    classes_response = await client.get("/api/activity-classes")
+    assert classes_response.status_code == 200
+    assert [activity_class["id"] for activity_class in classes_response.json()] == [
+        "cls-recovery",
+    ]
+
+    activities_response = await client.get("/api/activities")
+    assert activities_response.status_code == 200
+    assert [activity["id"] for activity in activities_response.json()] == [
+        "act-stretch",
+    ]
+
+    logs_response = await client.get("/api/activity-logs")
+    assert logs_response.status_code == 200
+    assert logs_response.json() == []
+
+
+async def test_delete_activity_class_with_logged_activity_returns_conflict_and_preserves_rows(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    seed_activity_class(
+        app_with_test_database,
+        class_id="cls-foot-load",
+        name="Foot Load",
+    )
+    seed_activity(
+        app_with_test_database,
+        activity_id="act-walk",
+        activity_class_id="cls-foot-load",
+        name="Walk",
+    )
+    seed_activity(
+        app_with_test_database,
+        activity_id="act-run",
+        activity_class_id="cls-foot-load",
+        name="Run",
+    )
+    seed_activity_log(
+        app_with_test_database,
+        log_id="log-walk",
+        activity_id="act-walk",
+        logged_date=date(2026, 5, 21),
+    )
+
+    response = await client.delete("/api/activity-classes/cls-foot-load")
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": "Cannot delete activity class while activities have logs",
+    }
+
+    classes_response = await client.get("/api/activity-classes")
+    assert classes_response.status_code == 200
+    assert len(classes_response.json()) == 1
+    assert classes_response.json()[0]["id"] == "cls-foot-load"
+
+    activities_response = await client.get("/api/activities")
+    assert activities_response.status_code == 200
+    assert {activity["id"] for activity in activities_response.json()} == {
+        "act-walk",
+        "act-run",
+    }
+
+    logs_response = await client.get("/api/activity-logs")
+    assert logs_response.status_code == 200
+    assert len(logs_response.json()) == 1
+    assert logs_response.json()[0]["id"] == "log-walk"
+
+
+@pytest.mark.parametrize(
+    "goal_reference",
+    [
+        {"activity_class_id": "cls-foot-load"},
+        {"activity_id": "act-walk"},
+    ],
+    ids=["class", "activity"],
+)
+async def test_delete_activity_class_with_goal_reference_returns_conflict_and_preserves_rows(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+    goal_reference: dict[str, str],
+) -> None:
+    seed_activity_class(
+        app_with_test_database,
+        class_id="cls-foot-load",
+        name="Foot Load",
+    )
+    if "activity_id" in goal_reference:
+        seed_activity(
+            app_with_test_database,
+            activity_id="act-walk",
+            activity_class_id="cls-foot-load",
+            name="Walk",
+        )
+    seed_goal(
+        app_with_test_database,
+        goal_id="goal-walk",
+        title="Walk goal",
+        activity_class_id=goal_reference.get("activity_class_id"),
+        activity_id=goal_reference.get("activity_id"),
+    )
+
+    response = await client.delete("/api/activity-classes/cls-foot-load")
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": "Cannot delete activity class while goals reference it",
+    }
+
+    classes_response = await client.get("/api/activity-classes")
+    assert classes_response.status_code == 200
+    assert len(classes_response.json()) == 1
+    assert classes_response.json()[0]["id"] == "cls-foot-load"
+
+    goals_response = await client.get("/api/goals")
+    assert goals_response.status_code == 200
+    assert len(goals_response.json()) == 1
+    assert goals_response.json()[0]["id"] == "goal-walk"
+
+
+async def test_delete_activity_class_with_rule_reference_returns_conflict_and_preserves_rows(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    seed_training_block(
+        app_with_test_database,
+        block_id="blk-1",
+        name="Rehab Block",
+        start_date=date(2026, 4, 7),
+        status="archived",
+    )
+    seed_activity_class(
+        app_with_test_database,
+        class_id="cls-foot-load",
+        name="Foot Load",
+    )
+    seed_rule(
+        app_with_test_database,
+        rule_id="rule-cap",
+        training_block_id="blk-1",
+        rule_type="weekly_load_cap",
+        threshold_value=100.0,
+        window_days=7,
+        activity_class_id="cls-foot-load",
+    )
+
+    response = await client.delete("/api/activity-classes/cls-foot-load")
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": "Cannot delete activity class while rules reference it",
+    }
+
+    classes_response = await client.get("/api/activity-classes")
+    assert classes_response.status_code == 200
+    assert len(classes_response.json()) == 1
+    assert classes_response.json()[0]["id"] == "cls-foot-load"
+
+    rules_response = await client.get("/api/training-blocks/blk-1/rules")
+    assert rules_response.status_code == 200
+    assert len(rules_response.json()) == 1
+    assert rules_response.json()[0]["id"] == "rule-cap"
+
+
+async def test_delete_activity_class_with_weekly_target_ref_returns_conflict_preserves_rows(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    seed_training_block(
+        app_with_test_database,
+        block_id="blk-1",
+        name="Rehab Block",
+        start_date=date(2026, 4, 7),
+        status="archived",
+    )
+    seed_activity_class(
+        app_with_test_database,
+        class_id="cls-foot-load",
+        name="Foot Load",
+    )
+    seed_weekly_target(
+        app_with_test_database,
+        target_id="wt-foot-load",
+        training_block_id="blk-1",
+        activity_class_id="cls-foot-load",
+        target_value=8.0,
+        target_unit="km",
+    )
+
+    response = await client.delete("/api/activity-classes/cls-foot-load")
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": "Cannot delete activity class while weekly targets reference it",
+    }
+
+    classes_response = await client.get("/api/activity-classes")
+    assert classes_response.status_code == 200
+    assert len(classes_response.json()) == 1
+    assert classes_response.json()[0]["id"] == "cls-foot-load"
+
+    targets_response = await client.get("/api/training-blocks/blk-1/weekly-targets")
+    assert targets_response.status_code == 200
+    assert len(targets_response.json()) == 1
+    assert targets_response.json()[0]["id"] == "wt-foot-load"

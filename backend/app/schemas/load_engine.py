@@ -41,6 +41,10 @@ class DailySafetyScore(TypedDict, total=False):
     pain_level: int | None
 
 
+SuggestionBucket = Literal["do", "rest", "done"]
+SuggestionScope = Literal["activity", "class"]
+
+
 class Suggestion(TypedDict, total=False):
     id: str
     label: str
@@ -48,6 +52,10 @@ class Suggestion(TypedDict, total=False):
     reason: str
     next_safe_date: str
     last_done_date: str
+    bucket: SuggestionBucket
+    scope: SuggestionScope
+    activity_class_id: str
+    description: str | None
 
 
 class WeeklyProgress(TypedDict):
@@ -85,6 +93,33 @@ class DelayedTaxHit(TypedDict, total=False):
     contributor_hit_type: HitType
 
 
+class LoadRiskDay(TypedDict):
+    date: str
+    flagged: bool
+
+
+class LoadRiskExerciseBar(TypedDict):
+    activity_id: str
+    activity_name: str
+    actual: float
+    limit: float
+    unit: str
+
+
+class LoadRiskClassBar(TypedDict):
+    activity_class_id: str
+    class_name: str
+    actual: float
+    limit: float
+    unit: str
+    exercises: list[LoadRiskExerciseBar]
+
+
+class LoadRiskSummary(TypedDict):
+    week_days: list[LoadRiskDay]
+    class_bars: list[LoadRiskClassBar]
+
+
 LogDict = dict[str, Any]
 ActivityDict = dict[str, Any]
 ActivityClassDict = dict[str, Any]
@@ -92,3 +127,5 @@ RuleDict = dict[str, Any]
 CheckInDict = dict[str, Any]
 IncidentDict = dict[str, Any]
 WeeklyTargetDict = dict[str, Any]
+GoalDict = dict[str, Any]
+RecoveryTargetDict = dict[str, Any]

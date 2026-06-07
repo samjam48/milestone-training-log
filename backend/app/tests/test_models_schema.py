@@ -16,6 +16,7 @@ from sqlmodel import Session, SQLModel, create_engine
 if TYPE_CHECKING:
     from app.models.block import Rule
     from app.models.checkin import FlareUpIncident
+    from app.models.goal import Goal
     from app.models.log import ActivityLog
 
 EXPECTED_MODEL_MODULES = {
@@ -283,9 +284,11 @@ def test_phase_one_metadata_contains_exact_tables_and_columns() -> None:
             "id",
             "training_block_id",
             "activity_class_id",
+            "activity_id",
             "rule_type",
             "threshold_value",
             "window_days",
+            "limit_unit",
             "enabled",
             "created_at",
             "updated_at",
@@ -326,6 +329,8 @@ def test_phase_one_metadata_contains_exact_tables_and_columns() -> None:
             "target_date",
             "timeframe",
             "activity_class_id",
+            "activity_id",
+            "auto_track_progress",
             "progress_value",
             "progress_target",
             "progress_unit",
@@ -368,6 +373,8 @@ def test_id_user_ownership_and_foreign_key_columns_match_phase_one_contract() ->
     _assert_foreign_key("training_blocks", "related_goal_id", "goals.id", nullable=True)
     _assert_foreign_key("rules", "training_block_id", "training_blocks.id")
     _assert_foreign_key("rules", "activity_class_id", "activity_classes.id", nullable=True)
+    _assert_foreign_key("rules", "activity_id", "activities.id", nullable=True)
+    _assert_foreign_key("goals", "activity_id", "activities.id", nullable=True)
     _assert_foreign_key("weekly_targets", "training_block_id", "training_blocks.id")
     _assert_foreign_key("weekly_targets", "activity_class_id", "activity_classes.id")
     _assert_foreign_key("recovery_targets", "training_block_id", "training_blocks.id")
@@ -406,6 +413,18 @@ def test_column_nullability_defaults_json_and_uniqueness_constraints_are_declare
     assert isinstance(review_column.type, Boolean)
     assert _normalized_server_default(review_column) in {"0", "false"}
 
+    goals = SQLModel.metadata.tables["goals"]
+    assert _get_column(goals, "activity_id").nullable
+    auto_track_column = _get_column(goals, "auto_track_progress")
+    assert isinstance(auto_track_column.type, Boolean)
+    assert not auto_track_column.nullable
+    assert _normalized_server_default(auto_track_column) in {"0", "false"}
+
+    rules = SQLModel.metadata.tables["rules"]
+    assert _get_column(rules, "activity_id").nullable
+    assert _get_column(rules, "limit_unit").nullable
+    assert isinstance(_get_column(rules, "limit_unit").type, String)
+
     assert frozenset({"training_block_id", "activity_class_id"}) in _unique_column_sets(
         "weekly_targets"
     )
@@ -428,6 +447,9 @@ def test_sqlite_schema_declares_required_database_defaults() -> None:
     training_block_defaults = _sqlite_column_defaults(engine, "training_blocks")
     assert training_block_defaults["is_review_milestone_hit"] in {"0", "false"}
 
+    goal_defaults = _sqlite_column_defaults(engine, "goals")
+    assert goal_defaults["auto_track_progress"] in {"0", "false"}
+
 
 def test_relationship_mappings_cover_required_ownership_paths() -> None:
     model_classes = _load_model_classes()
@@ -443,6 +465,104 @@ def test_relationship_mappings_cover_required_ownership_paths() -> None:
     assert "rules" in _relationship_target_tables(model_classes["TrainingBlock"])
     assert "weekly_targets" in _relationship_target_tables(model_classes["TrainingBlock"])
     assert "recovery_targets" in _relationship_target_tables(model_classes["TrainingBlock"])
+    assert "activities" in _relationship_target_tables(model_classes["Goal"])
+    assert "activities" in _relationship_target_tables(model_classes["Rule"])
+
+
+def test_goal_and_rule_models_expose_stage_2_5_field_names() -> None:
+    model_classes = _load_model_classes()
+
+    goal_fields = set(model_classes["Goal"].model_fields)
+    assert {"activity_id", "auto_track_progress"}.issubset(goal_fields)
+
+    rule_fields = set(model_classes["Rule"].model_fields)
+    assert {"activity_id", "limit_unit"}.issubset(rule_fields)
+
+
+def test_legacy_goal_and_rule_rows_default_stage_2_5_columns() -> None:
+    """Existing rows without S25.B1 fields set keep null activity links and auto-track off."""
+    model_classes = _load_model_classes()
+    engine = _make_engine()
+    now = _utc_now()
+
+    activity_class = model_classes["ActivityClass"](
+        id="class-legacy",
+        name="Walking",
+        description="Legacy class-scoped goal and rule",
+        type="performance",
+        created_at=now,
+    )
+    activity = model_classes["Activity"](
+        id="activity-legacy",
+        activity_class_id="class-legacy",
+        name="Outdoor walk",
+        type="performance",
+        default_volume_unit="km",
+        is_active=True,
+        created_at=now,
+        updated_at=now,
+    )
+    goal = model_classes["Goal"](
+        id="goal-legacy",
+        title="Class-only goal",
+        description="Pre-S25.B1 row",
+        target_date=date(2026, 6, 30),
+        timeframe="monthly",
+        activity_class_id="class-legacy",
+        progress_value=None,
+        progress_target=None,
+        progress_unit=None,
+        status="active",
+        created_at=now,
+        updated_at=now,
+    )
+    training_block = model_classes["TrainingBlock"](
+        id="block-legacy",
+        name="Legacy block",
+        start_date=date(2026, 5, 27),
+        end_date=None,
+        status="active",
+        related_goal_id=None,
+        notes=None,
+        created_at=now,
+        updated_at=now,
+    )
+    rule = model_classes["Rule"](
+        id="rule-legacy",
+        training_block_id="block-legacy",
+        activity_class_id="class-legacy",
+        rule_type="weekly_load_cap",
+        threshold_value=50,
+        window_days=7,
+        enabled=True,
+        created_at=now,
+        updated_at=now,
+    )
+
+    with Session(engine) as session:
+        session.add(activity_class)
+        session.add(activity)
+        session.add(goal)
+        session.add(training_block)
+        session.add(rule)
+        session.commit()
+
+        persisted_goal = cast(
+            "Goal | None",
+            session.get(model_classes["Goal"], "goal-legacy"),
+        )
+        persisted_rule = cast(
+            "Rule | None",
+            session.get(model_classes["Rule"], "rule-legacy"),
+        )
+
+    assert persisted_goal is not None
+    assert persisted_goal.activity_id is None
+    assert persisted_goal.auto_track_progress is False
+
+    assert persisted_rule is not None
+    assert persisted_rule.activity_id is None
+    assert persisted_rule.limit_unit is None
 
 
 def test_sqlite_persistence_roundtrips_relationship_foreign_keys_and_json_snapshots() -> None:
@@ -591,6 +711,95 @@ def test_sqlite_persistence_roundtrips_relationship_foreign_keys_and_json_snapsh
     assert persisted_flare.daily_check_in_id == "checkin-1"
     assert persisted_rule is not None
     assert persisted_rule.activity_class_id == "class-walk"
+
+
+def test_sqlite_persistence_roundtrips_stage_2_5_activity_links() -> None:
+    model_classes = _load_model_classes()
+    engine = _make_engine()
+    now = _utc_now()
+
+    activity_class = model_classes["ActivityClass"](
+        id="class-linked",
+        name="Walking",
+        description="Activity-linked goal and exercise rule",
+        type="performance",
+        created_at=now,
+    )
+    activity = model_classes["Activity"](
+        id="activity-linked",
+        activity_class_id="class-linked",
+        name="Outdoor walk",
+        type="performance",
+        default_volume_unit="km",
+        is_active=True,
+        created_at=now,
+        updated_at=now,
+    )
+    goal = model_classes["Goal"](
+        id="goal-linked",
+        title="Walk 10 km",
+        description="Auto-tracked walking goal",
+        target_date=date(2026, 6, 30),
+        timeframe="monthly",
+        activity_class_id="class-linked",
+        activity_id="activity-linked",
+        auto_track_progress=True,
+        progress_value=0.0,
+        progress_target=10.0,
+        progress_unit="km",
+        status="active",
+        created_at=now,
+        updated_at=now,
+    )
+    training_block = model_classes["TrainingBlock"](
+        id="block-linked",
+        name="Linked block",
+        start_date=date(2026, 5, 27),
+        end_date=None,
+        status="active",
+        related_goal_id="goal-linked",
+        notes=None,
+        created_at=now,
+        updated_at=now,
+    )
+    rule = model_classes["Rule"](
+        id="rule-linked",
+        training_block_id="block-linked",
+        activity_class_id="class-linked",
+        activity_id="activity-linked",
+        rule_type="daily_volume_cap",
+        threshold_value=5,
+        window_days=1,
+        limit_unit="km",
+        enabled=True,
+        created_at=now,
+        updated_at=now,
+    )
+
+    with Session(engine) as session:
+        session.add(activity_class)
+        session.add(activity)
+        session.add(goal)
+        session.add(training_block)
+        session.add(rule)
+        session.commit()
+
+        persisted_goal = cast(
+            "Goal | None",
+            session.get(model_classes["Goal"], "goal-linked"),
+        )
+        persisted_rule = cast(
+            "Rule | None",
+            session.get(model_classes["Rule"], "rule-linked"),
+        )
+
+    assert persisted_goal is not None
+    assert persisted_goal.activity_id == "activity-linked"
+    assert persisted_goal.auto_track_progress is True
+
+    assert persisted_rule is not None
+    assert persisted_rule.activity_id == "activity-linked"
+    assert persisted_rule.limit_unit == "km"
 
 
 @pytest.mark.parametrize(

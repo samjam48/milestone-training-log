@@ -55,3 +55,5 @@ class Activity(SQLModel, table=True):
 
     activity_class: ActivityClass = Relationship(back_populates="activities")
     logs: list["ActivityLog"] = Relationship(back_populates="activity")
+    goals: list["Goal"] = Relationship(back_populates="activity")
+    rules: list["Rule"] = Relationship(back_populates="activity")

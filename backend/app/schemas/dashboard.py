@@ -14,6 +14,7 @@ from app.schemas.load import (
     SuggestionRead,
     WeeklyProgressRead,
 )
+from app.schemas.load_engine import LoadRiskSummary
 from app.schemas.training_blocks import TrainingBlockRead
 
 
@@ -41,6 +42,45 @@ class RecoveryStreakRead(BaseModel):
     current_streak_days: int
 
 
+class GoalDashboardRowRead(BaseModel):
+    goal_id: str
+    title: str
+    status: str
+    activity_id: str | None
+    progress_value: float | None
+    progress_target: float | None
+    progress_unit: str | None
+    fill_ratio: float | None
+    is_qualitative: bool
+
+
+class LoadRiskDayRead(BaseModel):
+    date: date
+    flagged: bool
+
+
+class LoadRiskExerciseBarRead(BaseModel):
+    activity_id: str
+    activity_name: str
+    actual: float
+    limit: float
+    unit: str
+
+
+class LoadRiskClassBarRead(BaseModel):
+    activity_class_id: str
+    class_name: str
+    actual: float
+    limit: float
+    unit: str
+    exercises: list[LoadRiskExerciseBarRead]
+
+
+class LoadRiskSummaryRead(BaseModel):
+    week_days: list[LoadRiskDayRead]
+    class_bars: list[LoadRiskClassBarRead]
+
+
 class DashboardRead(BaseModel):
     as_of: date
     user_name: str
@@ -52,7 +92,9 @@ class DashboardRead(BaseModel):
     incidents: list[FlareUpIncidentRead]
     has_checked_in_today: bool
     class_statuses: list[ActivityClassStatusRead]
-    suggestions: list[SuggestionRead]
+    suggestion_buckets: list[SuggestionRead]
+    goal_rows: list[GoalDashboardRowRead]
+    load_risk_summary: LoadRiskSummaryRead | None
     weekly_progress: list[WeeklyProgressRead]
     daily_scores: list[DailySafetyScoreRead]
     load_series: list[LoadPointRead]
@@ -81,4 +123,36 @@ def daily_safety_score_from_dict(score: dict[str, Any]) -> DailySafetyScoreRead:
         violations=[RuleViolationRead.model_validate(v) for v in score["violations"]],
         had_flare_up=bool(score["had_flare_up"]),
         pain_level=score.get("pain_level"),
+    )
+
+
+def load_risk_summary_from_dict(summary: LoadRiskSummary) -> LoadRiskSummaryRead:
+    return LoadRiskSummaryRead(
+        week_days=[
+            LoadRiskDayRead(
+                date=date.fromisoformat(day["date"]),
+                flagged=bool(day["flagged"]),
+            )
+            for day in summary["week_days"]
+        ],
+        class_bars=[
+            LoadRiskClassBarRead(
+                activity_class_id=bar["activity_class_id"],
+                class_name=bar["class_name"],
+                actual=float(bar["actual"]),
+                limit=float(bar["limit"]),
+                unit=bar["unit"],
+                exercises=[
+                    LoadRiskExerciseBarRead(
+                        activity_id=exercise["activity_id"],
+                        activity_name=exercise["activity_name"],
+                        actual=float(exercise["actual"]),
+                        limit=float(exercise["limit"]),
+                        unit=exercise["unit"],
+                    )
+                    for exercise in bar["exercises"]
+                ],
+            )
+            for bar in summary["class_bars"]
+        ],
     )

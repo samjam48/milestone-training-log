@@ -8,6 +8,8 @@ import type {
   DailyCheckIn,
   FlareUpIncident,
   Goal,
+  GoalDashboardRow,
+  GoalStatus,
   ISODate,
   ISODateTime,
   PostActivityFeel,
@@ -23,7 +25,11 @@ import type {
   WeeklyTarget,
 } from '../../types';
 import type { LoadPoint } from '../load';
-import type { Suggestion, WeeklyProgress } from '../engine';
+import type {
+  LoadRiskSummary,
+  Suggestion,
+  WeeklyProgress,
+} from '../engine';
 
 type WithoutUserId<T extends { userId: string }> = Omit<T, 'userId'>;
 
@@ -348,9 +354,11 @@ export function mapRuleFromApi(raw: Record<string, unknown>): Rule {
     id: String(raw.id),
     trainingBlockId: String(raw.training_block_id),
     activityClassId: (raw.activity_class_id as string | null) ?? null,
+    activityId: (raw.activity_id as string | null) ?? undefined,
     ruleType: raw.rule_type as RuleType,
     thresholdValue: Number(raw.threshold_value),
     windowDays: Number(raw.window_days),
+    limitUnit: (raw.limit_unit as Rule['limitUnit']) ?? undefined,
     enabled: Boolean(raw.enabled),
     ...readTimestamped(raw),
   };
@@ -413,6 +421,8 @@ export function mapGoalFromApi(raw: Record<string, unknown>): WithoutUserId<Goal
     targetDate: String(raw.target_date) as ISODate,
     timeframe: raw.timeframe as Goal['timeframe'],
     activityClassId: (raw.activity_class_id as string | null) ?? undefined,
+    activityId: (raw.activity_id as string | null) ?? undefined,
+    autoTrackProgress: raw.auto_track_progress === true,
     progressValue: (raw.progress_value as number | null) ?? undefined,
     progressTarget: (raw.progress_target as number | null) ?? undefined,
     progressUnit: (raw.progress_unit as VolumeUnit | null) ?? undefined,
@@ -423,6 +433,20 @@ export function mapGoalFromApi(raw: Record<string, unknown>): WithoutUserId<Goal
 
 export function mapGoalCreateBody(draft: Record<string, unknown>): Record<string, unknown> {
   return mapKeysToSnake(draft, { omitUndefined: true });
+}
+
+export function mapGoalDashboardRowFromApi(raw: Record<string, unknown>): GoalDashboardRow {
+  return {
+    goalId: String(raw.goal_id),
+    title: String(raw.title),
+    status: raw.status as GoalStatus,
+    activityId: raw.activity_id == null ? null : String(raw.activity_id),
+    progressValue: raw.progress_value == null ? null : Number(raw.progress_value),
+    progressTarget: raw.progress_target == null ? null : Number(raw.progress_target),
+    progressUnit: raw.progress_unit == null ? null : String(raw.progress_unit),
+    fillRatio: raw.fill_ratio == null ? null : Number(raw.fill_ratio),
+    isQualitative: Boolean(raw.is_qualitative),
+  };
 }
 
 export function mapGoalPatchBody(draft: Record<string, unknown>): Record<string, unknown> {
@@ -452,6 +476,61 @@ function mapSuggestionFromApi(raw: Record<string, unknown>): Suggestion {
     reason: String(raw.reason),
     nextSafeDate: (raw.next_safe_date as ISODate | null) ?? undefined,
     lastDoneDate: (raw.last_done_date as ISODate | null) ?? undefined,
+    bucket: raw.bucket == null ? undefined : (raw.bucket as Suggestion['bucket']),
+    scope: raw.scope == null ? undefined : (raw.scope as Suggestion['scope']),
+    activityClassId:
+      raw.activity_class_id == null ? undefined : String(raw.activity_class_id),
+    description: raw.description == null ? undefined : String(raw.description),
+  };
+}
+
+function mapLoadRiskExerciseBarFromApi(raw: Record<string, unknown>) {
+  return {
+    activityId: String(raw.activity_id),
+    activityName: String(raw.activity_name),
+    actual: Number(raw.actual),
+    limit: Number(raw.limit),
+    unit: String(raw.unit),
+  };
+}
+
+function mapLoadRiskClassBarFromApi(raw: Record<string, unknown>) {
+  const exercises = raw.exercises;
+  return {
+    activityClassId: String(raw.activity_class_id),
+    className: String(raw.class_name),
+    actual: Number(raw.actual),
+    limit: Number(raw.limit),
+    unit: String(raw.unit),
+    exercises: Array.isArray(exercises)
+      ? exercises.map((item) =>
+          mapLoadRiskExerciseBarFromApi(isRecord(item) ? item : {}),
+        )
+      : [],
+  };
+}
+
+export function mapLoadRiskSummaryFromApi(
+  raw: Record<string, unknown> | null | undefined,
+): LoadRiskSummary | null {
+  if (raw == null) {
+    return null;
+  }
+  const weekDays = raw.week_days;
+  const classBars = raw.class_bars;
+  return {
+    weekDays: Array.isArray(weekDays)
+      ? weekDays.map((item) => {
+          const day = isRecord(item) ? item : {};
+          return {
+            date: String(day.date) as ISODate,
+            flagged: Boolean(day.flagged),
+          };
+        })
+      : [],
+    classBars: Array.isArray(classBars)
+      ? classBars.map((item) => mapLoadRiskClassBarFromApi(isRecord(item) ? item : {}))
+      : [],
   };
 }
 
@@ -510,7 +589,8 @@ export interface DashboardPayload {
   incidents: WithoutUserId<FlareUpIncident>[];
   hasCheckedInToday: boolean;
   classStatuses: ReturnType<typeof mapActivityClassStatusFromApi>[];
-  suggestions: Suggestion[];
+  suggestionBuckets: Suggestion[];
+  loadRiskSummary: LoadRiskSummary | null;
   weeklyProgress: WeeklyProgress[];
   dailyScores: ReturnType<typeof mapDailySafetyScoreFromApi>[];
   loadSeries: LoadPoint[];
@@ -520,6 +600,7 @@ export interface DashboardPayload {
   cleanStreak: number;
   recoveryStreaks: RecoveryStreak[];
   goals: WithoutUserId<Goal>[];
+  goalRows: GoalDashboardRow[];
   previousBlocks: WithoutUserId<TrainingBlock>[];
 }
 
@@ -540,7 +621,14 @@ export function mapDashboardFromApi(raw: Record<string, unknown>): DashboardPayl
     incidents: mapList(raw.incidents, mapFlareUpIncidentFromApi),
     hasCheckedInToday: Boolean(raw.has_checked_in_today),
     classStatuses: mapList(raw.class_statuses, mapActivityClassStatusFromApi),
-    suggestions: mapList(raw.suggestions, mapSuggestionFromApi),
+    suggestionBuckets: mapList(raw.suggestion_buckets, mapSuggestionFromApi),
+    loadRiskSummary: mapLoadRiskSummaryFromApi(
+      raw.load_risk_summary == null
+        ? null
+        : isRecord(raw.load_risk_summary)
+          ? raw.load_risk_summary
+          : {},
+    ),
     weeklyProgress: mapList(raw.weekly_progress, mapWeeklyProgressFromApi),
     dailyScores: mapList(raw.daily_scores, mapDailySafetyScoreFromApi),
     loadSeries: mapList(raw.load_series, mapLoadPointFromApi),
@@ -553,6 +641,7 @@ export function mapDashboardFromApi(raw: Record<string, unknown>): DashboardPayl
     cleanStreak: Number(raw.clean_streak),
     recoveryStreaks: mapList(raw.recovery_streaks, mapRecoveryStreakFromApi),
     goals: mapList(raw.goals, mapGoalFromApi),
+    goalRows: mapList(raw.goal_rows, mapGoalDashboardRowFromApi),
     previousBlocks: mapList(raw.previous_blocks, mapTrainingBlockFromApi),
   };
 }
@@ -579,12 +668,18 @@ export function mapCheckViolationsRequestBody(input: {
   volumeValue: number;
   rpe: number;
   asOf?: ISODate;
+  durationMinutes?: number;
+  volumeUnit?: string;
 }): Record<string, unknown> {
   return {
     activity_id: input.activityId,
     volume_value: input.volumeValue,
     rpe: input.rpe,
     ...(input.asOf !== undefined ? { as_of: input.asOf } : {}),
+    ...(input.durationMinutes !== undefined
+      ? { duration_minutes: input.durationMinutes }
+      : {}),
+    ...(input.volumeUnit !== undefined ? { volume_unit: input.volumeUnit } : {}),
   };
 }
 

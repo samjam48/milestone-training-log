@@ -33,3 +33,7 @@ export async function patchActivityClass(
   });
   return mapActivityClassFromApi(raw);
 }
+
+export async function deleteActivityClass(classId: string): Promise<void> {
+  await apiFetch(`/activity-classes/${classId}`, { method: 'DELETE' });
+}

@@ -9,6 +9,7 @@ from app.services.rules import (
     ActivityClassNotFoundError,
     RuleAlreadyExistsError,
     RuleNotFoundError,
+    RuleValidationError,
     TrainingBlockNotFoundError,
     create_rule,
     delete_rule,
@@ -61,6 +62,11 @@ async def post_rule(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Activity class not found",
         ) from exc
+    except RuleValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=exc.detail,
+        ) from exc
     return RuleRead.model_validate(rule)
 
 
@@ -81,6 +87,11 @@ async def patch_rule(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Activity class not found",
+        ) from exc
+    except RuleValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=exc.detail,
         ) from exc
     return RuleRead.model_validate(rule)
 

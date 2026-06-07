@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from httpx import AsyncClient
 
 from app.tests.helpers.seed import (
+    seed_activity,
     seed_activity_class,
     seed_goal,
     seed_training_block,
@@ -24,6 +25,8 @@ def _assert_goal_payload(
     timeframe: str,
     status: str,
     activity_class_id: str | None = None,
+    activity_id: str | None = None,
+    auto_track_progress: bool = False,
     progress_value: float | None = None,
     progress_target: float | None = None,
     progress_unit: str | None = None,
@@ -35,6 +38,8 @@ def _assert_goal_payload(
     assert payload["timeframe"] == timeframe
     assert payload["status"] == status
     assert payload["activity_class_id"] == activity_class_id
+    assert payload["activity_id"] == activity_id
+    assert payload["auto_track_progress"] is auto_track_progress
     assert payload["progress_value"] == progress_value
     assert payload["progress_target"] == progress_target
     assert payload["progress_unit"] == progress_unit
@@ -706,3 +711,241 @@ async def test_patch_goal_rejects_null_required_fields_without_changing_row(
         timeframe="monthly",
         status="active",
     )
+
+
+# ---------------------------------------------------------------------------
+# S25.B3 — Goal auto-progress API extension
+# ---------------------------------------------------------------------------
+
+
+async def test_create_goal_defaults_auto_track_progress_to_false(
+    client: AsyncClient,
+) -> None:
+    response = await client.post(
+        "/api/goals",
+        json={
+            "id": "goal-default-auto-track",
+            "title": "Manual goal",
+            "description": "No auto-track flag sent",
+            "target_date": "2026-06-30",
+            "timeframe": "monthly",
+        },
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["activity_id"] is None
+    assert payload["auto_track_progress"] is False
+
+
+async def test_create_goal_accepts_activity_id_and_auto_track_progress(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    seed_activity_class(
+        app_with_test_database,
+        class_id="cls-foot",
+        name="Foot Load",
+    )
+    seed_activity(
+        app_with_test_database,
+        activity_id="act-walk",
+        activity_class_id="cls-foot",
+        name="Walk",
+    )
+
+    response = await client.post(
+        "/api/goals",
+        json={
+            "id": "goal-auto-track",
+            "title": "Walk 20km",
+            "description": "Auto-tracked from logs",
+            "target_date": "2026-06-30",
+            "timeframe": "monthly",
+            "activity_id": "act-walk",
+            "auto_track_progress": True,
+            "progress_target": 20.0,
+            "progress_unit": "km",
+        },
+    )
+
+    assert response.status_code == 201
+    _assert_goal_payload(
+        response.json(),
+        goal_id="goal-auto-track",
+        title="Walk 20km",
+        description="Auto-tracked from logs",
+        target_date="2026-06-30",
+        timeframe="monthly",
+        status="active",
+        activity_class_id="cls-foot",
+        activity_id="act-walk",
+        auto_track_progress=True,
+        progress_target=20.0,
+        progress_unit="km",
+    )
+
+
+async def test_patch_goal_accepts_activity_id_and_auto_track_progress(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    seed_activity_class(
+        app_with_test_database,
+        class_id="cls-foot",
+        name="Foot Load",
+    )
+    seed_activity(
+        app_with_test_database,
+        activity_id="act-walk",
+        activity_class_id="cls-foot",
+        name="Walk",
+    )
+    seed_goal(
+        app_with_test_database,
+        goal_id="goal-1",
+        title="Before",
+        description="Manual goal",
+    )
+
+    response = await client.patch(
+        "/api/goals/goal-1",
+        json={
+            "activity_id": "act-walk",
+            "auto_track_progress": True,
+            "progress_target": 15.0,
+            "progress_unit": "km",
+        },
+    )
+
+    assert response.status_code == 200
+    _assert_goal_payload(
+        response.json(),
+        goal_id="goal-1",
+        title="Before",
+        description="Manual goal",
+        target_date="2026-06-30",
+        timeframe="monthly",
+        status="active",
+        activity_class_id="cls-foot",
+        activity_id="act-walk",
+        auto_track_progress=True,
+        progress_target=15.0,
+        progress_unit="km",
+    )
+
+
+@pytest.mark.parametrize(
+    "missing_field",
+    ["activity_id", "progress_target", "progress_unit"],
+)
+async def test_create_goal_rejects_auto_track_without_required_fields(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+    missing_field: str,
+) -> None:
+    seed_activity_class(
+        app_with_test_database,
+        class_id="cls-foot",
+        name="Foot Load",
+    )
+    seed_activity(
+        app_with_test_database,
+        activity_id="act-walk",
+        activity_class_id="cls-foot",
+        name="Walk",
+    )
+
+    body: dict[str, Any] = {
+        "id": f"goal-invalid-{missing_field}",
+        "title": "Invalid auto-track goal",
+        "description": "Missing a required auto-track field",
+        "target_date": "2026-06-30",
+        "timeframe": "monthly",
+        "auto_track_progress": True,
+        "activity_id": "act-walk",
+        "progress_target": 20.0,
+        "progress_unit": "km",
+    }
+    body.pop(missing_field)
+
+    response = await client.post("/api/goals", json=body)
+
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert isinstance(detail, str), (
+        "Expected service validation message once auto_track fields exist; "
+        f"got schema errors: {detail}"
+    )
+    assert missing_field in detail
+
+
+async def test_create_goal_denormalizes_activity_class_id_from_activity(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    seed_activity_class(
+        app_with_test_database,
+        class_id="cls-foot",
+        name="Foot Load",
+    )
+    seed_activity(
+        app_with_test_database,
+        activity_id="act-walk",
+        activity_class_id="cls-foot",
+        name="Walk",
+    )
+
+    response = await client.post(
+        "/api/goals",
+        json={
+            "id": "goal-linked-activity",
+            "title": "Activity-linked goal",
+            "description": "Class denormalized from activity",
+            "target_date": "2026-06-30",
+            "timeframe": "monthly",
+            "activity_id": "act-walk",
+            "auto_track_progress": True,
+            "progress_target": 10.0,
+            "progress_unit": "km",
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["activity_class_id"] == "cls-foot"
+    assert response.json()["activity_id"] == "act-walk"
+
+
+async def test_list_goals_includes_activity_id_and_auto_track_progress(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    seed_activity_class(
+        app_with_test_database,
+        class_id="cls-foot",
+        name="Foot Load",
+    )
+    seed_activity(
+        app_with_test_database,
+        activity_id="act-walk",
+        activity_class_id="cls-foot",
+        name="Walk",
+    )
+    seed_goal(
+        app_with_test_database,
+        goal_id="goal-auto",
+        title="Auto goal",
+        activity_class_id="cls-foot",
+        activity_id="act-walk",
+        auto_track_progress=True,
+        progress_target=20.0,
+        progress_unit="km",
+    )
+
+    response = await client.get("/api/goals")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload) == 1
+    assert payload[0]["activity_id"] == "act-walk"
+    assert payload[0]["auto_track_progress"] is True

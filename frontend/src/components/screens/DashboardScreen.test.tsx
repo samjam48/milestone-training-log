@@ -5,6 +5,7 @@
  * F10.2 — Dashboard clean streak relabel (plans/tickets-phase-10-polish-2026-06-04.md).
  * Load-risk panel removed from dashboard (owner feedback 2026-06-04); delayed tax kept on incident/check-in flows.
  * F10.5 — Load graph title from engine.graphClassId (plans/tickets-phase-10-polish-2026-06-04.md).
+ * S25.F2 — Goals dashboard card (plans/tickets-stage-2-5-usage-logic-2026-06-06.md).
  *
  * Mocking strategy (mirrors BlockReviewScreen.test.tsx):
  *   - CalendarHeatmap: stubbed to a simple div — tests verify screen wiring, not heatmap internals
@@ -17,9 +18,22 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { screen, cleanup, within } from '@testing-library/react';
 import { renderWithProviders } from '../../test/renderWithProviders';
 import { mockEngine, resetMockEngine } from '../../test/mockEngine';
-import type { DelayedTaxResponse } from '../../hooks/useMilestoneEngine';
+import type { MilestoneEngineResult } from '../../hooks/useMilestoneEngine';
+import type { LoadRiskSummary } from '../../lib/engine';
 import type { ActivityClass, TrainingBlock, DailySafetyScore, RecoveryStreak } from '../../types';
+import {
+  goalDashboardRowAchieved,
+  goalDashboardRowNumeric,
+  goalDashboardRowQualitative,
+  type GoalDashboardRow,
+} from '../../test/goalDashboardRowFixtures';
 import { DashboardScreen } from './DashboardScreen';
+
+type EngineWithGoalRows = MilestoneEngineResult & { goalRows: GoalDashboardRow[] };
+
+function assignGoalRows(rows: GoalDashboardRow[]): void {
+  (mockEngine as EngineWithGoalRows).goalRows = rows;
+}
 
 vi.mock('../../components/composites/CalendarHeatmap', () => ({
   CalendarHeatmap: ({ startDate, endDate }: { startDate: string; endDate: string }) => (
@@ -127,66 +141,38 @@ const ARM_PERFORMANCE_CLASS: ActivityClass = {
   createdAt: '2026-04-07T06:00:00Z',
 };
 
-const DELAYED_TAX_BASE: Omit<DelayedTaxResponse, 'hits'> = {
-  asOf: '2026-05-28',
-  riskWindowDays: 7,
-  baselineDays: 14,
-  painThreshold: 3,
-};
-
-const PROACTIVE_ONLY_DELAYED_TAX: DelayedTaxResponse = {
-  ...DELAYED_TAX_BASE,
-  hits: [
+const LOAD_RISK_SUMMARY: LoadRiskSummary = {
+  weekDays: [
+    { date: '2026-05-22', flagged: true },
+    { date: '2026-05-23', flagged: false },
+    { date: '2026-05-24', flagged: true },
+    { date: '2026-05-25', flagged: false },
+    { date: '2026-05-26', flagged: false },
+    { date: '2026-05-27', flagged: false },
+    { date: '2026-05-28', flagged: false },
+  ],
+  classBars: [
     {
-      hitType: 'elevated_load',
       activityClassId: 'cls-foot',
-      contributingDate: '2026-05-22',
-      message: 'Foot load on May 22 was above your 14-day baseline',
-    },
-    {
-      hitType: 'rest_debt',
-      activityClassId: 'cls-foot',
-      contributingDate: '2026-05-24',
-      message: 'Back-to-back foot sessions without enough rest',
+      className: 'Foot load',
+      actual: 8,
+      limit: 10,
+      unit: 'km',
+      exercises: [
+        {
+          activityId: 'act-walk',
+          activityName: 'Walking',
+          actual: 5,
+          limit: 6,
+          unit: 'km',
+        },
+      ],
     },
   ],
 };
 
-const SYMPTOM_LINKED_DELAYED_TAX: DelayedTaxResponse = {
-  ...DELAYED_TAX_BASE,
-  hits: [
-    {
-      hitType: 'symptom_marker',
-      activityClassId: 'cls-foot',
-      symptomDate: '2026-05-23',
-      message: 'Pain or flare recorded on May 23',
-    },
-    {
-      hitType: 'acute_attribution',
-      activityClassId: 'cls-foot',
-      contributingDate: '2026-05-20',
-      symptomDate: '2026-05-22',
-      primary: true,
-      message: 'Return session after 14 days off, symptoms within 3 days',
-    },
-    {
-      hitType: 'symptom_contributor',
-      activityClassId: 'cls-foot',
-      contributingDate: '2026-05-21',
-      symptomDate: '2026-05-23',
-      contributorHitType: 'elevated_load',
-      message: 'Earlier elevated load in the week before symptoms',
-    },
-  ],
-};
-
-const EMPTY_DELAYED_TAX: DelayedTaxResponse = {
-  ...DELAYED_TAX_BASE,
-  hits: [],
-};
-
-function setupDashboardWithDelayedTax(
-  delayedTax: DelayedTaxResponse | undefined,
+function setupDashboardWithLoadRisk(
+  loadRiskSummary: LoadRiskSummary | null,
 ): void {
   mockEngine.block = ACTIVE_BLOCK;
   mockEngine.dailyScores = DAILY_SCORES;
@@ -194,7 +180,7 @@ function setupDashboardWithDelayedTax(
   mockEngine.activityClasses = [FOOT_PERFORMANCE_CLASS];
   mockEngine.graphClassId = 'cls-foot';
   mockEngine.hasCheckedInToday = true;
-  mockEngine.delayedTax = delayedTax;
+  mockEngine.loadRiskSummary = loadRiskSummary;
 }
 
 function assertAppearsAfter(earlier: HTMLElement, later: HTMLElement): void {
@@ -498,9 +484,9 @@ describe('DashboardScreen — F10.5 load graph title (engine.graphClassId / B10.
   });
 });
 
-describe('DashboardScreen — Load risk visual panel (engine.delayedTax)', () => {
-  it('renders Load risk after the load graph with week strip and event bars', () => {
-    setupDashboardWithDelayedTax(PROACTIVE_ONLY_DELAYED_TAX);
+describe('DashboardScreen — Load risk visual panel (engine.loadRiskSummary)', () => {
+  it('renders Load risk after the load graph with week strip and class bars', () => {
+    setupDashboardWithLoadRisk(LOAD_RISK_SUMMARY);
     useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
 
     renderDashboard();
@@ -512,18 +498,12 @@ describe('DashboardScreen — Load risk visual panel (engine.delayedTax)', () =>
     assertAppearsAfter(section, blockSafetyLabel);
 
     expect(screen.getByTestId('load-risk-week-strip')).toBeInTheDocument();
-    expect(screen.getByTestId('load-risk-event-bars')).toBeInTheDocument();
-    expect(
-      within(screen.getByTestId('load-risk-event-bars')).getAllByRole('progressbar'),
-    ).toHaveLength(2);
-    expect(screen.getByText(/22nd May/i)).toBeInTheDocument();
-    expect(screen.getByText(/24th May/i)).toBeInTheDocument();
-    expect(screen.getByText(/Elevated load/i)).toBeInTheDocument();
-    expect(screen.getByText(/Rest debt/i)).toBeInTheDocument();
+    expect(screen.getByTestId('load-risk-class-bars')).toBeInTheDocument();
+    expect(screen.getByText('8 / 10 km')).toBeInTheDocument();
   });
 
   it('highlights flagged days on the week strip', () => {
-    setupDashboardWithDelayedTax(PROACTIVE_ONLY_DELAYED_TAX);
+    setupDashboardWithLoadRisk(LOAD_RISK_SUMMARY);
     useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
 
     renderDashboard();
@@ -533,38 +513,97 @@ describe('DashboardScreen — Load risk visual panel (engine.delayedTax)', () =>
     expect(flagged.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('shows safe copy when delayedTax has no proactive hits', () => {
-    setupDashboardWithDelayedTax(EMPTY_DELAYED_TAX);
+  it('shows no-caps copy when loadRiskSummary is null', () => {
+    setupDashboardWithLoadRisk(null);
     useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
 
     renderDashboard();
 
-    expect(
-      screen.getByText(/No elevated load or rest-debt flags in the last 7 days/i),
-    ).toBeInTheDocument();
-    expect(screen.queryByTestId('load-risk-event-bars')).not.toBeInTheDocument();
+    expect(screen.getByText(/no load caps configured/i)).toBeInTheDocument();
+    expect(screen.queryByTestId('load-risk-week-strip')).not.toBeInTheDocument();
+  });
+});
+
+describe('DashboardScreen — S25.F2 Goals card', () => {
+  function setupDashboardWithGoalRows(goalRows: GoalDashboardRow[]): void {
+    mockEngine.block = ACTIVE_BLOCK;
+    mockEngine.dailyScores = DAILY_SCORES;
+    mockEngine.previousBlocks = [];
+    mockEngine.hasCheckedInToday = true;
+    assignGoalRows(goalRows);
+  }
+
+  it('renders GoalsCard below Last 7 days when engine.goalRows has entries', () => {
+    setupDashboardWithGoalRows([
+      goalDashboardRowNumeric,
+      goalDashboardRowQualitative,
+      goalDashboardRowAchieved,
+    ]);
+    useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
+
+    renderDashboard();
+
+    const weeklyLabel = screen.getByText('Last 7 days');
+    const goalsCard = screen.getByTestId('goals-card');
+    assertAppearsAfter(weeklyLabel, goalsCard);
+
+    expect(screen.getByText(goalDashboardRowNumeric.title)).toBeInTheDocument();
+    expect(screen.getByText(goalDashboardRowQualitative.title)).toBeInTheDocument();
+    expect(screen.getByText(goalDashboardRowAchieved.title)).toBeInTheDocument();
   });
 
-  it('omits load risk section while delayedTax is undefined', () => {
-    setupDashboardWithDelayedTax(undefined);
+  it('hides GoalsCard when engine.goalRows is empty', () => {
+    setupDashboardWithGoalRows([goalDashboardRowNumeric]);
     useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
 
-    renderDashboard();
+    const view = renderDashboard();
+    expect(screen.getByTestId('goals-card')).toBeInTheDocument();
 
-    expect(screen.queryByTestId('load-risk-section')).not.toBeInTheDocument();
+    assignGoalRows([]);
+    view.rerender(
+      <DashboardScreen
+        engine={mockEngine}
+        onOpenCheckIn={vi.fn()}
+        onOpenLogActivity={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByTestId('goals-card')).not.toBeInTheDocument();
+    expect(screen.queryByText('Goals')).not.toBeInTheDocument();
   });
 
-  it('does not show symptom-only hits as event bars', () => {
-    setupDashboardWithDelayedTax(SYMPTOM_LINKED_DELAYED_TAX);
+  it('shows numeric fill bar width from fill_ratio on dashboard rows', () => {
+    setupDashboardWithGoalRows([goalDashboardRowNumeric]);
     useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
 
     renderDashboard();
 
-    expect(screen.getByTestId('load-risk-section')).toBeInTheDocument();
-    expect(screen.queryByTestId('load-risk-event-bars')).not.toBeInTheDocument();
-    expect(
-      screen.getByText(/No elevated load or rest-debt flags in the last 7 days/i),
-    ).toBeInTheDocument();
+    const row = screen.getByTestId(`goals-card-row-${goalDashboardRowNumeric.goalId}`);
+    const bar = within(row).getByRole('progressbar');
+    const fill = bar.querySelector<HTMLElement>('[style*="width"]');
+    expect(fill?.style.width).toBe('40%');
+  });
+
+  it('shows qualitative status pill instead of a progress bar', () => {
+    setupDashboardWithGoalRows([goalDashboardRowQualitative]);
+    useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
+
+    renderDashboard();
+
+    const row = screen.getByTestId(`goals-card-row-${goalDashboardRowQualitative.goalId}`);
+    expect(within(row).getByTestId('goals-card-status-pill')).toHaveTextContent(/active/i);
+    expect(within(row).queryByRole('progressbar')).not.toBeInTheDocument();
+  });
+
+  it('renders achieved goals with subdued row styling', () => {
+    setupDashboardWithGoalRows([goalDashboardRowAchieved]);
+    useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
+
+    renderDashboard();
+
+    const row = screen.getByTestId(`goals-card-row-${goalDashboardRowAchieved.goalId}`);
+    expect(row).toHaveAttribute('data-achieved', 'true');
+    expect(row.className).toMatch(/opacity-|text-ink-muted|text-ink-faint/);
   });
 });
 

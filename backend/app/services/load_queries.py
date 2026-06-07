@@ -122,6 +122,8 @@ def check_load_violations(
     volume_value: float,
     rpe: int,
     as_of: date | None = None,
+    duration_minutes: int | None = None,
+    volume_unit: str | None = None,
 ) -> CheckViolationsResponse:
     resolved = resolve_as_of(as_of)
     as_of_str = format_iso_date(resolved)
@@ -147,6 +149,8 @@ def check_load_violations(
         log_dicts,
         rule_dicts,
         as_of_str,
+        duration_minutes=duration_minutes,
+        volume_unit=volume_unit,
     )
 
     return CheckViolationsResponse(

@@ -4,6 +4,7 @@
 
 import * as React from 'react';
 import { cn } from '../../lib/cn';
+import { buildBodyPartSuggestions } from '../../lib/bodyPartSuggestions';
 import { BackButton } from '../ui/BackButton';
 import { Card } from '../ui/Card';
 import { Slider } from '../ui/Slider';
@@ -50,7 +51,7 @@ const FieldGroup: React.FC<{ children: React.ReactNode }> = ({ children }) => (
 // ---------------------------------------------------------------------------
 
 export const MorningCheckInScreen: React.FC<Props> = ({ engine, onBack, onComplete }) => {
-  const { todayDate, delayedTax, delayedTaxError, submitCheckIn } = engine;
+  const { todayDate, delayedTax, delayedTaxError, incidents, checkIns, submitCheckIn } = engine;
 
   const [pain,       setPain]       = React.useState<number>(0);
   const [stiffness,  setStiffness]  = React.useState<number>(0);
@@ -60,6 +61,11 @@ export const MorningCheckInScreen: React.FC<Props> = ({ engine, onBack, onComple
   const [severity,   setSeverity]   = React.useState<number>(5);
   const [notes,      setNotes]      = React.useState('');
   const [submitted,  setSubmitted]  = React.useState(false);
+
+  const bodyPartSuggestions = React.useMemo(
+    () => buildBodyPartSuggestions(incidents, checkIns),
+    [incidents, checkIns],
+  );
 
   const formattedDate = new Date(todayDate + 'T00:00:00Z').toLocaleDateString(undefined, {
     weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC',
@@ -178,6 +184,23 @@ export const MorningCheckInScreen: React.FC<Props> = ({ engine, onBack, onComple
                 <label className="block text-body font-medium text-ink mb-2" htmlFor="body-part">
                   Body part affected
                 </label>
+                {bodyPartSuggestions.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {bodyPartSuggestions.map((part) => (
+                      <button
+                        key={part}
+                        type="button"
+                        onClick={() => setBodyPart(part)}
+                        className={cn(
+                          'h-8 px-3 rounded-pill text-body font-medium transition-colors duration-snap border',
+                          'bg-bg-sunken text-ink-muted border-border hover:border-border-strong',
+                        )}
+                      >
+                        {part}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <input
                   id="body-part"
                   type="text"

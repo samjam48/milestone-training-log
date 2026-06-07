@@ -5,7 +5,7 @@ from typing import cast
 
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Engine
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
@@ -46,9 +46,11 @@ EXPECTED_FOREIGN_KEYS = {
         ("daily_check_in_id", "daily_check_ins", "id"),
     },
     "training_blocks": {("related_goal_id", "goals", "id")},
+    "goals": {("activity_id", "activities", "id")},
     "rules": {
         ("training_block_id", "training_blocks", "id"),
         ("activity_class_id", "activity_classes", "id"),
+        ("activity_id", "activities", "id"),
     },
     "weekly_targets": {
         ("training_block_id", "training_blocks", "id"),
@@ -58,6 +60,16 @@ EXPECTED_FOREIGN_KEYS = {
         ("training_block_id", "training_blocks", "id"),
         ("activity_id", "activities", "id"),
     },
+}
+
+STAGE_2_5_GOALS_COLUMNS = {
+    "activity_id",
+    "auto_track_progress",
+}
+
+STAGE_2_5_RULES_COLUMNS = {
+    "activity_id",
+    "limit_unit",
 }
 
 EXPECTED_UNIQUE_COLUMN_SETS = {
@@ -173,13 +185,30 @@ def test_alembic_env_imports_central_sqlmodel_metadata_surface() -> None:
 def test_single_initial_migration_revision_exists() -> None:
     revisions = _migration_revision_files()
 
-    assert len(revisions) == 1, "B1.2 requires one initial migration revision."
+    assert len(revisions) >= 1, "B1.2 requires at least one initial migration revision."
 
-    revision_text = revisions[0].read_text(encoding="utf-8")
-    assert "def upgrade()" in revision_text
-    assert "def downgrade()" in revision_text
+    initial_revision_text = revisions[0].read_text(encoding="utf-8")
+    assert "def upgrade()" in initial_revision_text
+    assert "def downgrade()" in initial_revision_text
     for table_name in APPLICATION_TABLES:
-        assert table_name in revision_text
+        assert table_name in initial_revision_text
+
+
+def test_stage_2_5_migration_revision_adds_goals_and_rules_schema_extensions() -> None:
+    revisions = _migration_revision_files()
+
+    assert len(revisions) >= 2, (
+        "S25.B1 requires a second Alembic revision for goals and rules schema extensions."
+    )
+
+    stage_2_5_revision_text = revisions[-1].read_text(encoding="utf-8")
+    assert "def upgrade()" in stage_2_5_revision_text
+    assert "def downgrade()" in stage_2_5_revision_text
+    assert "goals" in stage_2_5_revision_text
+    assert "rules" in stage_2_5_revision_text
+    assert "activity_id" in stage_2_5_revision_text
+    assert "auto_track_progress" in stage_2_5_revision_text
+    assert "limit_unit" in stage_2_5_revision_text
 
 
 def test_upgrade_head_creates_phase_one_schema_in_temporary_sqlite(
@@ -215,6 +244,70 @@ def test_upgrade_head_creates_phase_one_schema_in_temporary_sqlite(
 
     for table_name, expected_foreign_keys in EXPECTED_FOREIGN_KEYS.items():
         assert expected_foreign_keys.issubset(_foreign_key_triples(engine, table_name))
+
+    goal_columns = {column["name"]: column for column in inspector.get_columns("goals")}
+    rule_columns = {column["name"]: column for column in inspector.get_columns("rules")}
+
+    assert STAGE_2_5_GOALS_COLUMNS.issubset(goal_columns)
+    assert STAGE_2_5_RULES_COLUMNS.issubset(rule_columns)
+    assert goal_columns["activity_id"]["nullable"] is True
+    assert goal_columns["auto_track_progress"]["nullable"] is False
+    assert _normalized_default(goal_columns["auto_track_progress"].get("default")) in {
+        "0",
+        "false",
+    }
+    assert rule_columns["activity_id"]["nullable"] is True
+    assert rule_columns["limit_unit"]["nullable"] is True
+
+    goal_defaults = _sqlite_column_defaults(engine, "goals")
+    assert goal_defaults["auto_track_progress"] in {"0", "false"}
+
+
+def test_stage_2_5_migration_disables_existing_weekly_activity_count_rules(
+    tmp_path: Path,
+) -> None:
+    database_url = f"sqlite:///{tmp_path / 'weekly-activity-count-migration.db'}"
+    config = _make_alembic_config(database_url)
+
+    command.upgrade(config, "20260527_0001")
+
+    engine = create_engine(database_url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                INSERT INTO training_blocks (
+                    id, user_id, name, start_date, status,
+                    is_review_milestone_hit, created_at, updated_at
+                ) VALUES (
+                    'blk-cross-class', 'local', 'Legacy Block', '2026-04-07', 'active',
+                    0, '2026-04-07T00:00:00', '2026-04-07T00:00:00'
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO rules (
+                    id, training_block_id, activity_class_id, rule_type,
+                    threshold_value, window_days, enabled, created_at, updated_at
+                ) VALUES (
+                    'rule-cross-class', 'blk-cross-class', NULL, 'weekly_activity_count',
+                    4, 7, 1, '2026-04-07T00:00:00', '2026-04-07T00:00:00'
+                )
+                """
+            )
+        )
+
+    command.upgrade(config, "head")
+
+    with engine.connect() as connection:
+        enabled = connection.execute(
+            text("SELECT enabled FROM rules WHERE id = 'rule-cross-class'")
+        ).scalar_one()
+
+    assert enabled in {0, False}
 
 
 def test_downgrade_base_removes_application_tables_from_temporary_sqlite(

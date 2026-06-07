@@ -13,9 +13,13 @@ FROZEN_TODAY = date.fromisoformat(AS_OF)
 
 
 def freeze_server_today(monkeypatch: pytest.MonkeyPatch) -> None:
+    freeze_server_today_as(monkeypatch, FROZEN_TODAY)
+
+
+def freeze_server_today_as(monkeypatch: pytest.MonkeyPatch, today: date) -> None:
     monkeypatch.setattr(
         "app.services.load_queries._server_local_today",
-        lambda: FROZEN_TODAY,
+        lambda: today,
     )
 
 

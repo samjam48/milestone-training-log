@@ -18,13 +18,17 @@ import { Card } from '../ui/Card';
 import { Slider } from '../ui/Slider';
 import { SegmentedControl } from '../ui/SegmentedControl';
 import { RuleViolationBanner } from '../composites/RuleViolationBanner';
-import type { MilestoneEngineResult, LogDraft } from '../../hooks/useMilestoneEngine';
-import type { Activity, ActivityClass, RPE, PostActivityFeel, SafetyState } from '../../types';
+import { DatePickerPopover } from '../ui/DatePickerPopover';
+import type { MilestoneEngineResult, LogDraft, LogPatch } from '../../hooks/useMilestoneEngine';
+import { ApiError } from '../../lib/api/client';
+import type { Activity, ActivityClass, ISODate, RPE, PostActivityFeel, SafetyState } from '../../types';
 
 interface Props {
   engine: MilestoneEngineResult;
   /** Pre-selected activity (e.g. tapped from SuggestedActivityCard). */
   initialActivityId?: string;
+  /** When set, form edits an existing log instead of creating one. */
+  logId?: string;
   onBack: () => void;
   onComplete: () => void;
   onCreateActivity?: () => void;
@@ -52,6 +56,24 @@ const FEEL_OPTIONS = [
 const FieldLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <p className="text-body-lg font-semibold text-ink mb-3">{children}</p>
 );
+
+const SaveSpinner: React.FC<{ tone?: 'inverse' | 'ink' }> = ({ tone = 'inverse' }) => (
+  <span
+    className={cn(
+      'inline-block h-5 w-5 animate-spin rounded-full border-2',
+      tone === 'inverse'
+        ? 'border-ink-inverse/30 border-t-ink-inverse'
+        : 'border-ink/20 border-t-ink',
+    )}
+    aria-hidden="true"
+  />
+);
+
+function saveErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) return error.message;
+  if (error instanceof Error) return error.message;
+  return 'Could not save session.';
+}
 
 const NumberField: React.FC<{
   value: number; onChange: (v: number) => void;
@@ -94,20 +116,71 @@ function resolveInitialActivityId(
 // Screen
 // ---------------------------------------------------------------------------
 
-export const LogActivityScreen: React.FC<Props> = ({
-  engine, initialActivityId, onBack, onComplete, onCreateActivity,
-}) => {
-  const { activityClasses, activities, checkViolations, submitLog } = engine;
+function buildLogPatch(
+  selectedId: string,
+  loggedDate: ISODate,
+  duration: number,
+  volume: number,
+  selAct: Activity | undefined,
+  rpe: number,
+  feel: PostActivityFeel,
+  notes: string,
+  violations: ReturnType<MilestoneEngineResult['checkViolations']>,
+): LogPatch {
+  return {
+    activityId: selectedId,
+    loggedDate,
+    durationMinutes: duration,
+    volumeValue: volume,
+    volumeUnit: selAct?.defaultVolumeUnit,
+    rpe: rpe > 0 ? rpe as RPE : undefined,
+    postActivityFeel: feel,
+    notes: notes || undefined,
+    ruleViolationsAtLog: violations.length > 0 ? violations : undefined,
+  };
+}
 
-  const [selectedId,  setSelectedId]  = React.useState<string>(
-    () => resolveInitialActivityId(initialActivityId, activities),
+export const LogActivityScreen: React.FC<Props> = ({
+  engine, initialActivityId, logId, onBack, onComplete, onCreateActivity,
+}) => {
+  const {
+    todayDate,
+    activityClasses,
+    activities,
+    logs,
+    checkViolations,
+    submitLog,
+    updateLog,
+  } = engine;
+
+  const editingLog = logId != null ? logs.find(l => l.id === logId) : undefined;
+  const isEditMode = editingLog != null;
+
+  const [selectedId,  setSelectedId]  = React.useState<string>(() => {
+    if (editingLog != null) return editingLog.activityId;
+    return resolveInitialActivityId(initialActivityId, activities);
+  });
+  const [loggedDate,  setLoggedDate]  = React.useState<ISODate>(
+    () => editingLog?.loggedDate ?? todayDate,
   );
-  const [duration,    setDuration]    = React.useState(0);
-  const [volume,      setVolume]      = React.useState(0);
-  const [rpe,         setRpe]         = React.useState(5);
-  const [feel,        setFeel]        = React.useState<PostActivityFeel>('fine');
-  const [notes,       setNotes]       = React.useState('');
+  const [duration,    setDuration]    = React.useState(
+    () => editingLog?.durationMinutes ?? 0,
+  );
+  const [volume,      setVolume]      = React.useState(
+    () => editingLog?.volumeValue ?? 0,
+  );
+  const [rpe,         setRpe]         = React.useState<number>(
+    () => editingLog?.rpe ?? 5,
+  );
+  const [feel,        setFeel]        = React.useState<PostActivityFeel>(
+    () => editingLog?.postActivityFeel ?? 'fine',
+  );
+  const [notes,       setNotes]       = React.useState(
+    () => editingLog?.notes ?? '',
+  );
   const [submitted,   setSubmitted]   = React.useState(false);
+  const [isSaving,    setIsSaving]    = React.useState(false);
+  const [saveError,   setSaveError]   = React.useState<string | null>(null);
 
   const groups  = React.useMemo(() => groupActivities(activityClasses, activities), [activityClasses, activities]);
   const hasActiveActivities = groups.length > 0;
@@ -115,28 +188,49 @@ export const LogActivityScreen: React.FC<Props> = ({
 
   // Live violation check — updates on every relevant input change
   const violations = React.useMemo(() => {
-    if (!selectedId || volume <= 0) return [];
-    return checkViolations(selectedId, volume, rpe > 0 ? rpe : 5);
-  }, [selectedId, volume, rpe, checkViolations]);
+    if (!selectedId || (volume <= 0 && duration <= 0)) return [];
+    return checkViolations(
+      selectedId,
+      volume,
+      rpe > 0 ? rpe : 5,
+      duration > 0 ? duration : undefined,
+      selAct?.defaultVolumeUnit,
+    );
+  }, [selectedId, volume, rpe, duration, selAct?.defaultVolumeUnit, checkViolations]);
 
   const canSubmit = selectedId !== '' && duration > 0;
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!canSubmit) return;
-    const draft: LogDraft = {
-      activityId: selectedId,
-      durationMinutes: duration,
-      volumeValue: volume,
-      volumeUnit: selAct?.defaultVolumeUnit,
-      rpe: rpe > 0 ? rpe as RPE : undefined,
-      postActivityFeel: feel,
-      notes: notes || undefined,
-      ruleViolationsAtLog: violations.length > 0 ? violations : undefined,
-    };
-    submitLog(draft);
-    setSubmitted(true);
-    setTimeout(onComplete, 800);
+    if (!canSubmit || isSaving) return;
+    setSaveError(null);
+    setIsSaving(true);
+    try {
+      if (isEditMode && logId != null) {
+        await updateLog(logId, buildLogPatch(
+          selectedId, loggedDate, duration, volume, selAct, rpe, feel, notes, violations,
+        ));
+      } else {
+        const draft: LogDraft = {
+          activityId: selectedId,
+          loggedDate,
+          durationMinutes: duration,
+          volumeValue: volume,
+          volumeUnit: selAct?.defaultVolumeUnit,
+          rpe: rpe > 0 ? rpe as RPE : undefined,
+          postActivityFeel: feel,
+          notes: notes || undefined,
+          ruleViolationsAtLog: violations.length > 0 ? violations : undefined,
+        };
+        await submitLog(draft);
+      }
+      setSubmitted(true);
+      setTimeout(onComplete, 800);
+    } catch (error) {
+      setSaveError(saveErrorMessage(error));
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   if (submitted) return (
@@ -144,7 +238,9 @@ export const LogActivityScreen: React.FC<Props> = ({
       <span className="flex h-14 w-14 items-center justify-center rounded-full bg-safe/20">
         <svg width={28} height={28} viewBox="0 0 28 28" fill="none"><path d="M5 14l6 6L23 7" stroke="#3DD68C" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"/></svg>
       </span>
-      <p className="text-title font-semibold text-safe-fg">Session logged.</p>
+      <p className="text-title font-semibold text-safe-fg">
+        {isEditMode ? 'Session updated.' : 'Session logged.'}
+      </p>
       <p className="text-body text-ink-muted">Your dashboard has been updated.</p>
     </div>
   );
@@ -154,7 +250,9 @@ export const LogActivityScreen: React.FC<Props> = ({
       {/* Header */}
       <div className="px-4 pb-2 shrink-0">
         <BackButton onPress={onBack} />
-        <h1 className="text-title font-bold text-ink mt-3">Log Activity</h1>
+        <h1 className="text-title font-bold text-ink mt-3">
+          {isEditMode ? 'Edit Activity' : 'Log Activity'}
+        </h1>
       </div>
 
       <div className="flex flex-1 min-h-0 flex-col gap-4 overflow-y-auto px-4 pb-4 mt-2">
@@ -204,6 +302,16 @@ export const LogActivityScreen: React.FC<Props> = ({
         {selectedId && (
           <>
             <Card pad="md">
+              <FieldLabel>Date</FieldLabel>
+              <DatePickerPopover
+                value={loggedDate}
+                maxDate={todayDate}
+                todayDate={todayDate}
+                onChange={setLoggedDate}
+              />
+            </Card>
+
+            <Card pad="md">
               <FieldLabel>Session details</FieldLabel>
               <div className="flex flex-col gap-4">
                 <div>
@@ -250,16 +358,48 @@ export const LogActivityScreen: React.FC<Props> = ({
 
       {hasActiveActivities && (
       <div className="shrink-0 border-t border-border bg-bg px-4 py-3 pb-safe-bottom">
-        <button type="submit" disabled={!canSubmit}
-          className={cn('h-12 w-full rounded-md text-body-lg font-semibold transition-colors duration-snap',
+        {saveError != null && (
+          <p role="alert" className="mb-3 text-body text-danger-fg">
+            {saveError}
+          </p>
+        )}
+        <button type="submit" disabled={!canSubmit || isSaving}
+          className={cn('flex h-12 w-full items-center justify-center gap-2 rounded-md text-body-lg font-semibold transition-colors duration-snap',
             violations.length > 0
               ? 'bg-caution text-ink-inverse active:brightness-90'
               : 'bg-ink text-ink-inverse active:opacity-80',
-            !canSubmit && 'opacity-40 cursor-not-allowed')}>
-          {violations.length > 0 ? 'Log anyway' : 'Log session'}
+            (!canSubmit || isSaving) && 'opacity-40 cursor-not-allowed')}>
+          {isSaving ? (
+            <>
+              <SaveSpinner />
+              <span>{isEditMode ? 'Saving…' : 'Logging…'}</span>
+            </>
+          ) : (
+            isEditMode
+              ? (violations.length > 0 ? 'Save anyway' : 'Save changes')
+              : (violations.length > 0 ? 'Log anyway' : 'Log session')
+          )}
         </button>
       </div>
       )}
+
+      {isSaving && (
+        <div
+          data-testid="log-activity-saving"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-bg/70"
+          aria-busy="true"
+          role="status"
+          aria-label={isEditMode ? 'Saving session' : 'Logging session'}
+        >
+          <div className="flex items-center gap-3 rounded-xl border border-border bg-bg-raised px-6 py-4 shadow-lg">
+            <SaveSpinner tone="ink" />
+            <span className="text-body font-medium text-ink">
+              {isEditMode ? 'Saving…' : 'Logging…'}
+            </span>
+          </div>
+        </div>
+      )}
+
     </form>
   );
 };

@@ -4,6 +4,14 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
+def _reject_future_logged_date(value: date) -> date:
+    from app.services.load_queries import _server_local_today
+
+    if value > _server_local_today():
+        raise ValueError("logged_date must not be in the future")
+    return value
+
+
 class ActivityLogCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -17,6 +25,11 @@ class ActivityLogCreate(BaseModel):
     post_activity_feel: str | None = None
     notes: str | None = None
     rule_violations_at_log: list[dict[str, Any]] | None = None
+
+    @field_validator("logged_date")
+    @classmethod
+    def validate_logged_date_not_future(cls, value: date) -> date:
+        return _reject_future_logged_date(value)
 
 
 class ActivityLogPatch(BaseModel):
@@ -44,6 +57,13 @@ class ActivityLogPatch(BaseModel):
         if value is None:
             raise ValueError("Field may not be null")
         return value
+
+    @field_validator("logged_date")
+    @classmethod
+    def validate_logged_date_not_future(cls, value: date | None) -> date | None:
+        if value is None:
+            return value
+        return _reject_future_logged_date(value)
 
 
 class ActivityLogRead(BaseModel):

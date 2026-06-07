@@ -48,15 +48,24 @@ class Rule(SQLModel, table=True):
         default=None,
         sa_column=Column(String, ForeignKey("activity_classes.id"), nullable=True),
     )
+    activity_id: str | None = Field(
+        default=None,
+        sa_column=Column(String, ForeignKey("activities.id"), nullable=True),
+    )
     rule_type: str
     threshold_value: float
     window_days: int
+    limit_unit: str | None = Field(
+        default=None,
+        sa_column=Column(String, nullable=True),
+    )
     enabled: bool
     created_at: datetime
     updated_at: datetime
 
     training_block: TrainingBlock = Relationship(back_populates="rules")
     activity_class: ActivityClass | None = Relationship(back_populates="rules")
+    activity: Activity | None = Relationship(back_populates="rules")
 
 
 class WeeklyTarget(SQLModel, table=True):

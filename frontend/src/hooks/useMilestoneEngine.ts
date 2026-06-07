@@ -17,6 +17,7 @@ import type {
   DailySafetyScore,
   FlareUpIncident,
   Goal,
+  GoalDashboardRow,
   GoalStatus,
   GoalTimeframe,
   ID,
@@ -30,22 +31,28 @@ import type {
   RuleViolationSnapshot,
   Score0to10,
   TrainingBlock,
+  VolumeCapUnit,
   VolumeUnit,
   WeeklyTarget,
 } from '../types';
-import type { WeeklyProgress, Suggestion } from '../lib/engine';
+import type { LoadRiskSummary, WeeklyProgress, Suggestion } from '../lib/engine';
 import type { LoadPoint } from '../lib/load';
-import { isUnauthorizedError } from '../lib/api/client';
+import { ApiError, isUnauthorizedError } from '../lib/api/client';
+import { addDays } from '../lib/load';
 import {
   getDashboard,
   listActivityLogs,
   listActivities,
+  listDailyCheckIns,
   createActivityLog,
+  patchActivityLog,
   createDailyCheckIn,
   createFlareUpIncident,
   checkViolations as checkViolationsApi,
   listRulesByBlock,
   listWeeklyTargetsByBlock,
+  createWeeklyTarget as createWeeklyTargetApi,
+  patchWeeklyTarget as patchWeeklyTargetApi,
   createGoal as createGoalApi,
   patchGoal,
   createRule as createRuleApi,
@@ -54,9 +61,12 @@ import {
   createTrainingBlock as createTrainingBlockApi,
   createActivity,
   createActivityClass,
+  patchActivityClass,
+  deleteActivityClass as deleteActivityClassApi,
   patchActivity,
   getDelayedTax,
 } from '../lib/api';
+import type { DailyCheckInRead } from '../lib/api/mappers';
 
 export type DelayedTaxResponse = Awaited<ReturnType<typeof getDelayedTax>>;
 
@@ -90,6 +100,7 @@ export interface CheckInDraft {
 
 export interface LogDraft {
   activityId: string;
+  loggedDate: ISODate;
   durationMinutes: number;
   volumeValue: number;
   volumeUnit?: VolumeUnit;
@@ -97,6 +108,18 @@ export interface LogDraft {
   postActivityFeel?: PostActivityFeel;
   notes?: string;
   /** Violations detected at submit time — stored on the log for history display. */
+  ruleViolationsAtLog?: RuleViolationSnapshot[];
+}
+
+export interface LogPatch {
+  activityId?: string;
+  loggedDate?: ISODate;
+  durationMinutes?: number;
+  volumeValue?: number;
+  volumeUnit?: VolumeUnit;
+  rpe?: RPE;
+  postActivityFeel?: PostActivityFeel;
+  notes?: string;
   ruleViolationsAtLog?: RuleViolationSnapshot[];
 }
 
@@ -123,6 +146,11 @@ export interface NewActivityClassDraft {
   defaultRecoveryWindowDays?: number;
 }
 
+export interface ActivityClassPatch {
+  name?: string;
+  type?: ActivityType;
+}
+
 export interface GoalDraft {
   title: string;
   targetDate: ISODate;
@@ -130,6 +158,8 @@ export interface GoalDraft {
   status: GoalStatus;
   description?: string;
   activityClassId?: ID;
+  activityId?: ID;
+  autoTrackProgress?: boolean;
   progressValue?: number;
   progressTarget?: number;
   progressUnit?: VolumeUnit;
@@ -138,14 +168,26 @@ export interface GoalDraft {
 export type GoalPatch = Partial<Omit<GoalDraft, 'title'>> & { title?: string; status?: GoalStatus };
 
 export interface RuleDraft {
-  activityClassId: ID | null;
+  activityClassId: ID;
+  activityId?: ID;
   ruleType: RuleType;
   thresholdValue: number;
   windowDays: number;
+  limitUnit?: VolumeCapUnit;
   enabled: boolean;
 }
 
-export type RulePatch = Partial<Pick<RuleDraft, 'thresholdValue' | 'windowDays' | 'enabled'>>;
+export type RulePatch = Partial<
+  Pick<RuleDraft, 'thresholdValue' | 'windowDays' | 'limitUnit' | 'enabled'>
+>;
+
+export interface WeeklyTargetDraft {
+  activityClassId: ID;
+  targetValue: number;
+  targetUnit: VolumeUnit;
+}
+
+export type WeeklyTargetPatch = Partial<Pick<WeeklyTargetDraft, 'targetValue' | 'targetUnit'>>;
 
 export interface BlockDraft {
   name: string;
@@ -167,9 +209,11 @@ export interface MilestoneEngineResult {
   activities: Activity[];
   logs: ActivityLog[];
   incidents: FlareUpIncident[];
+  checkIns: DailyCheckInRead[];
   hasCheckedInToday: boolean;
   classStatuses: ActivityClassStatus[];
-  suggestions: Suggestion[];
+  suggestionBuckets: Suggestion[];
+  loadRiskSummary: LoadRiskSummary | null;
   weeklyProgress: WeeklyProgress[];
   dailyScores: DailySafetyScore[];
   loadSeries: LoadPoint[];
@@ -183,12 +227,15 @@ export interface MilestoneEngineResult {
   delayedTaxError: boolean;
   // F2.0 read fields
   goals: Omit<Goal, 'userId'>[];
+  goalRows: GoalDashboardRow[];
   rules: Rule[];
   weeklyTargets: WeeklyTarget[];
   previousBlocks: TrainingBlock[];
   // F2.0 mutations
   submitNewActivity: (draft: NewActivityDraft) => void;
   submitNewActivityClass: (draft: NewActivityClassDraft) => Promise<void>;
+  updateActivityClass: (classId: ID, patch: ActivityClassPatch) => Promise<void>;
+  deleteActivityClass: (classId: ID) => Promise<void>;
   updateActivity: (activityId: ID, patch: Partial<NewActivityDraft>) => void;
   deactivateActivity: (activityId: ID) => void;
   createGoal: (draft: GoalDraft) => void;
@@ -197,6 +244,11 @@ export interface MilestoneEngineResult {
   createRule: (draft: RuleDraft) => void;
   updateRule: (ruleId: ID, patch: RulePatch) => void;
   deleteRule: (ruleId: ID) => void;
+  /** Inline error from the latest createRule / updateRule failure; null when none. */
+  ruleMutationError: string | null;
+  clearRuleMutationError: () => void;
+  createWeeklyTarget: (draft: WeeklyTargetDraft) => void;
+  patchWeeklyTarget: (targetId: ID, patch: WeeklyTargetPatch) => void;
   createTrainingBlock: (draft: BlockDraft) => void;
   // H10.2 — app shell query status (no raw React Query objects)
   isInitialLoading: boolean;
@@ -206,17 +258,36 @@ export interface MilestoneEngineResult {
   refetchAll: () => void;
   // F1.3 mutations
   submitCheckIn: (draft: CheckInDraft) => void;
-  submitLog: (draft: LogDraft) => void;
+  submitLog: (draft: LogDraft) => Promise<void>;
+  updateLog: (logId: ID, patch: LogPatch) => Promise<void>;
   submitIncident: (draft: IncidentDraft) => void;
-  checkViolations: (activityId: ID, volumeValue: number, rpe: number) => RuleViolationSnapshot[];
+  checkViolations: (
+    activityId: ID,
+    volumeValue: number,
+    rpe: number,
+    durationMinutes?: number,
+    volumeUnit?: VolumeUnit,
+  ) => RuleViolationSnapshot[];
 }
 
 // ---------------------------------------------------------------------------
 // Hook
 // ---------------------------------------------------------------------------
 
+function ruleMutationErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    return error.message;
+  }
+  return 'Failed to save rule';
+}
+
 export function useMilestoneEngine(): MilestoneEngineResult {
   const queryClient = useQueryClient();
+  const [ruleMutationError, setRuleMutationError] = React.useState<string | null>(null);
+
+  const clearRuleMutationError = React.useCallback(() => {
+    setRuleMutationError(null);
+  }, []);
 
   const dashboardQuery = useQuery({
     queryKey: ['dashboard'],
@@ -236,6 +307,17 @@ export function useMilestoneEngine(): MilestoneEngineResult {
   const dashboard = dashboardQuery.data;
   const todayDate = dashboard?.todayDate ?? ('' as ISODate);
   const blockId = dashboard?.block?.id ?? null;
+
+  const checkInsQuery = useQuery({
+    queryKey: ['daily-check-ins', todayDate],
+    queryFn: () => {
+      if (todayDate === '') return Promise.resolve([]);
+      const startDate = addDays(todayDate, -365);
+      return listDailyCheckIns({ startDate, endDate: todayDate });
+    },
+    enabled: todayDate !== '',
+    refetchOnWindowFocus: false,
+  });
 
   const rulesQuery = useQuery({
     queryKey: ['rules', blockId ?? ''],
@@ -268,7 +350,7 @@ export function useMilestoneEngine(): MilestoneEngineResult {
       createActivityLog({
         id: crypto.randomUUID(),
         activityId: draft.activityId,
-        loggedDate: todayDate,
+        loggedDate: draft.loggedDate,
         durationMinutes: draft.durationMinutes,
         volumeValue: draft.volumeValue,
         volumeUnit: draft.volumeUnit,
@@ -277,6 +359,17 @@ export function useMilestoneEngine(): MilestoneEngineResult {
         notes: draft.notes,
         ruleViolationsAtLog: draft.ruleViolationsAtLog ?? liveViolations,
       }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['activity-logs'] });
+      void queryClient.invalidateQueries({ queryKey: ['activities'] });
+      void queryClient.invalidateQueries({ queryKey: ['delayed-tax'] });
+    },
+  });
+
+  const updateLogMutation = useMutation({
+    mutationFn: ({ logId, patch }: { logId: ID; patch: LogPatch }) =>
+      patchActivityLog(logId, patch as Record<string, unknown>),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       void queryClient.invalidateQueries({ queryKey: ['activity-logs'] });
@@ -305,6 +398,7 @@ export function useMilestoneEngine(): MilestoneEngineResult {
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['daily-check-ins'] });
       void queryClient.invalidateQueries({ queryKey: ['delayed-tax'] });
     },
   });
@@ -353,6 +447,24 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       void queryClient.invalidateQueries({ queryKey: ['activity-classes'] });
+    },
+  });
+
+  const updateActivityClassMutation = useMutation({
+    mutationFn: ({ classId, patch }: { classId: ID; patch: ActivityClassPatch }) =>
+      patchActivityClass(classId, patch as Record<string, unknown>),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['activity-classes'] });
+    },
+  });
+
+  const deleteActivityClassMutation = useMutation({
+    mutationFn: (classId: ID) => deleteActivityClassApi(classId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['activity-classes'] });
+      void queryClient.invalidateQueries({ queryKey: ['activities'] });
     },
   });
 
@@ -407,16 +519,30 @@ export function useMilestoneEngine(): MilestoneEngineResult {
         id: crypto.randomUUID(),
         ...draft,
       }),
+    onMutate: () => {
+      setRuleMutationError(null);
+    },
     onSuccess: () => {
+      setRuleMutationError(null);
       void queryClient.invalidateQueries({ queryKey: ['rules', blockId ?? ''] });
+    },
+    onError: (error) => {
+      setRuleMutationError(ruleMutationErrorMessage(error));
     },
   });
 
   const updateRuleMutation = useMutation({
     mutationFn: ({ ruleId, patch }: { ruleId: ID; patch: RulePatch }) =>
       patchRule(ruleId, patch as Record<string, unknown>),
+    onMutate: () => {
+      setRuleMutationError(null);
+    },
     onSuccess: () => {
+      setRuleMutationError(null);
       void queryClient.invalidateQueries({ queryKey: ['rules', blockId ?? ''] });
+    },
+    onError: (error) => {
+      setRuleMutationError(ruleMutationErrorMessage(error));
     },
   });
 
@@ -424,6 +550,27 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     mutationFn: (ruleId: ID) => deleteRuleApi(ruleId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['rules', blockId ?? ''] });
+    },
+  });
+
+  const createWeeklyTargetMutation = useMutation({
+    mutationFn: (draft: WeeklyTargetDraft) =>
+      createWeeklyTargetApi(blockId as string, {
+        id: crypto.randomUUID(),
+        ...draft,
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['weekly-targets', blockId ?? ''] });
+      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+  });
+
+  const patchWeeklyTargetMutation = useMutation({
+    mutationFn: ({ targetId, patch }: { targetId: ID; patch: WeeklyTargetPatch }) =>
+      patchWeeklyTargetApi(targetId, patch as Record<string, unknown>),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['weekly-targets', blockId ?? ''] });
+      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
   });
 
@@ -442,6 +589,8 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     activityId: ID,
     volumeValue: number,
     rpe: number,
+    durationMinutes?: number,
+    volumeUnit?: VolumeUnit,
   ): RuleViolationSnapshot[] => {
     if (violationDebounceRef.current !== undefined) {
       clearTimeout(violationDebounceRef.current);
@@ -452,7 +601,14 @@ export function useMilestoneEngine(): MilestoneEngineResult {
         queryClient.getQueryData<Awaited<ReturnType<typeof getDashboard>>>(['dashboard'])
           ?.todayDate ?? todayDate;
 
-      void checkViolationsApi({ activityId, volumeValue, rpe, asOf })
+      void checkViolationsApi({
+        activityId,
+        volumeValue,
+        rpe,
+        asOf,
+        ...(durationMinutes !== undefined ? { durationMinutes } : {}),
+        ...(volumeUnit !== undefined ? { volumeUnit } : {}),
+      })
         .then((response) => {
           setLiveViolations(response.violations);
         })
@@ -473,9 +629,13 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     submitCheckInMutation.mutate(draft);
   }, [submitCheckInMutation]);
 
-  const submitLog = React.useCallback((draft: LogDraft) => {
-    submitLogMutation.mutate(draft);
+  const submitLog = React.useCallback(async (draft: LogDraft) => {
+    await submitLogMutation.mutateAsync(draft);
   }, [submitLogMutation]);
+
+  const updateLog = React.useCallback(async (logId: ID, patch: LogPatch) => {
+    await updateLogMutation.mutateAsync({ logId, patch });
+  }, [updateLogMutation]);
 
   const submitIncident = React.useCallback((draft: IncidentDraft) => {
     submitIncidentMutation.mutate(draft);
@@ -488,6 +648,14 @@ export function useMilestoneEngine(): MilestoneEngineResult {
   const submitNewActivityClass = React.useCallback(async (draft: NewActivityClassDraft) => {
     await submitNewActivityClassMutation.mutateAsync(draft);
   }, [submitNewActivityClassMutation]);
+
+  const updateActivityClass = React.useCallback(async (classId: ID, patch: ActivityClassPatch) => {
+    await updateActivityClassMutation.mutateAsync({ classId, patch });
+  }, [updateActivityClassMutation]);
+
+  const deleteActivityClass = React.useCallback(async (classId: ID) => {
+    await deleteActivityClassMutation.mutateAsync(classId);
+  }, [deleteActivityClassMutation]);
 
   const updateActivity = React.useCallback((activityId: ID, patch: Partial<NewActivityDraft>) => {
     updateActivityMutation.mutate({ activityId, patch });
@@ -521,6 +689,14 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     deleteRuleMutation.mutate(ruleId);
   }, [deleteRuleMutation]);
 
+  const createWeeklyTarget = React.useCallback((draft: WeeklyTargetDraft) => {
+    createWeeklyTargetMutation.mutate(draft);
+  }, [createWeeklyTargetMutation]);
+
+  const patchWeeklyTarget = React.useCallback((targetId: ID, patch: WeeklyTargetPatch) => {
+    patchWeeklyTargetMutation.mutate({ targetId, patch });
+  }, [patchWeeklyTargetMutation]);
+
   const createTrainingBlock = React.useCallback((draft: BlockDraft) => {
     createTrainingBlockMutation.mutate(draft);
   }, [createTrainingBlockMutation]);
@@ -545,9 +721,11 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     activities: resolvedActivities,
     logs: (activityLogsQuery.data ?? []) as ActivityLog[],
     incidents: (dashboard?.incidents ?? []) as FlareUpIncident[],
+    checkIns: (checkInsQuery.data ?? []) as DailyCheckInRead[],
     hasCheckedInToday: dashboard?.hasCheckedInToday ?? false,
     classStatuses: dashboard?.classStatuses ?? [],
-    suggestions: dashboard?.suggestions ?? [],
+    suggestionBuckets: dashboard?.suggestionBuckets ?? [],
+    loadRiskSummary: dashboard?.loadRiskSummary ?? null,
     weeklyProgress: dashboard?.weeklyProgress ?? [],
     dailyScores: dashboard?.dailyScores ?? [],
     loadSeries: dashboard?.loadSeries ?? [],
@@ -560,12 +738,15 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     delayedTaxError: delayedTaxQuery.isError,
     // F2.0 read fields
     goals: (dashboard?.goals ?? []) as Omit<Goal, 'userId'>[],
+    goalRows: dashboard?.goalRows ?? [],
     rules: (rulesQuery.data ?? []) as Rule[],
     weeklyTargets: (weeklyTargetsQuery.data ?? []) as WeeklyTarget[],
     previousBlocks: (dashboard?.previousBlocks ?? []) as TrainingBlock[],
     // F2.0 mutations
     submitNewActivity,
     submitNewActivityClass,
+    updateActivityClass,
+    deleteActivityClass,
     updateActivity,
     deactivateActivity,
     createGoal,
@@ -574,6 +755,10 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     createRule,
     updateRule,
     deleteRule,
+    ruleMutationError,
+    clearRuleMutationError,
+    createWeeklyTarget,
+    patchWeeklyTarget,
     createTrainingBlock,
     // H10.2 — app shell query status
     isInitialLoading,
@@ -583,6 +768,7 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     // F1.3 mutations
     submitCheckIn,
     submitLog,
+    updateLog,
     submitIncident,
     checkViolations,
   };

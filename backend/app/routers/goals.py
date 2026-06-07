@@ -7,8 +7,10 @@ from app.database import get_session
 from app.schemas.goals import GoalCreate, GoalPatch, GoalRead
 from app.services.goals import (
     ActivityClassNotFoundError,
+    ActivityNotFoundError,
     GoalAlreadyExistsError,
     GoalNotFoundError,
+    GoalValidationError,
     create_goal,
     list_goals,
     update_goal,
@@ -43,6 +45,16 @@ async def post_goal(payload: GoalCreate, session: SessionDep) -> GoalRead:
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Activity class not found",
         ) from exc
+    except ActivityNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Activity not found",
+        ) from exc
+    except GoalValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=exc.detail,
+        ) from exc
     return GoalRead.model_validate(goal)
 
 
@@ -63,5 +75,15 @@ async def patch_goal(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Activity class not found",
+        ) from exc
+    except ActivityNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Activity not found",
+        ) from exc
+    except GoalValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=exc.detail,
         ) from exc
     return GoalRead.model_validate(goal)

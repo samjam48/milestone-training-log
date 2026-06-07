@@ -9,14 +9,17 @@ from sqlmodel import Session
 
 from app.models.activity import Activity
 from app.models.block import RecoveryTarget, Rule
+from app.models.goal import Goal
 from app.schemas.activities import ActivityRead
 from app.schemas.activity_classes import ActivityClassRead
 from app.schemas.activity_logs import ActivityLogRead
 from app.schemas.dashboard import (
     DashboardRead,
+    GoalDashboardRowRead,
     RecoveryStreakRead,
     daily_safety_score_from_dict,
     load_point_from_dict,
+    load_risk_summary_from_dict,
 )
 from app.schemas.flare_up_incidents import FlareUpIncidentRead
 from app.schemas.goals import GoalRead
@@ -25,7 +28,7 @@ from app.schemas.load import (
     SuggestionRead,
     WeeklyProgressRead,
 )
-from app.schemas.load_engine import RuleDict
+from app.schemas.load_engine import RuleDict, Suggestion
 from app.schemas.training_blocks import TrainingBlockRead
 from app.services.activities import list_activities
 from app.services.activity_classes import list_activity_classes
@@ -37,9 +40,11 @@ from app.services.load_engine import (
     compute_class_statuses,
     compute_clean_streak,
     compute_daily_safety_scores,
+    compute_load_risk_summary,
     compute_load_series,
-    compute_suggestions,
+    compute_suggestion_buckets,
     compute_weekly_progress,
+    detect_delayed_tax,
     format_iso_date,
 )
 from app.services.load_queries import (
@@ -107,6 +112,7 @@ def get_dashboard(session: Session, *, as_of: date | None = None) -> DashboardRe
 
     rule_dicts = [rule_dict(rule) for rule in rules]
     target_dicts = [weekly_target_dict(target) for target in weekly_targets]
+    dashboard_goals = list_goals(session)
 
     class_statuses = compute_class_statuses(
         as_of_str,
@@ -115,7 +121,50 @@ def get_dashboard(session: Session, *, as_of: date | None = None) -> DashboardRe
         log_dicts,
         rule_dicts,
     )
-    suggestions = compute_suggestions(class_statuses, activity_dicts, class_dicts)
+    suggestion_buckets: list[Suggestion] = []
+    load_risk_summary = None
+    if block_start is not None:
+        goal_dicts = _goal_dicts(dashboard_goals)
+        recovery_target_dicts = [
+            {
+                "id": target.id,
+                "training_block_id": target.training_block_id,
+                "activity_id": target.activity_id,
+                "target_frequency": target.target_frequency,
+                "frequency_unit": target.frequency_unit,
+                "current_streak_days": target.current_streak_days,
+            }
+            for target in recovery_targets
+        ]
+        suggestion_buckets = compute_suggestion_buckets(
+            as_of_str,
+            class_dicts,
+            activity_dicts,
+            log_dicts,
+            rule_dicts,
+            recovery_target_dicts,
+            goal_dicts,
+            target_dicts,
+        )
+        delayed_tax_hits = detect_delayed_tax(
+            log_dicts,
+            activity_dicts,
+            class_dicts,
+            rule_dicts,
+            check_in_dicts,
+            incident_dicts,
+            as_of_str,
+        )
+        load_risk_summary = load_risk_summary_from_dict(
+            compute_load_risk_summary(
+                as_of_str,
+                class_dicts,
+                activity_dicts,
+                log_dicts,
+                rule_dicts,
+                delayed_tax_hits,
+            )
+        )
 
     weekly_progress = (
         compute_weekly_progress(
@@ -159,7 +208,7 @@ def get_dashboard(session: Session, *, as_of: date | None = None) -> DashboardRe
     clean_streak = compute_clean_streak(log_dicts)
     recovery_streaks = _build_recovery_streaks(recovery_targets, activities)
     flare_up_dates = sorted({format_iso_date(incident.incident_date) for incident in incidents})
-    dashboard_goals = list_goals(session)
+    goal_rows = _build_goal_rows(dashboard_goals)
     previous_blocks = _build_previous_blocks(session)
     has_checked_in_today = any(
         check_in.check_in_date == resolved for check_in in check_ins
@@ -180,7 +229,11 @@ def get_dashboard(session: Session, *, as_of: date | None = None) -> DashboardRe
         class_statuses=[
             ActivityClassStatusRead.model_validate(status) for status in class_statuses
         ],
-        suggestions=[SuggestionRead.model_validate(suggestion) for suggestion in suggestions],
+        suggestion_buckets=[
+            SuggestionRead.model_validate(suggestion) for suggestion in suggestion_buckets
+        ],
+        goal_rows=goal_rows,
+        load_risk_summary=load_risk_summary,
         weekly_progress=[
             WeeklyProgressRead.model_validate(progress) for progress in weekly_progress
         ],
@@ -193,6 +246,45 @@ def get_dashboard(session: Session, *, as_of: date | None = None) -> DashboardRe
         recovery_streaks=recovery_streaks,
         goals=[GoalRead.model_validate(g) for g in dashboard_goals],
     )
+
+
+def _goal_dicts(goals: list[Goal]) -> list[dict[str, object]]:
+    return [
+        {
+            "id": goal.id,
+            "activity_id": goal.activity_id,
+            "status": goal.status,
+            "target_date": format_iso_date(goal.target_date),
+            "progress_value": goal.progress_value,
+            "progress_target": goal.progress_target,
+            "progress_unit": goal.progress_unit,
+        }
+        for goal in goals
+    ]
+
+
+def _build_goal_rows(goals: list[Goal]) -> list[GoalDashboardRowRead]:
+    rows: list[GoalDashboardRowRead] = []
+    for goal in goals:
+        is_qualitative = goal.progress_target is None
+        fill_ratio: float | None = None
+        if not is_qualitative and goal.progress_target and goal.progress_target > 0:
+            progress_value = goal.progress_value or 0.0
+            fill_ratio = progress_value / goal.progress_target
+        rows.append(
+            GoalDashboardRowRead(
+                goal_id=goal.id,
+                title=goal.title,
+                status=goal.status,
+                activity_id=goal.activity_id,
+                progress_value=goal.progress_value,
+                progress_target=goal.progress_target,
+                progress_unit=goal.progress_unit,
+                fill_ratio=fill_ratio,
+                is_qualitative=is_qualitative,
+            )
+        )
+    return rows
 
 
 def _build_previous_blocks(session: Session) -> list[TrainingBlockRead]:

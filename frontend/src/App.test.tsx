@@ -5,7 +5,7 @@
  * Vitest harness (package.json, vitest.config.ts) is created by Implementer in F1.1.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { screen, within, cleanup, waitFor } from '@testing-library/react';
+import { screen, within, cleanup, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from './test/renderWithProviders';
 import {
@@ -24,6 +24,7 @@ import {
   c63YogaActivity,
 } from './test/mockEngine';
 import type { Activity, ActivityClass } from './types';
+import { createLogHistoryEngine } from './test/fixtures/c62Fixtures';
 import { App } from './App';
 
 const { apiFetchMock } = vi.hoisted(() => ({
@@ -171,7 +172,7 @@ describe('Dashboard suggestion → InlineLogSheet quick log (C6.3 / F9.10)', () 
   it('opens InlineLogSheet with the caution suggestion activity when CTA is tapped', async () => {
     const user = userEvent.setup();
     applyC63DashboardFixtures({
-      suggestions: [c63CautionYogaSuggestion],
+      suggestionBuckets: [c63CautionYogaSuggestion],
       activities: [c63StretchActivity, c63YogaActivity],
     });
     renderWithProviders(<App />);
@@ -216,7 +217,7 @@ describe('Dashboard suggestion → InlineLogSheet quick log (C6.3 / F9.10)', () 
   it('opens the second suggestion activity after closing the first quick-log sheet', async () => {
     const user = userEvent.setup();
     applyC63DashboardFixtures({
-      suggestions: [c63SafeStretchSuggestion, c63CautionYogaSuggestion],
+      suggestionBuckets: [c63SafeStretchSuggestion, c63CautionYogaSuggestion],
       activities: [c63StretchActivity, c63YogaActivity],
     });
     renderWithProviders(<App />);
@@ -235,7 +236,7 @@ describe('Dashboard suggestion → InlineLogSheet quick log (C6.3 / F9.10)', () 
   it('does not open quick log or Log Activity when suggestion id is not in activities', async () => {
     const user = userEvent.setup();
     applyC63DashboardFixtures({
-      suggestions: [{ ...c63SafeStretchSuggestion, id: 'act-deleted' }],
+      suggestionBuckets: [{ ...c63SafeStretchSuggestion, id: 'act-deleted' }],
       activities: [c63StretchActivity],
     });
     renderWithProviders(<App />);
@@ -248,7 +249,7 @@ describe('Dashboard suggestion → InlineLogSheet quick log (C6.3 / F9.10)', () 
 
   it('renders danger suggestions without a Log CTA on the dashboard', () => {
     applyC63DashboardFixtures({
-      suggestions: [c63DangerSquatSuggestion],
+      suggestionBuckets: [c63DangerSquatSuggestion],
       activities: [c63StretchActivity],
     });
     renderWithProviders(<App />);
@@ -430,7 +431,7 @@ describe('Settings stack navigation (F9.4)', () => {
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
   });
 
-  it('pushing activity-manager via its hidden affordance renders the overlay, hides the tab bar, and pops back out', async () => {
+  it('opens edit activity as a centered modal without pushing a stack screen', async () => {
     const user = userEvent.setup();
     const activityClass: ActivityClass = {
       id: 'cls-performance',
@@ -457,15 +458,9 @@ describe('Settings stack navigation (F9.4)', () => {
     await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Settings' }));
     await user.click(screen.getByRole('button', { name: /edit morning run/i }));
 
-    expect(screen.getByTestId('stack-screen-overlay')).toBeInTheDocument();
-    expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /go back/i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /edit activity/i })).toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: /go back/i }));
-
     expect(screen.queryByTestId('stack-screen-overlay')).not.toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: /edit activity/i })).toBeInTheDocument();
   });
 
   it('still renders nothing for an unknown stack key without crashing', async () => {
@@ -1077,7 +1072,7 @@ describe('App — S2.7 NewActivitySheet wiring', () => {
     );
   });
 
-  it('closes the sheet on Cancel without calling submitNewActivity', async () => {
+  it('closes the modal on X without calling submitNewActivity', async () => {
     const user = userEvent.setup();
     const submitNewActivity = vi.fn();
     mockEngine.submitNewActivity = submitNewActivity;
@@ -1085,7 +1080,7 @@ describe('App — S2.7 NewActivitySheet wiring', () => {
 
     await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
     await user.click(screen.getByRole('button', { name: '+ New Activity' }));
-    await user.click(screen.getByRole('button', { name: /^cancel$/i }));
+    await user.click(screen.getByRole('button', { name: /^close$/i }));
 
     expect(submitNewActivity).not.toHaveBeenCalled();
     expect(
@@ -1213,5 +1208,78 @@ describe('App — S2.8 Log Activity empty state', () => {
 
     expect(getNewActivityDialog()).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'New Activity' })).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// S25.F4 — Edit log stack route (plans/tickets-stage-2-5-usage-logic-2026-06-06.md)
+// ---------------------------------------------------------------------------
+
+describe('App — S25.F4 edit log flow', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetMockEngine();
+    Object.assign(mockEngine, createLogHistoryEngine(1));
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('opens Edit Activity on the stack when Edit is tapped in Log History', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+
+    expect(screen.getByTestId('stack-screen-overlay')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Edit Activity' })).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
+  });
+
+  it('updates the history row after save triggers updateLog and a mocked refetch', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup();
+    const originalLog = mockEngine.logs[0]!;
+    mockEngine.refetchAll = vi.fn();
+    mockEngine.updateLog = vi.fn(async (logId, patch) => {
+      mockEngine.logs = mockEngine.logs.map(log =>
+        log.id === logId ? { ...log, ...patch } : log,
+      );
+      mockEngine.refetchAll();
+    });
+
+    renderWithProviders(<App />);
+
+    try {
+      await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Log' }));
+      expect(screen.getByText('20 min')).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Edit' }));
+
+      const durationLabel = screen.getByText('Duration');
+      const durationField = durationLabel.parentElement;
+      expect(durationField).not.toBeNull();
+      const durationInput = within(durationField!).getByRole('spinbutton');
+      fireEvent.change(durationInput, { target: { value: '45' } });
+      await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+      expect(mockEngine.updateLog).toHaveBeenCalledWith(
+        originalLog.id,
+        expect.objectContaining({ durationMinutes: 45 }),
+      );
+      expect(mockEngine.refetchAll).toHaveBeenCalledTimes(1);
+      expect(screen.getByText('Session updated.')).toBeInTheDocument();
+
+      await vi.advanceTimersByTimeAsync(800);
+
+      expect(screen.queryByRole('heading', { name: 'Edit Activity' })).not.toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Log History' })).toBeInTheDocument();
+      expect(screen.getByText('45 min')).toBeInTheDocument();
+      expect(screen.queryByText('20 min')).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

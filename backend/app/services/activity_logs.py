@@ -56,7 +56,7 @@ def create_activity_log(session: Session, payload: ActivityLogCreate) -> Activit
     if existing_log is not None:
         raise ActivityLogAlreadyExistsError
 
-    activity = _ensure_local_activity_exists(session, payload.activity_id)
+    _ensure_local_activity_exists(session, payload.activity_id)
     now = datetime.now(UTC)
     activity_log = ActivityLog(
         id=payload.id,
@@ -76,12 +76,11 @@ def create_activity_log(session: Session, payload: ActivityLogCreate) -> Activit
     session.add(activity_log)
     session.commit()
     session.refresh(activity_log)
-    if activity.type == "recovery":
-        recalculate_recovery_streaks_for_activity(
-            session,
-            activity_log.activity_id,
-            anchor_date=activity_log.logged_date,
-        )
+    recompute_derived_state(
+        session,
+        activity_ids={activity_log.activity_id},
+        anchor_date=activity_log.logged_date,
+    )
     from app.services.review_milestone import maybe_update_review_milestone_after_log
 
     maybe_update_review_milestone_after_log(session)
@@ -96,7 +95,6 @@ def update_activity_log(
     activity_log = _get_local_activity_log(session, log_id)
     previous_activity_id = activity_log.activity_id
     previous_logged_date = activity_log.logged_date
-    previous_activity = _get_local_activity(session, previous_activity_id)
     updates = payload.model_dump(exclude_unset=True)
     if "activity_id" in updates:
         _ensure_local_activity_exists(session, str(updates["activity_id"]))
@@ -114,36 +112,52 @@ def update_activity_log(
     session.commit()
     session.refresh(activity_log)
 
-    anchor_date = max(previous_logged_date, activity_log.logged_date)
-    affected_activity_ids: set[str] = set()
-    if previous_activity.type == "recovery":
-        affected_activity_ids.add(previous_activity_id)
-    current_activity = _get_local_activity(session, activity_log.activity_id)
-    if current_activity.type == "recovery":
-        affected_activity_ids.add(activity_log.activity_id)
+    activity_ids = {activity_log.activity_id}
+    if previous_activity_id != activity_log.activity_id:
+        activity_ids.add(previous_activity_id)
 
-    for activity_id in affected_activity_ids:
-        recalculate_recovery_streaks_for_activity(
-            session,
-            activity_id,
-            anchor_date=anchor_date,
-        )
+    recompute_derived_state(
+        session,
+        activity_ids=activity_ids,
+        anchor_date=max(previous_logged_date, activity_log.logged_date),
+    )
     return activity_log
 
 
 def delete_activity_log(session: Session, log_id: str) -> None:
     activity_log = _get_local_activity_log(session, log_id)
-    activity = _get_local_activity(session, activity_log.activity_id)
     logged_date = activity_log.logged_date
     activity_id = activity_log.activity_id
     session.delete(activity_log)
     session.commit()
-    if activity.type == "recovery":
-        recalculate_recovery_streaks_for_activity(
-            session,
-            activity_id,
-            anchor_date=logged_date,
-        )
+    recompute_derived_state(
+        session,
+        activity_ids={activity_id},
+        anchor_date=logged_date,
+    )
+
+
+def recompute_derived_state(
+    session: Session,
+    *,
+    activity_ids: set[str],
+    anchor_date: date,
+) -> None:
+    if not activity_ids:
+        return
+
+    from app.services.goals import recompute_auto_tracked_goals
+
+    recompute_auto_tracked_goals(session, activity_ids=activity_ids)
+
+    for activity_id in activity_ids:
+        activity = _get_local_activity(session, activity_id)
+        if activity.type == "recovery":
+            recalculate_recovery_streaks_for_activity(
+                session,
+                activity_id,
+                anchor_date=anchor_date,
+            )
 
 
 def _copy_rule_violations(value: Any) -> list[dict[str, Any]] | None:

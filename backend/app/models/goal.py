@@ -1,10 +1,10 @@
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Column, ForeignKey, String
+from sqlalchemy import Boolean, Column, ForeignKey, String
 from sqlmodel import Field, Relationship, SQLModel
 
-from app.models.activity import ActivityClass
+from app.models.activity import Activity, ActivityClass
 
 if TYPE_CHECKING:
     from app.models.block import TrainingBlock
@@ -26,6 +26,14 @@ class Goal(SQLModel, table=True):
         default=None,
         sa_column=Column(String, ForeignKey("activity_classes.id"), nullable=True),
     )
+    activity_id: str | None = Field(
+        default=None,
+        sa_column=Column(String, ForeignKey("activities.id"), nullable=True),
+    )
+    auto_track_progress: bool = Field(
+        default=False,
+        sa_column=Column(Boolean, nullable=False, default=False, server_default="0"),
+    )
     progress_value: float | None = None
     progress_target: float | None = None
     progress_unit: str | None = None
@@ -34,4 +42,5 @@ class Goal(SQLModel, table=True):
     updated_at: datetime
 
     activity_class: ActivityClass | None = Relationship(back_populates="goals")
+    activity: Activity | None = Relationship(back_populates="goals")
     training_blocks: list["TrainingBlock"] = Relationship(back_populates="related_goal")

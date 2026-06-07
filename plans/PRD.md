@@ -229,3 +229,20 @@ and training-block flows on phone against production — same functionality as l
 - Authenticated API or dedicated MCP server; reuse `services/load_engine.py` and
   dashboard aggregations
 - Human-in-the-loop for write actions (log, check-in)
+
+---
+
+## 13. Stage 5 — Native app + quick entry (long-term)
+
+**Goal:** Ship installable native clients (Android first; iOS if feasible) with home-screen quick-entry widgets, not only PWA-in-browser.
+
+**In scope (when ticketed):**
+
+- Capacitor (or equivalent) wrapper around existing React `dist/`
+- Android home-screen widgets for fast log / check-in entry (deep-link into app flows)
+- iOS widgets if platform constraints allow
+- Push or local notifications (ties to Settings preference toggles once backend exists)
+
+**Depends on:** Stages 2–4 product logic stable enough that widget entry points land on correct flows.
+
+**Out of scope until Stage 5:** App store distribution polish, multi-user auth.

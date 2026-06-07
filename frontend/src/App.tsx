@@ -14,7 +14,6 @@ import {
   EditBlockRulesScreen,
   BlockReviewScreen,
   NewTrainingBlockScreen,
-  ActivityManagerScreen,
   InlineLogSheet,
   NewActivitySheet,
 } from './components/screens';
@@ -97,6 +96,7 @@ function resolveStackScreen(
   entry: StackEntry,
   engine: MilestoneEngineResult,
   onPop: () => void,
+  onOpenNewActivity?: () => void,
 ): React.ReactElement {
   if (entry.screen === 'goal-editor') {
     const goal = entry.params.goal as Omit<Goal, 'userId'> | undefined | null;
@@ -127,15 +127,16 @@ function resolveStackScreen(
       />
     );
   }
-  if (entry.screen === 'activity-manager') {
-    const activity = entry.params.activity as Activity | undefined;
-    if (activity == null) return <></>;
+  if (entry.screen === 'edit-log') {
+    const logId = entry.params.logId as string | undefined;
+    if (logId == null || logId === '') return <></>;
     return (
-      <ActivityManagerScreen
-        activity={activity}
+      <LogActivityScreen
         engine={engine}
+        logId={logId}
         onBack={onPop}
         onComplete={onPop}
+        onCreateActivity={onOpenNewActivity}
       />
     );
   }
@@ -266,6 +267,7 @@ export function App(): React.ReactElement {
         onOpenLogActivity={() => openLogActivity()}
         onOpenLogIncident={() => setOverlay('log-incident')}
         onOpenNewActivity={openNewActivitySheet}
+        onEditLog={(logId) => pushScreen('edit-log', { logId })}
       />
     );
   } else if (activeTab === 'goals') {
@@ -284,7 +286,6 @@ export function App(): React.ReactElement {
         onReview={() => pushScreen('block-review')}
         onNewBlock={() => pushScreen('new-training-block')}
         onViewBlock={(blockId) => pushScreen('block-review', { blockId })}
-        onEditActivity={(activity) => pushScreen('activity-manager', { activity })}
         onOpenNewActivity={openNewActivitySheet}
         onUnauthenticated={handleUnauthenticated}
       />
@@ -308,7 +309,7 @@ export function App(): React.ReactElement {
           data-testid="stack-screen-overlay"
           className="absolute inset-0 z-40 flex flex-col bg-bg pt-safe-top"
         >
-          {resolveStackScreen(topEntry, engine, navigateBack)}
+          {resolveStackScreen(topEntry, engine, navigateBack, openNewActivitySheet)}
         </div>
       )}
       {!shellBlocked && (

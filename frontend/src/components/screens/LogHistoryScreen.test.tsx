@@ -21,6 +21,7 @@ interface LogHistoryScreenS27Props {
   onOpenLogActivity: () => void;
   onOpenLogIncident: () => void;
   onOpenNewActivity?: () => void;
+  onEditLog?: (logId: string) => void;
 }
 
 const LogHistoryScreenS27 = LogHistoryScreen as unknown as (
@@ -351,5 +352,49 @@ describe('LogHistoryScreen — S2.8 empty state activity hint', () => {
 
     const emptyState = screen.getByTestId('log-history-empty-state');
     expect(within(emptyState).getByText(/no sessions logged yet/i)).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// S25.F4 — Edit log flow (plans/tickets-stage-2-5-usage-logic-2026-06-06.md)
+// ---------------------------------------------------------------------------
+
+describe('LogHistoryScreen — S25.F4 edit log', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('calls onEditLog with the row log id when Edit is clicked', async () => {
+    const user = userEvent.setup();
+    const onEditLog = vi.fn();
+    const engine = createLogHistoryEngine(1);
+
+    renderWithProviders(
+      <LogHistoryScreenS27
+        engine={engine}
+        onOpenLogActivity={vi.fn()}
+        onOpenLogIncident={vi.fn()}
+        onEditLog={onEditLog}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+
+    expect(onEditLog).toHaveBeenCalledTimes(1);
+    expect(onEditLog).toHaveBeenCalledWith(engine.logs[0]!.id);
+  });
+
+  it('does not render Edit buttons when onEditLog is omitted', () => {
+    const engine = createLogHistoryEngine(1);
+
+    renderWithProviders(
+      <LogHistoryScreen
+        engine={engine}
+        onOpenLogActivity={vi.fn()}
+        onOpenLogIncident={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
   });
 });

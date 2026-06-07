@@ -14,6 +14,7 @@ import { screen, cleanup, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders';
 import { mockEngine, resetMockEngine } from '../../test/mockEngine';
+import { P25_6_RULE_LABELS } from '../../test/ruleTaxonomy';
 import type {
   ActivityClass,
   Activity,
@@ -24,6 +25,7 @@ import type {
 } from '../../types';
 import type { NewActivityDraft } from '../../hooks/useMilestoneEngine';
 import { SettingsScreen } from './SettingsScreen';
+import { ApiError } from '../../lib/api/client';
 
 // Module-level mock for apiFetch used in F2.6 onClick wiring tests.
 // vi.hoisted ensures the variable is available when the hoisted vi.mock factory runs.
@@ -130,17 +132,6 @@ const RULE_DISABLED: Rule = {
   createdAt: '2026-05-01T00:00:00Z',
 };
 
-const RULE_CROSS_CLASS: Rule = {
-  id: 'rule-cross-1',
-  trainingBlockId: 'blk-active',
-  activityClassId: null,
-  ruleType: 'weekly_activity_count',
-  thresholdValue: 5,
-  windowDays: 7,
-  enabled: true,
-  createdAt: '2026-05-01T00:00:00Z',
-};
-
 const WEEKLY_TARGET_RUNNING: WeeklyTarget = {
   id: 'wt-running-1',
   trainingBlockId: 'blk-active',
@@ -235,7 +226,6 @@ interface SettingsScreenCallbackProps {
   onReview?: () => void;
   onNewBlock?: () => void;
   onViewBlock?: (blockId: string) => void;
-  onEditActivity?: (activity: Activity) => void;
   onOpenNewActivity?: () => void;
 }
 
@@ -407,11 +397,11 @@ describe('SettingsScreen — Active Block card', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 2. Weekly targets list
+// 2. Weekly targets list (P25.9: removed from block summary)
 // ---------------------------------------------------------------------------
 
 describe('SettingsScreen — Weekly Targets', () => {
-  it('renders weekly targets from active block', () => {
+  it('does not render weekly targets in the active block summary card', () => {
     const engine = makeEngine({
       block: ACTIVE_BLOCK,
       rules: [],
@@ -421,15 +411,13 @@ describe('SettingsScreen — Weekly Targets', () => {
 
     renderWithProviders(<SettingsScreen engine={engine} />);
 
-    // Class name resolved from activityClassId (scoped to block summary card)
     const blockSection = getSectionByHeading(/^training block$/i);
-    expect(within(blockSection).getByText(CLASS_RUNNING.name)).toBeInTheDocument();
-    // Target value and unit
-    expect(screen.getByText(/20/)).toBeInTheDocument();
-    expect(screen.getByText(/km/i)).toBeInTheDocument();
+    expect(within(blockSection).queryByText(/weekly targets/i)).not.toBeInTheDocument();
+    expect(within(blockSection).queryByText(/weekly goal/i)).not.toBeInTheDocument();
+    expect(within(blockSection).queryByText(/20/)).not.toBeInTheDocument();
   });
 
-  it('resolves activityClassId → class name in weekly targets', () => {
+  it('does not list weekly target class names in block summary even when targets exist', () => {
     const engine = makeEngine({
       block: ACTIVE_BLOCK,
       rules: [],
@@ -440,21 +428,23 @@ describe('SettingsScreen — Weekly Targets', () => {
     renderWithProviders(<SettingsScreen engine={engine} />);
 
     const blockSection = getSectionByHeading(/^training block$/i);
-    expect(within(blockSection).getByText('Running')).toBeInTheDocument();
+    expect(within(blockSection).queryByText('Running')).not.toBeInTheDocument();
+    expect(within(blockSection).queryByText(/weekly targets/i)).not.toBeInTheDocument();
   });
 
-  it('falls back to raw activityClassId when class is not found in weekly targets', () => {
+  it('does not fall back to raw activityClassId in block summary when class is unknown', () => {
     const engine = makeEngine({
       block: ACTIVE_BLOCK,
       rules: [],
       weeklyTargets: [WEEKLY_TARGET_UNKNOWN_CLASS],
-      activityClasses: [], // empty — class not found
+      activityClasses: [],
     });
 
     renderWithProviders(<SettingsScreen engine={engine} />);
 
-    // Falls back to raw id
-    expect(screen.getByText('cls-unknown-xyz')).toBeInTheDocument();
+    const blockSection = getSectionByHeading(/^training block$/i);
+    expect(within(blockSection).queryByText('cls-unknown-xyz')).not.toBeInTheDocument();
+    expect(within(blockSection).queryByText(/weekly targets/i)).not.toBeInTheDocument();
   });
 });
 
@@ -473,8 +463,10 @@ describe('SettingsScreen — Recovery Rules', () => {
 
     renderWithProviders(<SettingsScreen engine={engine} />);
 
-    // RULE_REST is rest_between_class with threshold 2 → "Min 2-day rest"
-    expect(screen.getByText(/min 2.day rest/i)).toBeInTheDocument();
+    // RULE_REST is rest_between_class with threshold 2
+    expect(
+      screen.getByText(new RegExp(P25_6_RULE_LABELS.rest_between_class, 'i')),
+    ).toBeInTheDocument();
   });
 
   it('renders frequency_limit rule with correct label', () => {
@@ -487,8 +479,10 @@ describe('SettingsScreen — Recovery Rules', () => {
 
     renderWithProviders(<SettingsScreen engine={engine} />);
 
-    // frequency_limit with threshold 3 → "Max 3× / week"
-    expect(screen.getByText(/max 3.* week/i)).toBeInTheDocument();
+    // frequency_limit with threshold 3
+    expect(
+      screen.getByText(new RegExp(P25_6_RULE_LABELS.frequency_limit, 'i')),
+    ).toBeInTheDocument();
   });
 
   it('excludes disabled rules from the recovery rules summary', () => {
@@ -504,13 +498,21 @@ describe('SettingsScreen — Recovery Rules', () => {
     // RULE_DISABLED is weekly_load_cap — its label should NOT appear
     expect(screen.queryByText(/load cap/i)).not.toBeInTheDocument();
     // RULE_REST should still appear
-    expect(screen.getByText(/min 2.day rest/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(new RegExp(P25_6_RULE_LABELS.rest_between_class, 'i')),
+    ).toBeInTheDocument();
   });
 
   it('renders "All classes" label for rules with null activityClassId', () => {
+    const crossClassRestRule: Rule = {
+      ...RULE_REST,
+      id: 'rule-cross-rest',
+      activityClassId: null,
+    };
+
     const engine = makeEngine({
       block: ACTIVE_BLOCK,
-      rules: [RULE_CROSS_CLASS],
+      rules: [crossClassRestRule],
       weeklyTargets: [],
       activityClasses: [],
     });
@@ -520,7 +522,7 @@ describe('SettingsScreen — Recovery Rules', () => {
     expect(screen.getByText(/all classes/i)).toBeInTheDocument();
   });
 
-  it('falls back to raw ruleType when RuleType is not in RULE_LABEL map', () => {
+  it('falls back to raw ruleType when rule type is not in taxonomy map', () => {
     const unknownRule: Rule = {
       ...RULE_REST,
       id: 'rule-unknown',
@@ -827,9 +829,8 @@ describe('SettingsScreen — stack action callbacks', () => {
     expect(onViewBlock).toHaveBeenCalledWith(PREVIOUS_BLOCK_1.id);
   });
 
-  it('calls onEditActivity with the activity when Edit is clicked', async () => {
+  it('opens the edit activity modal when Edit is clicked', async () => {
     const user = userEvent.setup();
-    const onEditActivity = vi.fn();
     const engine = makeEngine({
       block: ACTIVE_BLOCK,
       activityClasses: [CLASS_RUNNING],
@@ -837,12 +838,13 @@ describe('SettingsScreen — stack action callbacks', () => {
       logs: [],
     });
 
-    renderSettingsScreenWithCallbacks({ engine, onEditActivity });
+    renderSettingsScreenWithCallbacks({ engine });
 
     await user.click(screen.getByRole('button', { name: /edit morning run/i }));
 
-    expect(onEditActivity).toHaveBeenCalledTimes(1);
-    expect(onEditActivity).toHaveBeenCalledWith(ACTIVITY_RUNNING);
+    expect(
+      screen.getByRole('dialog', { name: /edit activity/i }),
+    ).toBeInTheDocument();
   });
 
   it('requires confirmation before calling engine.deactivateActivity from the activity list', async () => {
@@ -1733,17 +1735,18 @@ describe('SettingsScreen — edge cases', () => {
     }).not.toThrow();
   });
 
-  it('handles weekly target with unknown class — falls back to raw id', () => {
+  it('handles weekly target with unknown class without showing raw id in block summary', () => {
     const engine = makeEngine({
       block: ACTIVE_BLOCK,
       rules: [],
       weeklyTargets: [WEEKLY_TARGET_UNKNOWN_CLASS],
-      activityClasses: [], // class not found
+      activityClasses: [],
     });
 
     renderWithProviders(<SettingsScreen engine={engine} />);
 
-    expect(screen.getByText('cls-unknown-xyz')).toBeInTheDocument();
+    const blockSection = getSectionByHeading(/^training block$/i);
+    expect(within(blockSection).queryByText('cls-unknown-xyz')).not.toBeInTheDocument();
   });
 
   it('renders correctly with no active block and no previous blocks', () => {
@@ -1774,5 +1777,144 @@ describe('SettingsScreen — edge cases', () => {
 
     expect(screen.getByText(/no active training block/i)).toBeInTheDocument();
     expect(screen.queryByText(/previous blocks/i)).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// S25.F8 — Activity class edit + delete
+// ---------------------------------------------------------------------------
+
+describe('SettingsScreen — S25.F8 activity class edit and delete', () => {
+  it('opens edit sheet and PATCHes rename and type on save', async () => {
+    const user = userEvent.setup();
+    const updateActivityClass = vi.fn().mockResolvedValue(undefined);
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [CLASS_RUNNING],
+      activities: [ACTIVITY_RUNNING],
+      logs: [],
+      updateActivityClass,
+    });
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    await user.click(screen.getByRole('button', { name: /edit running/i }));
+
+    expect(
+      screen.getByRole('dialog', { name: /edit activity class/i }),
+    ).toBeInTheDocument();
+
+    const nameInput = screen.getByLabelText(/class name/i);
+    await user.clear(nameInput);
+    await user.type(nameInput, 'Road Running');
+
+    await user.click(screen.getByRole('radio', { name: /^recovery$/i }));
+    await user.click(screen.getByRole('button', { name: /^save$/i }));
+
+    await waitFor(() => {
+      expect(updateActivityClass).toHaveBeenCalledWith(CLASS_RUNNING.id, {
+        name: 'Road Running',
+        type: 'recovery',
+      });
+    });
+  });
+
+  it('two-step delete lists activity names before DELETE', async () => {
+    const user = userEvent.setup();
+    const deleteActivityClass = vi.fn().mockResolvedValue(undefined);
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [CLASS_RUNNING],
+      activities: [ACTIVITY_RUNNING, ACTIVITY_INACTIVE],
+      logs: [],
+      deleteActivityClass,
+    });
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    await user.click(screen.getByRole('button', { name: /delete running/i }));
+    expect(screen.getByText(/delete class\?/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /^delete class$/i }));
+
+    const deleteDialog = screen.getByRole('dialog', { name: /delete activity class/i });
+    expect(within(deleteDialog).getByText(ACTIVITY_RUNNING.name)).toBeInTheDocument();
+    expect(within(deleteDialog).getByText(ACTIVITY_INACTIVE.name)).toBeInTheDocument();
+    expect(within(deleteDialog).getByText(/will be deleted/i)).toBeInTheDocument();
+    expect(deleteActivityClass).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: /^delete anyway$/i }));
+
+    await waitFor(() => {
+      expect(deleteActivityClass).toHaveBeenCalledWith(CLASS_RUNNING.id);
+    });
+  });
+
+  it('skips step two and DELETEs immediately when class has no activities', async () => {
+    const user = userEvent.setup();
+    const deleteActivityClass = vi.fn().mockResolvedValue(undefined);
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [CLASS_STRENGTH],
+      activities: [],
+      logs: [],
+      deleteActivityClass,
+    });
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    await user.click(screen.getByRole('button', { name: /delete strength/i }));
+    await user.click(screen.getByRole('button', { name: /^delete class$/i }));
+
+    await waitFor(() => {
+      expect(deleteActivityClass).toHaveBeenCalledWith(CLASS_STRENGTH.id);
+    });
+    expect(screen.queryByText(/will be deleted/i)).not.toBeInTheDocument();
+  });
+
+  it('shows API message on 409 when activities have logs', async () => {
+    const user = userEvent.setup();
+    const deleteActivityClass = vi.fn().mockRejectedValue(
+      new ApiError(409, 'Cannot delete class: Morning Run has logged sessions'),
+    );
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [CLASS_RUNNING],
+      activities: [ACTIVITY_RUNNING],
+      logs: [LOG_RECENT],
+      deleteActivityClass,
+    });
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    await user.click(screen.getByRole('button', { name: /delete running/i }));
+    await user.click(screen.getByRole('button', { name: /^delete class$/i }));
+    await user.click(screen.getByRole('button', { name: /^delete anyway$/i }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/cannot delete class: morning run has logged sessions/i),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it('does not call delete when user cancels at step one', async () => {
+    const user = userEvent.setup();
+    const deleteActivityClass = vi.fn();
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [CLASS_RUNNING],
+      activities: [ACTIVITY_RUNNING],
+      logs: [],
+      deleteActivityClass,
+    });
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    await user.click(screen.getByRole('button', { name: /delete running/i }));
+    await user.click(screen.getByRole('button', { name: /^cancel$/i }));
+
+    expect(deleteActivityClass).not.toHaveBeenCalled();
+    expect(screen.queryByText(/delete class\?/i)).not.toBeInTheDocument();
   });
 });

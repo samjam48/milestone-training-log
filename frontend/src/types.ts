@@ -66,6 +66,9 @@ export type VolumeUnit =
   | 'reps' | 'sets' | 'sessions'
   | 'minutes';
 
+/** Units for exercise volume-cap rules (P25.7). */
+export type VolumeCapUnit = 'km' | 'minutes' | 'hours';
+
 // -----------------------------------------------------------------------------
 // ActivityLog — the central logged event
 // -----------------------------------------------------------------------------
@@ -152,18 +155,24 @@ export interface TrainingBlock extends Timestamped {
 export type RuleType =
   | 'rest_between_class'      // min N days between same-class activities
   | 'frequency_limit'         // max N activities per window
-  | 'weekly_load_cap'         // sum(volume * rpe) ≤ N per week
+  | 'weekly_load_cap'         // sum(volume * rpe) ≤ N per week (legacy — hidden from UI)
   | 'consecutive_day_limit'   // max N consecutive days with activity
+  | 'weekly_volume_cap'       // max volume per week for one exercise (P25.7: limit_unit)
+  | 'daily_volume_cap'        // max volume per day for one exercise (P25.7: limit_unit)
   | 'weekly_activity_count';  // cross-class: max N performance acts / week
 
 export interface Rule extends Timestamped {
   id: ID;
   trainingBlockId: ID;
-  /** null => cross-class rule (e.g. weekly_activity_count). */
+  /** null => legacy cross-class rule (deprecated — not shown in UI). */
   activityClassId: ID | null;
+  /** When set, this rule applies to a single exercise within the class. */
+  activityId?: ID;
   ruleType: RuleType;
   thresholdValue: number;
   windowDays: number;                 // typically 7
+  /** Present on daily/weekly volume-cap rules (exercise-scoped). */
+  limitUnit?: VolumeCapUnit;
   enabled: boolean;
 }
 
@@ -201,11 +210,28 @@ export interface Goal extends Timestamped {
   timeframe: GoalTimeframe;
   /** null => cross-class goal. */
   activityClassId?: ID;
+  /** Linked activity for auto-tracked or activity-scoped goals. */
+  activityId?: ID;
+  /** When true, progress_value is recomputed from matching activity logs. */
+  autoTrackProgress?: boolean;
   /** Numeric progress (e.g. km walked). Optional for qualitative goals. */
   progressValue?: number;
   progressTarget?: number;
   progressUnit?: VolumeUnit;
   status: GoalStatus;
+}
+
+/** Dashboard summary row for GoalsCard (S25.B7 / GoalDashboardRowRead). */
+export interface GoalDashboardRow {
+  goalId: string;
+  title: string;
+  status: GoalStatus;
+  activityId: string | null;
+  progressValue: number | null;
+  progressTarget: number | null;
+  progressUnit: string | null;
+  fillRatio: number | null;
+  isQualitative: boolean;
 }
 
 // -----------------------------------------------------------------------------

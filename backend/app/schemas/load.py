@@ -20,6 +20,10 @@ class SuggestionRead(BaseModel):
     reason: str
     next_safe_date: str | None = None
     last_done_date: str | None = None
+    bucket: Literal["do", "rest", "done"] | None = None
+    scope: Literal["activity", "class"] | None = None
+    activity_class_id: str | None = None
+    description: str | None = None
 
 
 class WeeklyProgressRead(BaseModel):
@@ -46,6 +50,8 @@ class CheckViolationsRequest(BaseModel):
     volume_value: float
     rpe: int
     as_of: date | None = None
+    duration_minutes: int | None = None
+    volume_unit: str | None = None
 
 
 class RuleViolationRead(BaseModel):

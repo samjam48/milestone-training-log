@@ -32,6 +32,9 @@ export interface WeeklyProgress {
   state: SafetyState | 'neutral';
 }
 
+export type SuggestionBucket = 'do' | 'rest' | 'done';
+export type SuggestionScope = 'activity' | 'class';
+
 /** A suggestion the engine produces for "what to do today". */
 export interface Suggestion {
   id: ID;
@@ -40,6 +43,47 @@ export interface Suggestion {
   reason: string;
   nextSafeDate?: ISODate;
   lastDoneDate?: ISODate;
+  bucket?: SuggestionBucket;
+  scope?: SuggestionScope;
+  activityClassId?: ID;
+  description?: string;
+}
+
+export interface LoadRiskDay {
+  date: ISODate;
+  flagged: boolean;
+}
+
+export interface LoadRiskExerciseBar {
+  activityId: ID;
+  activityName: string;
+  actual: number;
+  limit: number;
+  unit: string;
+}
+
+export interface LoadRiskClassBar {
+  activityClassId: ID;
+  className: string;
+  actual: number;
+  limit: number;
+  unit: string;
+  exercises: LoadRiskExerciseBar[];
+}
+
+export interface LoadRiskSummary {
+  weekDays: LoadRiskDay[];
+  classBars: LoadRiskClassBar[];
+}
+
+const DESCRIPTION_MAX_LEN = 80;
+
+/** Truncate bucket description to match backend cap (S25.B5). */
+export function truncateSuggestionDescription(text: string): string {
+  if (text.length <= DESCRIPTION_MAX_LEN) {
+    return text;
+  }
+  return `${text.slice(0, DESCRIPTION_MAX_LEN - 1)}…`;
 }
 
 // ---------------------------------------------------------------------------

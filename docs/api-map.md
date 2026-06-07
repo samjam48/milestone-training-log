@@ -55,6 +55,7 @@ Use this alongside:
 | `GET` | `/api/activity-classes` | List activity classes |
 | `POST` | `/api/activity-classes` | Create an activity class |
 | `PATCH` | `/api/activity-classes/{class_id}` | Update class metadata |
+| `DELETE` | `/api/activity-classes/{class_id}` | Delete class when no blocking references; returns `409` if any activity in the class has logs or goals/rules/weekly targets reference the class or its activities; otherwise `204` and cascade-deletes unlogged activities in one transaction |
 
 ### Activities
 
@@ -108,6 +109,10 @@ Use this alongside:
 | `POST` | `/api/training-blocks/{block_id}/weekly-targets` | Create a weekly target for a performance class |
 | `PATCH` | `/api/weekly-targets/{target_id}` | Update a weekly target |
 
+**P25.9 UI note:** Edit Rules and Settings block summary no longer surface weekly targets. Aspirational targets belong on the Goals tab only. The `weekly_targets` table and API remain for now.
+
+**Dashboard `weekly_progress` (Last 7 days):** Still computed from `weekly_targets` rows on the active block via `compute_weekly_progress` (`GET /api/dashboard` and `GET /api/load/summary`). Display-only on the dashboard chart; no create/edit UI after P25.9. Aligning `weekly_progress` with Goals or retiring `weekly_targets` is tracked in `plans/BACKLOG.md`.
+
 ### Recovery Targets
 
 | Method | Path | Purpose |
@@ -122,7 +127,7 @@ Use this alongside:
 | `GET` | `/api/load/summary` | Class statuses, suggestions, weekly progress; optional `?as_of=` (default server-local today); snake_case JSON; 200 with neutral payloads when no active block |
 | `POST` | `/api/load/check-violations` | Dry-run all five rule types for a proposed log; body `activity_id`, `volume_value`, `rpe`, optional `as_of`; no DB write |
 | `GET` | `/api/load/delayed-tax` | Proactive 7-day load/rest risk plus symptom attribution when pain/flare recorded; optional `?as_of=`, `?risk_window_days=`, `?baseline_days=`, `?pain_threshold=` (default 3) |
-| `GET` | `/api/dashboard` | Aggregate dashboard payload; optional `?as_of=YYYY-MM-DD` (default server-local today). Top-level fields: `as_of`, `user_name`, `block`, `activity_classes`, `activities`, `logs` (30-day window ending on `as_of` only — full Log History is Phase 6 via `GET /api/activity-logs`), `incidents`, `goals` (all local goals for the Goals tab: active, achieved, paused, missed), `previous_blocks` (completed/archived blocks, summary only — no scores), `has_checked_in_today`, `class_statuses`, `suggestions`, `weekly_progress`, `daily_scores`, `load_series`, `graph_class_id` (activity class ID used for `load_series` and `week_load_threshold`; `null` when no active block), `flare_up_dates`, `week_load_threshold`, `clean_streak`, `recovery_streaks`. Returns 200 with `block: null` and neutral/empty derived fields when no active block |
+| `GET` | `/api/dashboard` | Aggregate dashboard payload; optional `?as_of=YYYY-MM-DD` (default server-local today). Top-level fields: `as_of`, `user_name`, `block`, `activity_classes`, `activities`, `logs` (30-day window ending on `as_of` only — full Log History is Phase 6 via `GET /api/activity-logs`), `incidents`, `goals` (all local goals for the Goals tab: active, achieved, paused, missed), `previous_blocks` (completed/archived blocks, summary only — no scores), `has_checked_in_today`, `class_statuses`, `suggestion_buckets` (do/rest/done rows with `bucket`, `scope`, `activity_class_id`, `description`), `goal_rows` (dashboard summary rows: `goal_id`, `title`, `status`, `activity_id`, `progress_value`, `progress_target`, `progress_unit`, `fill_ratio` 0..1 or `null` for qualitative, `is_qualitative`), `load_risk_summary` (`week_days` seven-day strip with `flagged`; `class_bars` for performance classes with enabled caps — `null` when no active block), `weekly_progress`, `daily_scores`, `load_series`, `graph_class_id` (activity class ID used for `load_series` and `week_load_threshold`; `null` when no active block), `flare_up_dates`, `week_load_threshold`, `clean_streak`, `recovery_streaks`. Returns 200 with `block: null` and neutral/empty derived fields when no active block |
 
 ### MCP Context (AI Stub)
 
