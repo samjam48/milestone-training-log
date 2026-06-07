@@ -36,8 +36,13 @@ class TrainingBlock(SQLModel, table=True):
     end_date: date | None = None
     status: str
     period_kind: str = Field(
-        default="legacy",
-        sa_column=Column(String, nullable=False, default="legacy", server_default="legacy"),
+        default="weekly_focus",
+        sa_column=Column(
+            String,
+            nullable=False,
+            default="weekly_focus",
+            server_default="weekly_focus",
+        ),
     )
     focus_series_id: str | None = Field(
         default=None,

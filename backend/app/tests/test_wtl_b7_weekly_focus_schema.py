@@ -23,7 +23,7 @@ WTL_B7_TRAINING_BLOCK_COLUMNS = {
     "week_number",
 }
 
-WTL_B7_PERIOD_KIND_DEFAULT = "legacy"
+WRU_B1_PERIOD_KIND_DEFAULT = "weekly_focus"
 
 
 def _wtl_b7_revision_paths() -> list[Path]:
@@ -73,7 +73,7 @@ def test_wtl_b7_sqlite_head_schema_adds_training_block_weekly_focus_columns(
     )
     assert period_kind["nullable"] is False
     defaults = _sqlite_column_defaults(engine, "training_blocks")
-    assert _normalized_default(defaults.get("period_kind")) == WTL_B7_PERIOD_KIND_DEFAULT
+    assert _normalized_default(defaults.get("period_kind")) == WRU_B1_PERIOD_KIND_DEFAULT
 
 
 def test_wtl_b7_migration_declares_single_active_weekly_focus_guard() -> None:

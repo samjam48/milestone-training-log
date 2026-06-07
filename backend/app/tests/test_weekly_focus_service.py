@@ -1,13 +1,13 @@
-"""WTL.B7 — Weekly focus backend lifecycle (failing tests until implemented).
+"""WTL.B7 / WRU.B1 — Weekly focus backend lifecycle.
 
-Covers calendar week bounds, ensure_active_weekly_focus, rollover, reset,
-lazy legacy cutover, catch-up across missed Mondays, and historical isolation.
+Covers calendar week bounds, ensure_active_weekly_focus, rollover, catch-up
+across missed Mondays, and historical isolation. Manual setup/reset/focus-title
+and lazy legacy cutover tests were removed for WRU.B1.
 """
 
 from __future__ import annotations
 
 from collections import Counter
-from datetime import date
 from fastapi import FastAPI
 from sqlmodel import col, select
 
@@ -33,7 +33,6 @@ from app.tests.helpers.weekly_focus_fixtures import (
     WEEK_TWO_START,
     calendar_week_bounds,
     require_weekly_focus_service,
-    seed_legacy_active_block,
     seed_weekly_focus_block,
 )
 
@@ -144,23 +143,6 @@ def test_ensure_active_weekly_focus_returns_none_when_no_focus_exists(
     assert active is None
 
 
-def test_setup_weekly_focus_creates_week_one_for_current_calendar_week(
-    app_with_test_database: FastAPI,
-) -> None:
-    service = require_weekly_focus_service()
-    for session in with_session(app_with_test_database):
-        created = service.setup_weekly_focus(session, FOCUS_TITLE, as_of=SUNDAY_AS_OF)
-
-    assert created.period_kind == "weekly_focus"
-    assert created.focus_title == FOCUS_TITLE
-    assert created.week_number == 1
-    assert created.focus_series_id is not None
-    assert created.start_date == WEEK_ONE_START
-    assert created.end_date == WEEK_ONE_END
-    assert created.status == "active"
-    assert created.name == f"{FOCUS_TITLE} · Week 1"
-
-
 def test_ensure_active_weekly_focus_returns_current_week_when_already_active(
     app_with_test_database: FastAPI,
 ) -> None:
@@ -255,122 +237,6 @@ def test_rollover_prior_week_with_no_rules_or_targets_still_creates_valid_week(
     assert targets == []
 
 
-def test_reset_focus_series_starts_new_series_at_week_one(
-    app_with_test_database: FastAPI,
-) -> None:
-    _seed_week_one_focus_graph(app_with_test_database)
-    service = require_weekly_focus_service()
-
-    for session in with_session(app_with_test_database):
-        reset_block = service.reset_focus_series(
-            session,
-            "Build running base",
-            as_of=SUNDAY_AS_OF,
-        )
-        prior_week = session.get(TrainingBlock, "blk-wf-week-1")
-
-    assert prior_week is not None
-    assert prior_week.status == "completed"
-    assert reset_block.period_kind == "weekly_focus"
-    assert reset_block.week_number == 1
-    assert reset_block.focus_title == "Build running base"
-    assert reset_block.focus_series_id != FOCUS_SERIES_ID
-    assert reset_block.start_date == WEEK_ONE_START
-    assert reset_block.end_date == WEEK_ONE_END
-    assert reset_block.status == "active"
-
-
-def test_reset_focus_on_sunday_uses_current_calendar_week(
-    app_with_test_database: FastAPI,
-) -> None:
-    _seed_week_one_focus_graph(app_with_test_database)
-    service = require_weekly_focus_service()
-
-    for session in with_session(app_with_test_database):
-        reset_block = service.reset_focus_series(
-            session,
-            "Sunday reset focus",
-            as_of=SUNDAY_AS_OF,
-        )
-
-    week_start, week_end = calendar_week_bounds(SUNDAY_AS_OF)
-    assert reset_block.start_date == week_start
-    assert reset_block.end_date == week_end
-    assert reset_block.week_number == 1
-
-
-def test_lazy_legacy_cutover_copies_from_active_legacy_block(
-    app_with_test_database: FastAPI,
-) -> None:
-    seed_activity_class(
-        app_with_test_database,
-        class_id="cls-legacy-foot",
-        name="Foot Load",
-    )
-    seed_legacy_active_block(
-        app_with_test_database,
-        block_id="blk-legacy-cutover",
-        name=FOCUS_TITLE,
-        start_date=date(2026, 4, 7),
-    )
-    seed_rule(
-        app_with_test_database,
-        rule_id="rule-legacy-enabled",
-        training_block_id="blk-legacy-cutover",
-        activity_class_id="cls-legacy-foot",
-        rule_type="weekly_load_cap",
-        threshold_value=100.0,
-        window_days=7,
-        enabled=True,
-    )
-    seed_rule(
-        app_with_test_database,
-        rule_id="rule-legacy-disabled",
-        training_block_id="blk-legacy-cutover",
-        activity_class_id="cls-legacy-foot",
-        rule_type="frequency_limit",
-        threshold_value=2.0,
-        window_days=7,
-        enabled=False,
-    )
-    seed_weekly_target(
-        app_with_test_database,
-        target_id="wt-legacy-walk",
-        training_block_id="blk-legacy-cutover",
-        activity_class_id="cls-legacy-foot",
-        target_value=2.0,
-        target_unit="sessions",
-    )
-    service = require_weekly_focus_service()
-
-    for session in with_session(app_with_test_database):
-        legacy_rules = list_rules(session, "blk-legacy-cutover")
-        legacy_targets = list_weekly_targets(session, "blk-legacy-cutover")
-        active = service.ensure_active_weekly_focus(session, SUNDAY_AS_OF)
-        assert active is not None
-        focus_rules = list_rules(session, active.id)
-        focus_targets = list_weekly_targets(session, active.id)
-        legacy_block = session.get(TrainingBlock, "blk-legacy-cutover")
-
-    assert legacy_block is not None
-    assert legacy_block.period_kind == "legacy"
-    assert legacy_block.status == "completed"
-
-    assert active.period_kind == "weekly_focus"
-    assert active.week_number == 1
-    assert active.focus_title == FOCUS_TITLE
-    assert active.start_date == WEEK_ONE_START
-    assert active.end_date == WEEK_ONE_END
-
-    enabled_legacy_rules = [rule for rule in legacy_rules if rule.enabled]
-    assert Counter(_rule_signature(rule) for rule in focus_rules) == Counter(
-        _rule_signature(rule) for rule in enabled_legacy_rules
-    )
-    assert Counter(_target_signature(target) for target in focus_targets) == Counter(
-        _target_signature(target) for target in legacy_targets
-    )
-
-
 def test_catch_up_multiple_missed_mondays_creates_intermediate_completed_weeks(
     app_with_test_database: FastAPI,
 ) -> None:
@@ -424,24 +290,6 @@ def test_mid_week_rule_edit_does_not_change_prior_week_rules(
 
     assert week_one_rules[0].threshold_value == 120.0
     assert week_two_rules_after[0].threshold_value == 200.0
-
-
-def test_update_focus_title_changes_active_row_only(
-    app_with_test_database: FastAPI,
-) -> None:
-    _seed_week_one_focus_graph(app_with_test_database)
-    service = require_weekly_focus_service()
-
-    for session in with_session(app_with_test_database):
-        week_two = service.ensure_active_weekly_focus(session, MONDAY_AS_OF)
-        assert week_two is not None
-        updated = service.update_focus_title(session, week_two.id, "Stronger ankles")
-        week_one = session.get(TrainingBlock, "blk-wf-week-1")
-
-    assert week_one is not None
-    assert week_one.focus_title == FOCUS_TITLE
-    assert updated.focus_title == "Stronger ankles"
-    assert updated.name == "Stronger ankles · Week 2"
 
 
 def test_historical_week_rules_remain_readable_for_review(

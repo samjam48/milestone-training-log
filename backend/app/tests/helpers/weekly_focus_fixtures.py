@@ -31,9 +31,13 @@ WTL_B7_SERVICE_SYMBOLS = (
     "calendar_week_bounds",
     "ensure_active_weekly_focus",
     "rollover_weekly_focus",
+)
+
+WRU_B1_REMOVED_SERVICE_SYMBOLS = (
     "reset_focus_series",
     "setup_weekly_focus",
     "update_focus_title",
+    "_try_legacy_cutover",
 )
 
 # Calendar anchors from technical design (Monday = 0).

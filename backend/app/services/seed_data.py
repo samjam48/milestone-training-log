@@ -10,6 +10,7 @@ from app.models.block import Rule, TrainingBlock, WeeklyTarget
 from app.models.checkin import DailyCheckIn, FlareUpIncident
 from app.models.goal import Goal
 from app.models.log import ActivityLog
+from app.services.training_blocks import calendar_week_bounds, calendar_week_label
 
 LOCAL_USER_ID = "local"
 CREATED_AT = datetime.fromisoformat("2026-04-07T06:00:00+00:00")
@@ -17,6 +18,10 @@ CREATED_AT = datetime.fromisoformat("2026-04-07T06:00:00+00:00")
 
 def _date(value: str) -> date:
     return date.fromisoformat(value)
+
+
+SEED_WEEK_AS_OF = _date("2026-06-07")
+SEED_WEEK_START, SEED_WEEK_END = calendar_week_bounds(SEED_WEEK_AS_OF)
 
 
 def _upsert_all(session: Session, rows: Sequence[SQLModel]) -> None:
@@ -162,10 +167,14 @@ def _training_blocks() -> list[TrainingBlock]:
         TrainingBlock(
             id="blk-1",
             user_id=LOCAL_USER_ID,
-            name="Return to Walking — Phase 2",
-            start_date=_date("2026-04-07"),
-            end_date=_date("2026-05-31"),
+            name=calendar_week_label(SEED_WEEK_START, SEED_WEEK_END),
+            start_date=SEED_WEEK_START,
+            end_date=SEED_WEEK_END,
             status="active",
+            period_kind="weekly_focus",
+            focus_series_id="fs-seed-1",
+            focus_title=None,
+            week_number=1,
             related_goal_id=None,
             notes=None,
             is_review_milestone_hit=False,

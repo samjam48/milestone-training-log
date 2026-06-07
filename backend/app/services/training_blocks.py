@@ -10,7 +10,6 @@ from app.services.local_scope import LOCAL_USER_ID, next_updated_at
 from app.services.rules import list_rules
 from app.services.weekly_targets import list_weekly_targets
 
-PERIOD_KIND_LEGACY = "legacy"
 PERIOD_KIND_WEEKLY_FOCUS = "weekly_focus"
 DEFAULT_FOCUS_TITLE = "My focus"
 
@@ -27,18 +26,27 @@ class GoalNotFoundError(Exception):
     pass
 
 
-class WeeklyFocusAlreadyActiveError(Exception):
-    pass
-
-
-class LegacyFocusTitlePatchError(Exception):
-    pass
-
-
 def calendar_week_bounds(as_of: date) -> tuple[date, date]:
     monday = as_of - timedelta(days=as_of.weekday())
     sunday = monday + timedelta(days=6)
     return monday, sunday
+
+
+def calendar_week_label(week_start: date, week_end: date) -> str:
+    if week_start.year == week_end.year:
+        if week_start.month == week_end.month:
+            return (
+                f"{week_start.strftime('%b')} {week_start.day} – "
+                f"{week_end.day}, {week_end.year}"
+            )
+        return (
+            f"{week_start.strftime('%b')} {week_start.day} – "
+            f"{week_end.strftime('%b')} {week_end.day}, {week_end.year}"
+        )
+    return (
+        f"{week_start.strftime('%b')} {week_start.day}, {week_start.year} – "
+        f"{week_end.strftime('%b')} {week_end.day}, {week_end.year}"
+    )
 
 
 def _weekly_focus_name(focus_title: str, week_number: int) -> str:
@@ -61,24 +69,12 @@ def get_active_training_block(
     session: Session,
     *,
     as_of: date | None = None,
-    allow_legacy_cutover: bool = False,
 ) -> TrainingBlock:
     if as_of is not None:
-        training_block = ensure_active_weekly_focus(
-            session,
-            as_of,
-            allow_legacy_cutover=allow_legacy_cutover,
-        )
+        training_block = ensure_active_weekly_focus(session, as_of)
         if training_block is not None:
             return training_block
-        statement = select(TrainingBlock).where(
-            TrainingBlock.user_id == LOCAL_USER_ID,
-            TrainingBlock.status == "active",
-        )
-        legacy_block = session.exec(statement).first()
-        if legacy_block is None:
-            raise TrainingBlockNotFoundError
-        return legacy_block
+        raise TrainingBlockNotFoundError
 
     statement = select(TrainingBlock).where(
         TrainingBlock.user_id == LOCAL_USER_ID,
@@ -93,8 +89,6 @@ def get_active_training_block(
 def ensure_active_weekly_focus(
     session: Session,
     as_of: date,
-    *,
-    allow_legacy_cutover: bool = True,
 ) -> TrainingBlock | None:
     week_start, week_end = calendar_week_bounds(as_of)
     previous_expire_on_commit = session.expire_on_commit
@@ -121,62 +115,9 @@ def ensure_active_weekly_focus(
                     return new_block
                 continue
 
-            if allow_legacy_cutover:
-                cutover = _try_legacy_cutover(session, as_of, week_start, week_end)
-                if cutover is not None:
-                    session.commit()
-                    session.refresh(cutover)
-                    return cutover
-
             return None
     finally:
         session.expire_on_commit = previous_expire_on_commit
-
-
-def setup_weekly_focus(session: Session, focus_title: str, *, as_of: date) -> TrainingBlock:
-    week_start, week_end = calendar_week_bounds(as_of)
-    if _find_active_weekly_focus_for_week(session, week_start) is not None:
-        raise WeeklyFocusAlreadyActiveError
-    if _has_any_active_weekly_focus(session):
-        raise WeeklyFocusAlreadyActiveError
-
-    new_block = _create_weekly_focus_block(
-        session,
-        focus_title=focus_title,
-        week_start=week_start,
-        week_end=week_end,
-        week_number=1,
-        new_series=True,
-    )
-    session.commit()
-    session.refresh(new_block)
-    return new_block
-
-
-def reset_focus_series(session: Session, focus_title: str, *, as_of: date) -> TrainingBlock:
-    current = ensure_active_weekly_focus(session, as_of)
-    week_start, week_end = calendar_week_bounds(as_of)
-
-    if current is None:
-        raise TrainingBlockNotFoundError
-
-    current.status = "completed"
-    current.end_date = min(as_of, week_end)
-    current.updated_at = next_updated_at(current.updated_at)
-    session.add(current)
-
-    new_block = _create_weekly_focus_block(
-        session,
-        focus_title=focus_title,
-        week_start=week_start,
-        week_end=week_end,
-        week_number=1,
-        new_series=True,
-        copy_from_block_id=current.id,
-    )
-    session.commit()
-    session.refresh(new_block)
-    return new_block
 
 
 def rollover_weekly_focus(
@@ -226,22 +167,6 @@ def rollover_weekly_focus(
     return new_block
 
 
-def update_focus_title(session: Session, block_id: str, focus_title: str) -> TrainingBlock:
-    training_block = _get_local_training_block(session, block_id)
-    if training_block.period_kind != PERIOD_KIND_WEEKLY_FOCUS:
-        raise LegacyFocusTitlePatchError
-    if training_block.status != "active":
-        raise TrainingBlockNotFoundError
-
-    training_block.focus_title = focus_title
-    training_block.name = _weekly_focus_name(focus_title, training_block.week_number or 1)
-    training_block.updated_at = next_updated_at(training_block.updated_at)
-    session.add(training_block)
-    session.commit()
-    session.refresh(training_block)
-    return training_block
-
-
 def create_training_block(session: Session, payload: TrainingBlockCreate) -> TrainingBlock:
     existing_block = session.get(TrainingBlock, payload.id)
     if existing_block is not None:
@@ -251,6 +176,20 @@ def create_training_block(session: Session, payload: TrainingBlockCreate) -> Tra
         _ensure_local_goal_exists(session, payload.related_goal_id)
 
     now = datetime.now(UTC)
+    copied_from_rules: list[Rule] = []
+    outgoing_active_blocks: list[TrainingBlock] = []
+    if payload.status == "active":
+        outgoing_active_blocks = _get_other_active_blocks(
+            session,
+            exclude_block_id=payload.id,
+        )
+        _complete_active_blocks(
+            session,
+            outgoing_active_blocks,
+            set_missing_end_date=True,
+        )
+        session.flush()
+
     training_block = TrainingBlock(
         id=payload.id,
         user_id=LOCAL_USER_ID,
@@ -258,7 +197,7 @@ def create_training_block(session: Session, payload: TrainingBlockCreate) -> Tra
         start_date=payload.start_date,
         end_date=payload.end_date,
         status=payload.status,
-        period_kind=PERIOD_KIND_LEGACY,
+        period_kind=PERIOD_KIND_WEEKLY_FOCUS,
         related_goal_id=payload.related_goal_id,
         notes=payload.notes,
         is_review_milestone_hit=False,
@@ -266,16 +205,12 @@ def create_training_block(session: Session, payload: TrainingBlockCreate) -> Tra
         updated_at=now,
     )
     session.add(training_block)
-    copied_from_rules: list[Rule] = []
-    if payload.status == "active":
-        outgoing_active_blocks = _get_other_active_blocks(session, exclude_block_id=payload.id)
-        if outgoing_active_blocks:
-            copied_from_rules = _copy_all_rules_to_block(
-                session,
-                source_block_id=outgoing_active_blocks[0].id,
-                target_block_id=payload.id,
-            )
-        _complete_active_blocks(session, outgoing_active_blocks, set_missing_end_date=True)
+    if payload.status == "active" and outgoing_active_blocks:
+        copied_from_rules = _copy_all_rules_to_block(
+            session,
+            source_block_id=outgoing_active_blocks[0].id,
+            target_block_id=payload.id,
+        )
     session.commit()
     session.refresh(training_block)
     for source_rule in copied_from_rules:
@@ -291,29 +226,26 @@ def update_training_block(
     training_block = _get_local_training_block(session, block_id)
     updates = payload.model_dump(exclude_unset=True)
 
-    if "focus_title" in updates:
-        focus_title = updates.pop("focus_title")
-        if focus_title is None:
-            raise ValueError("Field may not be null")
-        if training_block.period_kind == PERIOD_KIND_LEGACY:
-            raise LegacyFocusTitlePatchError
-        return update_focus_title(session, block_id, focus_title)
-
     if "related_goal_id" in updates and updates["related_goal_id"] is not None:
         _ensure_local_goal_exists(session, str(updates["related_goal_id"]))
+
+    if updates.get("status") == "active":
+        outgoing_active_blocks = _get_other_active_blocks(
+            session,
+            exclude_block_id=block_id,
+        )
+        _complete_active_blocks(
+            session,
+            outgoing_active_blocks,
+            set_missing_end_date=False,
+        )
+        session.flush()
 
     for field_name, value in updates.items():
         setattr(training_block, field_name, value)
 
     if updates:
         training_block.updated_at = next_updated_at(training_block.updated_at)
-
-    if updates.get("status") == "active":
-        _complete_active_blocks(
-            session,
-            _get_other_active_blocks(session, exclude_block_id=block_id),
-            set_missing_end_date=False,
-        )
 
     session.add(training_block)
     session.commit()
@@ -329,15 +261,6 @@ def _find_active_weekly_focus_for_week(session: Session, week_start: date) -> Tr
         TrainingBlock.start_date == week_start,
     )
     return session.exec(statement).first()
-
-
-def _has_any_active_weekly_focus(session: Session) -> bool:
-    statement = select(TrainingBlock).where(
-        TrainingBlock.user_id == LOCAL_USER_ID,
-        TrainingBlock.period_kind == PERIOD_KIND_WEEKLY_FOCUS,
-        TrainingBlock.status == "active",
-    )
-    return session.exec(statement).first() is not None
 
 
 def _find_rollover_source(session: Session, week_start: date) -> TrainingBlock | None:
@@ -372,93 +295,6 @@ def _find_rollover_source(session: Session, week_start: date) -> TrainingBlock |
 def _next_week_bounds(source: TrainingBlock) -> tuple[date, date]:
     next_monday = source.start_date + timedelta(days=7)
     return next_monday, next_monday + timedelta(days=6)
-
-
-def _try_legacy_cutover(
-    session: Session,
-    as_of: date,
-    week_start: date,
-    week_end: date,
-) -> TrainingBlock | None:
-    if _has_any_active_weekly_focus(session):
-        return None
-
-    legacy_statement = select(TrainingBlock).where(
-        TrainingBlock.user_id == LOCAL_USER_ID,
-        TrainingBlock.period_kind == PERIOD_KIND_LEGACY,
-        TrainingBlock.status == "active",
-    )
-    legacy_block = session.exec(legacy_statement).first()
-    if legacy_block is None:
-        return None
-
-    focus_title = legacy_block.name.strip() or DEFAULT_FOCUS_TITLE
-    new_block = _create_weekly_focus_block(
-        session,
-        focus_title=focus_title,
-        week_start=week_start,
-        week_end=week_end,
-        week_number=1,
-        new_series=True,
-        copy_from_block_id=legacy_block.id,
-    )
-
-    legacy_block.status = "completed"
-    legacy_block.end_date = min(as_of, week_end)
-    legacy_block.updated_at = next_updated_at(legacy_block.updated_at)
-    session.add(legacy_block)
-    return new_block
-
-
-def _create_weekly_focus_block(
-    session: Session,
-    *,
-    focus_title: str,
-    week_start: date,
-    week_end: date,
-    week_number: int,
-    new_series: bool,
-    copy_from_block_id: str | None = None,
-) -> TrainingBlock:
-    now = datetime.now(UTC)
-    focus_series_id = f"fs-{uuid4()}" if new_series else ""
-    if not new_series and copy_from_block_id is not None:
-        source = session.get(TrainingBlock, copy_from_block_id)
-        if source is not None and source.focus_series_id is not None:
-            focus_series_id = source.focus_series_id
-
-    training_block = TrainingBlock(
-        id=f"blk-{uuid4()}",
-        user_id=LOCAL_USER_ID,
-        name=_weekly_focus_name(focus_title, week_number),
-        start_date=week_start,
-        end_date=week_end,
-        status="active",
-        period_kind=PERIOD_KIND_WEEKLY_FOCUS,
-        focus_series_id=focus_series_id,
-        focus_title=focus_title,
-        week_number=week_number,
-        related_goal_id=None,
-        notes=None,
-        is_review_milestone_hit=False,
-        created_at=now,
-        updated_at=now,
-    )
-    session.add(training_block)
-
-    if copy_from_block_id is not None:
-        _copy_enabled_rules_to_block(
-            session,
-            source_block_id=copy_from_block_id,
-            target_block_id=training_block.id,
-        )
-        _copy_weekly_targets_to_block(
-            session,
-            source_block_id=copy_from_block_id,
-            target_block_id=training_block.id,
-        )
-
-    return training_block
 
 
 def _get_other_active_blocks(session: Session, *, exclude_block_id: str) -> list[TrainingBlock]:
