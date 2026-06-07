@@ -12,6 +12,7 @@ import { WeeklyLoadGraph } from '../composites/WeeklyLoadGraph';
 import { BlockSafetyMapSection } from '../composites/BlockSafetyMapSection';
 import { LoadRiskSection } from '../composites/LoadRiskSection';
 import { GoalsCard } from '../composites/GoalsCard';
+import { allWeeklyTargetsComplete } from '../../lib/engine';
 import type { MilestoneEngineResult } from '../../hooks/useMilestoneEngine';
 import type { Activity, ActivityClass, RecoveryStreak, SafetyState } from '../../types';
 
@@ -171,6 +172,7 @@ export const DashboardScreen: React.FC<Props> = ({
       {/* ── Suggested activities ── */}
       <SuggestedActivityCard
         suggestionBuckets={suggestionBuckets}
+        allWeeklyTargetsComplete={allWeeklyTargetsComplete(weeklyProgress)}
         onPick={(s) => {
           const activity = activities.find((candidate) => candidate.id === s.id);
           if (activity != null && onQuickLog != null) {

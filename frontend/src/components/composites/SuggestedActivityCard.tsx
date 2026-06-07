@@ -20,6 +20,8 @@ export type { Suggestion };
 
 export interface SuggestedActivityCardProps {
   suggestionBuckets: Suggestion[];
+  /** When true and buckets are empty, show calm weekly-target-complete copy. */
+  allWeeklyTargetsComplete?: boolean;
   onPick?: (s: Suggestion) => void;
   ctaLabel?: (s: Suggestion) => string;
   title?: string;
@@ -54,8 +56,12 @@ function showDoneForTodayCopy(doRows: Suggestion[], restRows: Suggestion[]): boo
   return doRows.length === 0 && (restRows.length > 0 || restRows.length === 0);
 }
 
+const WEEKLY_TARGETS_COMPLETE_COPY =
+  'Weekly targets met for this week. Nothing else required unless you want to log more.';
+
 export const SuggestedActivityCard: React.FC<SuggestedActivityCardProps> = ({
   suggestionBuckets,
+  allWeeklyTargetsComplete = false,
   onPick,
   ctaLabel,
   title = 'Suggested for today',
@@ -80,10 +86,14 @@ export const SuggestedActivityCard: React.FC<SuggestedActivityCardProps> = ({
       </CardHeader>
 
       {allEmpty ? (
-        <p className="text-body text-ink-muted">
-          Nothing to suggest yet. Log a few activities and your rules will fill
-          this card in.
-        </p>
+        allWeeklyTargetsComplete ? (
+          <p className="text-body text-ink-muted">{WEEKLY_TARGETS_COMPLETE_COPY}</p>
+        ) : (
+          <p className="text-body text-ink-muted">
+            Nothing to suggest yet. Log a few activities and your rules will fill
+            this card in.
+          </p>
+        )
       ) : (
         <div className="flex flex-col gap-4">
           <section data-testid="suggestion-section-do">

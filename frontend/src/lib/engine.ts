@@ -36,6 +36,11 @@ export interface WeeklyProgress {
   periodEnd?: ISODate;
 }
 
+/** True when the user has weekly targets and every row meets or exceeds its target. */
+export function allWeeklyTargetsComplete(weeklyProgress: WeeklyProgress[]): boolean {
+  return weeklyProgress.length > 0 && weeklyProgress.every((row) => row.value >= row.target);
+}
+
 export type SuggestionBucket = 'do' | 'rest' | 'done';
 export type SuggestionScope = 'activity' | 'class';
 
