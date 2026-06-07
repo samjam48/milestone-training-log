@@ -251,7 +251,7 @@ def log_dict(log: ActivityLog) -> LogDict:
 
 
 def rule_dict(rule: Rule) -> RuleDict:
-    return {
+    payload: RuleDict = {
         "id": rule.id,
         "training_block_id": rule.training_block_id,
         "activity_class_id": rule.activity_class_id,
@@ -260,6 +260,11 @@ def rule_dict(rule: Rule) -> RuleDict:
         "window_days": rule.window_days,
         "enabled": rule.enabled,
     }
+    if rule.activity_id is not None:
+        payload["activity_id"] = rule.activity_id
+    if rule.limit_unit is not None:
+        payload["limit_unit"] = rule.limit_unit
+    return payload
 
 
 def weekly_target_dict(target: WeeklyTarget) -> WeeklyTargetDict:

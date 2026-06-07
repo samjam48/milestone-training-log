@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal, NotRequired, TypedDict
 
 SafetyState = Literal["safe", "caution", "danger"]
 ProgressState = Literal["safe", "caution", "danger", "neutral"]
@@ -100,28 +100,29 @@ class DelayedTaxHit(TypedDict, total=False):
 class LoadRiskDay(TypedDict):
     date: str
     flagged: bool
+    state: SafetyState
 
 
-class LoadRiskExerciseBar(TypedDict):
-    activity_id: str
-    activity_name: str
-    actual: float
-    limit: float
-    unit: str
-
-
-class LoadRiskClassBar(TypedDict):
+class LoadRiskRuleLimitRow(TypedDict):
+    id: str
+    scope: Literal["class", "activity"]
+    rule_id: str
+    rule_type: str
     activity_class_id: str
     class_name: str
     actual: float
     limit: float
     unit: str
-    exercises: list[LoadRiskExerciseBar]
+    state: SafetyState
+    label: str
+    activity_id: NotRequired[str | None]
+    activity_name: NotRequired[str | None]
+    display_mode: NotRequired[str]
 
 
 class LoadRiskSummary(TypedDict):
     week_days: list[LoadRiskDay]
-    class_bars: list[LoadRiskClassBar]
+    rule_limit_rows: list[LoadRiskRuleLimitRow]
 
 
 LogDict = dict[str, Any]

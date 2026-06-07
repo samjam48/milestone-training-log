@@ -463,11 +463,10 @@ def _bucket_ids(rows: list[dict[str, Any]], bucket: str) -> set[str]:
     return {str(row["id"]) for row in rows if row.get("bucket") == bucket}
 
 
-def _foot_class_bar(payload: dict[str, Any]) -> dict[str, Any]:
+def _foot_rule_limit_row(payload: dict[str, Any], rule_id: str = "rule-cap-foot") -> dict[str, Any]:
     summary = payload["load_risk_summary"]
     assert summary is not None
-    class_bars = summary["class_bars"]
-    return next(bar for bar in class_bars if bar["activity_class_id"] == "cls-foot")
+    return next(row for row in summary["rule_limit_rows"] if row["rule_id"] == rule_id)
 
 
 def _foot_weekly_progress(payload: dict[str, Any]) -> dict[str, Any]:
@@ -513,11 +512,11 @@ async def test_get_dashboard_suggestion_buckets_rows_include_bucket_scope_descri
         assert "description" in row
 
 
-async def test_get_dashboard_load_risk_summary_week_days_and_class_bars(
+async def test_get_dashboard_load_risk_summary_week_days_and_rule_limit_rows(
     app_with_test_database: FastAPI,
     client: AsyncClient,
 ) -> None:
-    """load_risk_summary returns seven week_days and capped performance class bars."""
+    """load_risk_summary returns seven week_days and per-rule limit rows."""
     seed_dashboard_mock_graph(app_with_test_database)
 
     response = await client.get(DASHBOARD_URL, params={"as_of": AS_OF})
@@ -528,10 +527,15 @@ async def test_get_dashboard_load_risk_summary_week_days_and_class_bars(
     assert len(summary["week_days"]) == 7
     assert summary["week_days"][-1]["date"] == AS_OF
     assert all("flagged" in day for day in summary["week_days"])
+    assert all(day["state"] in {"safe", "caution", "danger"} for day in summary["week_days"])
 
-    class_ids = {bar["activity_class_id"] for bar in summary["class_bars"]}
-    assert "cls-foot" in class_ids
-    assert "cls-recovery" not in class_ids
+    foot_rows = [
+        row
+        for row in summary["rule_limit_rows"]
+        if row["activity_class_id"] == "cls-foot"
+    ]
+    assert foot_rows
+    assert not any(row["activity_class_id"] == "cls-recovery" for row in summary["rule_limit_rows"])
 
 
 async def test_get_dashboard_load_risk_summary_null_without_active_block(
@@ -666,7 +670,7 @@ async def test_backdated_activity_log_updates_suggestion_buckets_and_load_risk_s
     baseline_buckets = baseline_payload["suggestion_buckets"]
     baseline_summary = baseline_payload["load_risk_summary"]
     assert baseline_summary is not None
-    baseline_foot_actual = _foot_class_bar(baseline_payload)["actual"]
+    baseline_foot_actual = _foot_rule_limit_row(baseline_payload)["actual"]
     assert "act-walk" not in _bucket_ids(baseline_buckets, "done")
 
     backdated_date = (FROZEN_TODAY - timedelta(days=1)).isoformat()
@@ -692,7 +696,7 @@ async def test_backdated_activity_log_updates_suggestion_buckets_and_load_risk_s
 
     assert followup_payload["suggestion_buckets"] != baseline_buckets
     assert followup_payload["load_risk_summary"] != baseline_summary
-    assert _foot_class_bar(followup_payload)["actual"] > baseline_foot_actual
+    assert _foot_rule_limit_row(followup_payload)["actual"] > baseline_foot_actual
 
 
 # ---------------------------------------------------------------------------
@@ -715,7 +719,7 @@ async def test_patch_logged_date_across_week_boundary_updates_dashboard_derivati
     baseline_foot_progress = _foot_weekly_progress(baseline_payload)
     baseline_summary = baseline_payload["load_risk_summary"]
     assert baseline_summary is not None
-    baseline_foot_actual = _foot_class_bar(baseline_payload)["actual"]
+    baseline_foot_actual = _foot_rule_limit_row(baseline_payload)["actual"]
 
     # log-25 is 2026-05-22 (inside risk week 2026-05-19..25); move to prior week.
     patch_response = await client.patch(
@@ -729,7 +733,7 @@ async def test_patch_logged_date_across_week_boundary_updates_dashboard_derivati
     assert followup.status_code == 200
     followup_payload = followup.json()
 
-    followup_foot_actual = _foot_class_bar(followup_payload)["actual"]
+    followup_foot_actual = _foot_rule_limit_row(followup_payload)["actual"]
 
     # weekly_progress spans block start→as_of; load_risk uses 7-day window.
     assert _foot_weekly_progress(followup_payload)["value"] == baseline_foot_progress["value"]
@@ -905,3 +909,114 @@ async def test_get_dashboard_week_load_threshold_null_avoids_zero_cap_display(
     payload = response.json()
 
     assert payload["week_load_threshold"] is None
+
+
+# ---------------------------------------------------------------------------
+# WTL.B6 — load_risk_summary rule-limit rows contract
+# ---------------------------------------------------------------------------
+
+
+def _wtl_b6_rule_limit_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    summary = payload["load_risk_summary"]
+    assert summary is not None
+    assert "rule_limit_rows" in summary, "WTL.B6 requires rule_limit_rows on load_risk_summary"
+    return summary["rule_limit_rows"]
+
+
+def _wtl_b6_row_by_rule_id(payload: dict[str, Any], rule_id: str) -> dict[str, Any]:
+    rows = _wtl_b6_rule_limit_rows(payload)
+    matches = [row for row in rows if row.get("rule_id") == rule_id]
+    assert len(matches) == 1
+    return matches[0]
+
+
+async def test_get_dashboard_load_risk_summary_rule_limit_rows_contract(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    from app.tests.helpers.wtl_b6_fixtures import seed_wtl_b6_dashboard_graph
+
+    seed_wtl_b6_dashboard_graph(app_with_test_database)
+
+    response = await client.get(DASHBOARD_URL, params={"as_of": AS_OF})
+    assert response.status_code == 200
+    summary = response.json()["load_risk_summary"]
+
+    assert summary is not None
+    assert len(summary["week_days"]) == 7
+    assert summary["week_days"][-1]["date"] == AS_OF
+    for day in summary["week_days"]:
+        assert day["state"] in {"safe", "caution", "danger"}
+
+    rows = summary["rule_limit_rows"]
+    assert rows
+    for row in rows:
+        assert row["scope"] in {"class", "activity"}
+        assert row["state"] in {"safe", "caution", "danger"}
+        assert "rule_id" in row
+        assert "label" in row
+
+
+async def test_get_dashboard_load_risk_summary_foot_load_regression_no_class_km_row(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    """Exercise weekly km cap must not surface as a class-wide 0 / 8 style row."""
+    from app.tests.helpers.wtl_b6_fixtures import seed_wtl_b6_dashboard_graph
+
+    seed_wtl_b6_dashboard_graph(app_with_test_database)
+
+    response = await client.get(DASHBOARD_URL, params={"as_of": AS_OF})
+    assert response.status_code == 200
+    payload = response.json()
+
+    walk_row = _wtl_b6_row_by_rule_id(payload, "rule-vol-walk-weekly")
+    assert walk_row["scope"] == "activity"
+    assert walk_row["activity_id"] == "act-walk"
+    assert walk_row["unit"] == "km"
+
+    misleading = [
+        row
+        for row in _wtl_b6_rule_limit_rows(payload)
+        if row["scope"] == "class"
+        and row["rule_type"] in {"weekly_volume_cap", "daily_volume_cap"}
+    ]
+    assert misleading == []
+
+
+async def test_get_dashboard_load_risk_summary_empty_rows_without_enabled_limits(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    """Active block with no enabled limits still returns week_days and empty rows."""
+    from datetime import date
+
+    from app.tests.helpers.wtl_b6_fixtures import WTL_B6_BLOCK_ID
+
+    seed_activity_class(
+        app_with_test_database,
+        class_id="cls-foot",
+        name="Foot Load",
+        class_type="performance",
+    )
+    seed_activity(
+        app_with_test_database,
+        activity_id="act-walk",
+        activity_class_id="cls-foot",
+        name="Walk",
+    )
+    seed_training_block(
+        app_with_test_database,
+        block_id=WTL_B6_BLOCK_ID,
+        name="WTL B6 Empty Rules",
+        start_date=date(2026, 4, 7),
+        status="active",
+    )
+
+    response = await client.get(DASHBOARD_URL, params={"as_of": AS_OF})
+    assert response.status_code == 200
+    summary = response.json()["load_risk_summary"]
+
+    assert summary is not None
+    assert len(summary["week_days"]) == 7
+    assert summary["rule_limit_rows"] == []

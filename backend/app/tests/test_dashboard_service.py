@@ -685,10 +685,10 @@ def test_get_dashboard_load_risk_summary_matches_engine(
     assert summary.week_days[-1].date.isoformat() == expected["week_days"][-1]["date"]
 
     expected_foot = next(
-        bar for bar in expected["class_bars"] if bar["activity_class_id"] == "cls-foot"
+        row for row in expected["rule_limit_rows"] if row["rule_id"] == "rule-cap-foot"
     )
     actual_foot = next(
-        bar for bar in summary.class_bars if bar.activity_class_id == "cls-foot"
+        row for row in summary.rule_limit_rows if row.rule_id == "rule-cap-foot"
     )
     assert actual_foot.actual == pytest.approx(expected_foot["actual"])
     assert actual_foot.limit == pytest.approx(expected_foot["limit"])
@@ -1286,3 +1286,72 @@ def test_get_dashboard_week_load_threshold_null_when_no_cap_rules(
     dashboard = get_dashboard(session, as_of=date.fromisoformat(WTL_B5_AS_OF))
 
     assert dashboard.week_load_threshold is None
+
+
+# ---------------------------------------------------------------------------
+# WTL.B6 — load_risk_summary rule-limit rows contract
+# ---------------------------------------------------------------------------
+
+
+def test_get_dashboard_load_risk_summary_rule_limit_rows_match_engine(
+    app_with_test_database: FastAPI,
+    session: Session,
+) -> None:
+    """Dashboard load_risk_summary mirrors WTL.B6 rule_limit_rows from the engine."""
+    from app.tests.helpers.wtl_b6_fixtures import seed_wtl_b6_dashboard_graph
+
+    seed_wtl_b6_dashboard_graph(app_with_test_database)
+
+    dashboard = get_dashboard(session, as_of=FROZEN_AS_OF)
+    expected = _expected_load_risk_summary(session, as_of=FROZEN_AS_OF)
+
+    assert dashboard.load_risk_summary is not None
+    summary = dashboard.load_risk_summary
+    assert len(summary.week_days) == 7
+    assert summary.week_days[-1].date == FROZEN_AS_OF
+
+    for day in summary.week_days:
+        assert day.state in {"safe", "caution", "danger"}
+
+    assert hasattr(summary, "rule_limit_rows")
+    expected_rows = expected["rule_limit_rows"]
+    actual_rows = summary.rule_limit_rows
+    assert len(actual_rows) == len(expected_rows)
+
+    for actual, exp in zip(actual_rows, expected_rows, strict=True):
+        assert actual.rule_id == exp["rule_id"]
+        assert actual.scope == exp["scope"]
+        assert actual.actual == pytest.approx(exp["actual"])
+        assert actual.limit == pytest.approx(exp["limit"])
+        assert actual.state == exp["state"]
+
+
+def test_get_dashboard_load_risk_summary_foot_load_separate_class_and_activity_rows(
+    app_with_test_database: FastAPI,
+    session: Session,
+) -> None:
+    from app.tests.helpers.wtl_b6_fixtures import seed_wtl_b6_dashboard_graph
+
+    seed_wtl_b6_dashboard_graph(app_with_test_database)
+
+    dashboard = get_dashboard(session, as_of=FROZEN_AS_OF)
+    assert dashboard.load_risk_summary is not None
+
+    rows = dashboard.load_risk_summary.rule_limit_rows
+    class_freq = next(row for row in rows if row.rule_id == "rule-freq-foot")
+    walk_weekly = next(row for row in rows if row.rule_id == "rule-vol-walk-weekly")
+    bike_daily = next(row for row in rows if row.rule_id == "rule-vol-bike-daily")
+
+    assert class_freq.scope == "class"
+    assert class_freq.unit == "sessions"
+    assert walk_weekly.scope == "activity"
+    assert walk_weekly.activity_id == "act-walk"
+    assert walk_weekly.unit == "km"
+    assert bike_daily.scope == "activity"
+    assert bike_daily.activity_id == "act-bike"
+    assert bike_daily.unit == "minutes"
+
+    assert not any(
+        row.scope == "class" and row.rule_type == "weekly_volume_cap"
+        for row in rows
+    )

@@ -1530,9 +1530,9 @@ def _week_day_flags(summary: dict[str, Any]) -> dict[str, bool]:
     return {row["date"]: row["flagged"] for row in summary["week_days"]}
 
 
-def _class_bar(summary: dict[str, Any], class_id: str) -> dict[str, Any]:
+def _rule_limit_row(summary: dict[str, Any], rule_id: str) -> dict[str, Any]:
     return next(
-        bar for bar in summary["class_bars"] if bar["activity_class_id"] == class_id
+        row for row in summary["rule_limit_rows"] if row["rule_id"] == rule_id
     )
 
 
@@ -1551,17 +1551,17 @@ def test_compute_load_risk_summary_week_days_span_seven_days_ending_as_of() -> N
 
 
 def test_compute_load_risk_summary_omits_uncapped_recovery_class() -> None:
-    """Recovery classes with zero enabled cap rules are excluded from class_bars."""
+    """Recovery classes with zero enabled cap rules are excluded from rule_limit_rows."""
     rules = _foot_load_cap_rules_only()
     summary = _call_load_risk_summary(rules=rules, delayed_tax_hits=[])
 
-    class_ids = {bar["activity_class_id"] for bar in summary["class_bars"]}
+    class_ids = {row["activity_class_id"] for row in summary["rule_limit_rows"]}
     assert "cls-foot" in class_ids
     assert "cls-recovery" not in class_ids
 
 
 def test_compute_load_risk_summary_class_bar_actual_and_limit_for_load_cap() -> None:
-    """Class bar reports rolling load actual vs weekly load cap limit."""
+    """Weekly load cap rule row reports rolling load actual vs limit."""
     as_of = "2026-05-25"
     logs = [_make_log("act-walk", "2026-05-22", volume_value=1.5, rpe=3)]
     rules = _foot_load_cap_rules_only(threshold=120.0)
@@ -1572,16 +1572,16 @@ def test_compute_load_risk_summary_class_bar_actual_and_limit_for_load_cap() -> 
         rules=rules,
         delayed_tax_hits=[],
     )
-    foot = _class_bar(summary, "cls-foot")
+    row = _rule_limit_row(summary, "rule-cap-foot")
 
-    assert foot["class_name"] == "High-Intensity Foot Load"
-    assert foot["actual"] == pytest.approx(4.5)
-    assert foot["limit"] == pytest.approx(120.0)
-    assert foot["unit"] == "load"
+    assert row["class_name"] == "High-Intensity Foot Load"
+    assert row["actual"] == pytest.approx(4.5)
+    assert row["limit"] == pytest.approx(120.0)
+    assert row["unit"] == "load"
 
 
 def test_compute_load_risk_summary_exercise_bar_uses_exercise_cap_override() -> None:
-    """Exercise rows use exercise cap when present; otherwise inherit class cap."""
+    """Exercise-scoped load cap rows stay separate from class load cap rows."""
     as_of = "2026-05-25"
     walk = next(activity for activity in ACTIVITIES if activity["id"] == "act-walk")
     foot_class = next(cls for cls in ACTIVITY_CLASSES if cls["id"] == "cls-foot")
@@ -1604,11 +1604,9 @@ def test_compute_load_risk_summary_exercise_bar_uses_exercise_cap_override() -> 
         rules=rules,
         delayed_tax_hits=[],
     )
-    foot = _class_bar(summary, "cls-foot")
-    walk_row = next(
-        row for row in foot["exercises"] if row["activity_id"] == "act-walk"
-    )
+    walk_row = _rule_limit_row(summary, "rule-cap-walk")
 
+    assert walk_row["scope"] == "activity"
     assert walk_row["activity_name"] == "Morning Walk"
     assert walk_row["actual"] == pytest.approx(4.5)
     assert walk_row["limit"] == pytest.approx(40.0)
