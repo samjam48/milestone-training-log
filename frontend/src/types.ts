@@ -190,6 +190,8 @@ export interface WeeklyTarget extends Timestamped {
   id: ID;
   trainingBlockId: ID;
   activityClassId: ID;
+  /** Activity-scoped weekly target (WTL.B1/B2); legacy rows may omit. */
+  activityId?: ID;
   targetValue: number;
   targetUnit: VolumeUnit;
 }

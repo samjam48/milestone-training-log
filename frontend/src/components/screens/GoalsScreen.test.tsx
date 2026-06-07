@@ -544,7 +544,7 @@ describe('GoalsScreen — empty state', () => {
     expect(screen.queryByText(/no goals yet/i)).not.toBeInTheDocument();
   });
 
-  it('still shows "+ New Goal" CTA in the empty state', () => {
+  it('still shows Big goal CTA in the empty state', () => {
     const engine = makeEngine({
       goals: [],
       activityClasses: [],
@@ -552,7 +552,7 @@ describe('GoalsScreen — empty state', () => {
 
     renderWithProviders(<GoalsScreen engine={engine} />);
 
-    expect(screen.getByRole('button', { name: /\+ new goal/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /big goal/i })).toBeInTheDocument();
   });
 });
 
@@ -599,7 +599,7 @@ describe('GoalsScreen — F10.8 illustrated empty state', () => {
     ).toBeInTheDocument();
   });
 
-  it('keeps "+ New Goal" CTA visible in the illustrated empty state', () => {
+  it('keeps Big goal CTA visible in the illustrated empty state', () => {
     const engine = makeEngine({
       goals: [],
       activityClasses: [],
@@ -608,7 +608,7 @@ describe('GoalsScreen — F10.8 illustrated empty state', () => {
     renderWithProviders(<GoalsScreen engine={engine} />);
 
     expect(screen.getByTestId('goals-empty-state')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /\+ new goal/i })).toBeVisible();
+    expect(screen.getByRole('button', { name: /big goal/i })).toBeVisible();
   });
 
   it('renders illustrated empty state when only achieved goals exist (no active)', () => {
@@ -658,7 +658,7 @@ describe('GoalsScreen — F10.10 remove inline NewGoalForm', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('clicking "+ New Goal" without onNewGoal does not open an inline sheet', async () => {
+  it('clicking Big goal without onNewGoal does not open an inline sheet', async () => {
     const user = userEvent.setup();
     const createGoal = vi.fn();
     const engine = makeEngine({
@@ -669,13 +669,13 @@ describe('GoalsScreen — F10.10 remove inline NewGoalForm', () => {
 
     renderWithProviders(<GoalsScreen engine={engine} />);
 
-    await user.click(screen.getByRole('button', { name: /\+ new goal/i }));
+    await user.click(screen.getByRole('button', { name: /big goal/i }));
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(createGoal).not.toHaveBeenCalled();
   });
 
-  it('clicking "+ New Goal" with onNewGoal does not call engine.createGoal on the tab screen', async () => {
+  it('clicking Big goal with onNewGoal does not call engine.createGoal on the tab screen', async () => {
     const user = userEvent.setup();
     const onNewGoal = vi.fn();
     const createGoal = vi.fn();
@@ -689,7 +689,7 @@ describe('GoalsScreen — F10.10 remove inline NewGoalForm', () => {
       <GoalsScreen engine={engine} onNewGoal={onNewGoal} onEditGoal={vi.fn()} />,
     );
 
-    await user.click(screen.getByRole('button', { name: /\+ new goal/i }));
+    await user.click(screen.getByRole('button', { name: /big goal/i }));
 
     expect(onNewGoal).toHaveBeenCalledTimes(1);
     expect(createGoal).not.toHaveBeenCalled();
@@ -968,7 +968,7 @@ describe('GoalsScreen — F8.3: onEditGoal prop wiring', () => {
 });
 
 describe('GoalsScreen — F8.3 / F10.10: onNewGoal stack navigation', () => {
-  it('when onNewGoal is provided, clicking "+ New Goal" calls onNewGoal and does NOT open the inline sheet', async () => {
+  it('when onNewGoal is provided, clicking Big goal calls onNewGoal and does NOT open the inline sheet', async () => {
     const user = userEvent.setup();
     const onNewGoal = vi.fn();
     const onEditGoal = vi.fn<(goal: Omit<Goal, 'userId'>) => void>();
@@ -981,14 +981,14 @@ describe('GoalsScreen — F8.3 / F10.10: onNewGoal stack navigation', () => {
       <GoalsScreen engine={engine} onNewGoal={onNewGoal} onEditGoal={onEditGoal} />,
     );
 
-    await user.click(screen.getByRole('button', { name: /\+ new goal/i }));
+    await user.click(screen.getByRole('button', { name: /big goal/i }));
 
     expect(onNewGoal).toHaveBeenCalledTimes(1);
     // The inline NewGoalForm dialog must NOT appear
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('when onNewGoal is omitted, clicking "+ New Goal" does not open an inline NewGoalForm', async () => {
+  it('when onNewGoal is omitted, clicking Big goal does not open an inline NewGoalForm', async () => {
     const user = userEvent.setup();
     const engine = makeEngine({
       goals: [GOAL_MONTHLY_NUMERIC],
@@ -997,7 +997,7 @@ describe('GoalsScreen — F8.3 / F10.10: onNewGoal stack navigation', () => {
 
     renderWithProviders(<GoalsScreen engine={engine} />);
 
-    await user.click(screen.getByRole('button', { name: /\+ new goal/i }));
+    await user.click(screen.getByRole('button', { name: /big goal/i }));
 
     expect(screen.queryByRole('dialog', { name: /create new goal/i })).not.toBeInTheDocument();
   });
@@ -1076,13 +1076,13 @@ describe('GoalsScreen — F8.3: archive/restore regression', () => {
 });
 
 // ---------------------------------------------------------------------------
-// S2.1 — Sticky + New Goal CTA uses tab-bar bottom inset
+// S2.1 — Sticky + Big goal CTA uses tab-bar bottom inset
 // plans/tickets-stage-2-polish-2026-06-05.md
 // ---------------------------------------------------------------------------
 
-describe('GoalsScreen — S2.1 bottom inset on + New Goal CTA', () => {
-  function getNewGoalCtaRegion(): HTMLElement {
-    const button = screen.getByRole('button', { name: /\+ new goal/i });
+describe('GoalsScreen — S2.1 bottom inset on Big goal CTA', () => {
+  function getBigGoalCtaRegion(): HTMLElement {
+    const button = screen.getByRole('button', { name: /big goal/i });
     const byTestId = screen.queryByTestId(BOTTOM_ACTION_BAR_TEST_ID);
     if (byTestId !== null && byTestId.contains(button)) {
       return byTestId;
@@ -1104,7 +1104,7 @@ describe('GoalsScreen — S2.1 bottom inset on + New Goal CTA', () => {
       </AppShell>,
     );
 
-    const region = getNewGoalCtaRegion();
+    const region = getBigGoalCtaRegion();
     expectTabBarInsetAboveTabScreenFooter(region);
     expect(region.className).not.toMatch(/\babsolute\b.*\bbottom-0\b/);
   });
@@ -1114,7 +1114,7 @@ describe('GoalsScreen — S2.1 bottom inset on + New Goal CTA', () => {
 
     renderWithProviders(<GoalsScreen engine={engine} />);
 
-    const region = getNewGoalCtaRegion();
+    const region = getBigGoalCtaRegion();
     expect(region.className).not.toMatch(/\babsolute\s+bottom-0\b/);
     expect(region.className).not.toMatch(/\bpb-4\b(?!.*tabbar)/);
     expectTabScreenBottomActionBar(region);

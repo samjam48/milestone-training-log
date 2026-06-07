@@ -377,6 +377,7 @@ export function mapWeeklyTargetFromApi(raw: Record<string, unknown>): WeeklyTarg
     id: String(raw.id),
     trainingBlockId: String(raw.training_block_id),
     activityClassId: String(raw.activity_class_id),
+    ...(raw.activity_id != null ? { activityId: String(raw.activity_id) } : {}),
     targetValue: Number(raw.target_value),
     targetUnit: raw.target_unit as VolumeUnit,
     ...readTimestamped(raw),
