@@ -102,7 +102,7 @@ def get_dashboard(session: Session, *, as_of: date | None = None) -> DashboardRe
     block_start: str | None = None
 
     try:
-        active_block = get_active_training_block(session)
+        active_block = get_active_training_block(session, as_of=resolved)
         block_read = TrainingBlockRead.model_validate(active_block)
         block_start = format_iso_date(active_block.start_date)
         rules = list_rules(session, active_block.id)

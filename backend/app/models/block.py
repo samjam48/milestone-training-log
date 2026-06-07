@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Column, ForeignKey, Index, String, UniqueConstraint, text
+from sqlalchemy import Boolean, Column, ForeignKey, Index, Integer, String, UniqueConstraint, text
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.models.activity import Activity, ActivityClass
@@ -9,6 +9,22 @@ from app.models.goal import Goal
 
 class TrainingBlock(SQLModel, table=True):
     __tablename__ = "training_blocks"
+    __table_args__ = (
+        Index(
+            "uq_training_blocks_user_active_weekly_focus",
+            "user_id",
+            unique=True,
+            sqlite_where=text("status = 'active' AND period_kind = 'weekly_focus'"),
+            postgresql_where=text("status = 'active' AND period_kind = 'weekly_focus'"),
+        ),
+        Index(
+            "uq_training_blocks_user_focus_series_week",
+            "user_id",
+            "focus_series_id",
+            "week_number",
+            unique=True,
+        ),
+    )
 
     id: str = Field(sa_column=Column(String, primary_key=True, autoincrement=False))
     user_id: str = Field(
@@ -19,6 +35,22 @@ class TrainingBlock(SQLModel, table=True):
     start_date: date
     end_date: date | None = None
     status: str
+    period_kind: str = Field(
+        default="legacy",
+        sa_column=Column(String, nullable=False, default="legacy", server_default="legacy"),
+    )
+    focus_series_id: str | None = Field(
+        default=None,
+        sa_column=Column(String, nullable=True),
+    )
+    focus_title: str | None = Field(
+        default=None,
+        sa_column=Column(String, nullable=True),
+    )
+    week_number: int | None = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=True),
+    )
     related_goal_id: str | None = Field(
         default=None,
         sa_column=Column(String, ForeignKey("goals.id"), nullable=True),

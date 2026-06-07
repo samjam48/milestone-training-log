@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -9,15 +10,22 @@ from app.schemas.training_blocks import (
     TrainingBlockCreate,
     TrainingBlockPatch,
     TrainingBlockRead,
+    WeeklyFocusResetRequest,
+    WeeklyFocusSetupRequest,
 )
 from app.services.block_review import get_block_review
+from app.services.load_queries import resolve_as_of
 from app.services.training_blocks import (
     GoalNotFoundError,
+    LegacyFocusTitlePatchError,
     TrainingBlockAlreadyExistsError,
     TrainingBlockNotFoundError,
+    WeeklyFocusAlreadyActiveError,
     create_training_block,
     get_active_training_block,
     list_training_blocks,
+    reset_focus_series,
+    setup_weekly_focus,
     update_training_block,
 )
 
@@ -35,9 +43,67 @@ async def get_training_blocks(session: SessionDep) -> list[TrainingBlockRead]:
 
 
 @router.get("/active", response_model=TrainingBlockRead)
-async def get_active_block(session: SessionDep) -> TrainingBlockRead:
+async def get_active_block(
+    session: SessionDep,
+    as_of: date | None = None,
+) -> TrainingBlockRead:
+    resolved_as_of = resolve_as_of(as_of)
     try:
-        training_block = get_active_training_block(session)
+        training_block = get_active_training_block(
+            session,
+            as_of=resolved_as_of,
+            allow_legacy_cutover=True,
+        )
+    except TrainingBlockNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Active training block not found",
+        ) from exc
+    return TrainingBlockRead.model_validate(training_block)
+
+
+@router.post(
+    "/active/setup",
+    response_model=TrainingBlockRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_active_weekly_focus_setup(
+    payload: WeeklyFocusSetupRequest,
+    session: SessionDep,
+    as_of: date | None = None,
+) -> TrainingBlockRead:
+    resolved_as_of = resolve_as_of(as_of)
+    try:
+        training_block = setup_weekly_focus(
+            session,
+            payload.focus_title,
+            as_of=resolved_as_of,
+        )
+    except WeeklyFocusAlreadyActiveError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Active weekly focus already exists",
+        ) from exc
+    return TrainingBlockRead.model_validate(training_block)
+
+
+@router.post(
+    "/active/reset-focus",
+    response_model=TrainingBlockRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_active_reset_focus(
+    payload: WeeklyFocusResetRequest,
+    session: SessionDep,
+    as_of: date | None = None,
+) -> TrainingBlockRead:
+    resolved_as_of = resolve_as_of(as_of)
+    try:
+        training_block = reset_focus_series(
+            session,
+            payload.focus_title,
+            as_of=resolved_as_of,
+        )
     except TrainingBlockNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -97,5 +163,10 @@ async def patch_training_block(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Goal not found",
+        ) from exc
+    except LegacyFocusTitlePatchError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="focus_title cannot be updated on legacy training blocks",
         ) from exc
     return TrainingBlockRead.model_validate(training_block)

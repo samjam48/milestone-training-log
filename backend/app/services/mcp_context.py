@@ -76,7 +76,7 @@ def get_mcp_context(session: Session, *, as_of: date | None = None) -> McpContex
     class_statuses: list[McpClassStatusRead] = []
 
     try:
-        block = get_active_training_block(session)
+        block = get_active_training_block(session, as_of=resolved)
         active_block = McpActiveBlockRead.model_validate(block)
         rules = list_rules(session, block.id)
         rule_dicts = [rule_dict(rule) for rule in rules]

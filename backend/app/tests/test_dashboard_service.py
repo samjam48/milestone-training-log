@@ -57,6 +57,7 @@ from app.tests.helpers.seed import (
     seed_activity_log,
     seed_goal,
     seed_recovery_target,
+    seed_rule,
     seed_training_block,
     seed_weekly_target,
     with_session,
@@ -1355,3 +1356,98 @@ def test_get_dashboard_load_risk_summary_foot_load_separate_class_and_activity_r
         row.scope == "class" and row.rule_type == "weekly_volume_cap"
         for row in rows
     )
+
+
+def test_dashboard_ensure_active_weekly_focus_monday_boundary(
+    app_with_test_database: FastAPI,
+    session: Session,
+) -> None:
+    from app.tests.helpers.weekly_focus_fixtures import (
+        MONDAY_AS_OF,
+        SUNDAY_AS_OF,
+        WEEK_ONE_END,
+        WEEK_ONE_START,
+        WEEK_TWO_END,
+        WEEK_TWO_START,
+        seed_weekly_focus_block,
+    )
+
+    seed_activity_class(
+        app_with_test_database,
+        class_id="cls-dash-wf",
+        name="Foot Load",
+    )
+    seed_activity(
+        app_with_test_database,
+        activity_id="act-dash-wf",
+        activity_class_id="cls-dash-wf",
+        name="Morning Walk",
+        default_volume_unit="km",
+    )
+    seed_weekly_focus_block(
+        app_with_test_database,
+        block_id="blk-dash-week-1",
+        focus_series_id="fs-dash",
+        focus_title="Dashboard focus",
+        week_number=1,
+        start_date=WEEK_ONE_START,
+        end_date=WEEK_ONE_END,
+        status="active",
+    )
+    seed_rule(
+        app_with_test_database,
+        rule_id="rule-dash-week-1",
+        training_block_id="blk-dash-week-1",
+        activity_class_id="cls-dash-wf",
+        rule_type="weekly_load_cap",
+        threshold_value=80.0,
+        window_days=7,
+        enabled=True,
+    )
+    seed_weekly_target(
+        app_with_test_database,
+        target_id="wt-dash-week-1",
+        training_block_id="blk-dash-week-1",
+        activity_class_id="cls-dash-wf",
+        activity_id="act-dash-wf",
+        target_value=2.0,
+        target_unit="sessions",
+    )
+
+    sunday_dashboard = get_dashboard(session, as_of=SUNDAY_AS_OF)
+    assert sunday_dashboard.block is not None
+    assert sunday_dashboard.block.id == "blk-dash-week-1"
+    assert sunday_dashboard.block.week_number == 1
+
+    monday_dashboard = get_dashboard(session, as_of=MONDAY_AS_OF)
+    assert monday_dashboard.block is not None
+    assert monday_dashboard.block.id != "blk-dash-week-1"
+    assert monday_dashboard.block.week_number == 2
+    assert monday_dashboard.block.start_date == WEEK_TWO_START
+    assert monday_dashboard.block.end_date == WEEK_TWO_END
+    assert monday_dashboard.block.focus_title == "Dashboard focus"
+    assert len(monday_dashboard.weekly_progress) == 1
+    progress = monday_dashboard.weekly_progress[0]
+    assert progress.activity_id == "act-dash-wf"
+    assert progress.target == 2.0
+    assert progress.period_start == WEEK_TWO_START
+    assert progress.period_end == WEEK_TWO_END
+
+
+def test_dashboard_no_active_focus_returns_neutral_payload_when_ensure_returns_none(
+    app_with_test_database: FastAPI,
+    session: Session,
+) -> None:
+    from app.tests.helpers.weekly_focus_fixtures import SUNDAY_AS_OF
+
+    seed_activity_class(
+        app_with_test_database,
+        class_id="cls-no-focus",
+        name="Foot Load",
+    )
+
+    dashboard = get_dashboard(session, as_of=SUNDAY_AS_OF)
+
+    assert dashboard.block is None
+    assert dashboard.weekly_progress == []
+    assert dashboard.recovery_streaks == []

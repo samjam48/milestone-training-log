@@ -212,13 +212,22 @@ async def test_list_training_blocks_returns_local_blocks_in_start_date_desc_orde
 async def test_get_active_training_block_returns_active_block(
     app_with_test_database: FastAPI,
     client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    seed_training_block(
+    from app.tests.helpers.load_api_test_utils import freeze_server_today_as
+    from app.tests.helpers.weekly_focus_fixtures import (
+        SUNDAY_AS_OF,
+        WEEK_ONE_END,
+        WEEK_ONE_START,
+        seed_legacy_active_block,
+    )
+
+    freeze_server_today_as(monkeypatch, SUNDAY_AS_OF)
+    seed_legacy_active_block(
         app_with_test_database,
         block_id="blk-active",
         name="Active Block",
         start_date=date(2026, 4, 7),
-        status="active",
     )
     seed_training_block(
         app_with_test_database,
@@ -231,13 +240,11 @@ async def test_get_active_training_block_returns_active_block(
     response = await client.get("/api/training-blocks/active")
 
     assert response.status_code == 200
-    _assert_training_block_payload(
-        response.json(),
-        block_id="blk-active",
-        name="Active Block",
-        start_date="2026-04-07",
-        status="active",
-    )
+    payload = response.json()
+    _assert_weekly_focus_payload(payload, focus_title="Active Block", week_number=1)
+    assert payload["id"] != "blk-active"
+    assert payload["start_date"] == WEEK_ONE_START.isoformat()
+    assert payload["end_date"] == WEEK_ONE_END.isoformat()
 
 
 async def test_get_active_training_block_returns_not_found_when_none_active(
@@ -989,3 +996,293 @@ async def test_create_completed_training_block_does_not_copy_or_archive_existing
     new_rules_response = await client.get("/api/training-blocks/blk-completed/rules")
     assert new_rules_response.status_code == 200
     assert new_rules_response.json() == []
+
+
+def _assert_weekly_focus_payload(
+    payload: dict[str, Any],
+    *,
+    focus_title: str,
+    week_number: int,
+    period_kind: str = "weekly_focus",
+) -> None:
+    assert payload["period_kind"] == period_kind
+    assert payload["focus_title"] == focus_title
+    assert payload["week_number"] == week_number
+    assert payload["focus_series_id"] is not None
+
+
+async def test_get_active_training_block_returns_weekly_focus_fields_after_ensure(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    from app.tests.helpers.weekly_focus_fixtures import (
+        SUNDAY_AS_OF,
+        WEEK_ONE_END,
+        WEEK_ONE_START,
+        seed_weekly_focus_block,
+    )
+
+    seed_weekly_focus_block(
+        app_with_test_database,
+        block_id="blk-wf-api-active",
+        focus_series_id="fs-api",
+        focus_title="API focus",
+        week_number=1,
+        start_date=WEEK_ONE_START,
+        end_date=WEEK_ONE_END,
+        status="active",
+    )
+
+    response = await client.get(
+        "/api/training-blocks/active",
+        params={"as_of": SUNDAY_AS_OF.isoformat()},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    _assert_weekly_focus_payload(payload, focus_title="API focus", week_number=1)
+    assert payload["id"] == "blk-wf-api-active"
+    assert payload["start_date"] == WEEK_ONE_START.isoformat()
+    assert payload["end_date"] == WEEK_ONE_END.isoformat()
+
+
+async def test_get_active_training_block_rolls_forward_without_as_of(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.tests.helpers.load_api_test_utils import freeze_server_today_as
+    from app.tests.helpers.weekly_focus_fixtures import (
+        MONDAY_AS_OF,
+        WEEK_ONE_END,
+        WEEK_ONE_START,
+        WEEK_TWO_END,
+        WEEK_TWO_START,
+        seed_weekly_focus_block,
+    )
+
+    seed_weekly_focus_block(
+        app_with_test_database,
+        block_id="blk-wf-api-rollover",
+        focus_series_id="fs-api-rollover",
+        focus_title="Rollover focus",
+        week_number=1,
+        start_date=WEEK_ONE_START,
+        end_date=WEEK_ONE_END,
+        status="active",
+    )
+
+    freeze_server_today_as(monkeypatch, MONDAY_AS_OF)
+
+    response = await client.get("/api/training-blocks/active")
+
+    assert response.status_code == 200
+    payload = response.json()
+    _assert_weekly_focus_payload(payload, focus_title="Rollover focus", week_number=2)
+    assert payload["id"] != "blk-wf-api-rollover"
+    assert payload["start_date"] == WEEK_TWO_START.isoformat()
+    assert payload["end_date"] == WEEK_TWO_END.isoformat()
+
+
+async def test_post_active_setup_creates_week_one_weekly_focus(
+    client: AsyncClient,
+) -> None:
+    from app.tests.helpers.weekly_focus_fixtures import SUNDAY_AS_OF, WEEK_ONE_END, WEEK_ONE_START
+
+    response = await client.post(
+        "/api/training-blocks/active/setup",
+        json={"focus_title": "First weekly focus"},
+        params={"as_of": SUNDAY_AS_OF.isoformat()},
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    _assert_weekly_focus_payload(payload, focus_title="First weekly focus", week_number=1)
+    assert payload["start_date"] == WEEK_ONE_START.isoformat()
+    assert payload["end_date"] == WEEK_ONE_END.isoformat()
+    assert payload["status"] == "active"
+
+
+async def test_post_active_setup_returns_conflict_when_weekly_focus_already_active(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    from app.tests.helpers.weekly_focus_fixtures import (
+        SUNDAY_AS_OF,
+        WEEK_ONE_END,
+        WEEK_ONE_START,
+        seed_weekly_focus_block,
+    )
+
+    seed_weekly_focus_block(
+        app_with_test_database,
+        block_id="blk-wf-setup-conflict",
+        focus_series_id="fs-setup-conflict",
+        focus_title="Existing focus",
+        week_number=1,
+        start_date=WEEK_ONE_START,
+        end_date=WEEK_ONE_END,
+        status="active",
+    )
+
+    response = await client.post(
+        "/api/training-blocks/active/setup",
+        json={"focus_title": "Duplicate setup"},
+        params={"as_of": SUNDAY_AS_OF.isoformat()},
+    )
+
+    assert response.status_code == 409
+
+
+async def test_post_active_reset_focus_starts_new_series_week_one(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    from app.tests.helpers.weekly_focus_fixtures import (
+        SUNDAY_AS_OF,
+        WEEK_ONE_END,
+        WEEK_ONE_START,
+        seed_weekly_focus_block,
+    )
+
+    seed_weekly_focus_block(
+        app_with_test_database,
+        block_id="blk-wf-reset-api",
+        focus_series_id="fs-reset-api",
+        focus_title="Old series",
+        week_number=2,
+        start_date=WEEK_ONE_START,
+        end_date=WEEK_ONE_END,
+        status="active",
+    )
+
+    response = await client.post(
+        "/api/training-blocks/active/reset-focus",
+        json={"focus_title": "Reset series"},
+        params={"as_of": SUNDAY_AS_OF.isoformat()},
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    _assert_weekly_focus_payload(payload, focus_title="Reset series", week_number=1)
+    assert payload["focus_series_id"] != "fs-reset-api"
+    assert payload["start_date"] == WEEK_ONE_START.isoformat()
+    assert payload["end_date"] == WEEK_ONE_END.isoformat()
+
+
+async def test_patch_focus_title_on_active_weekly_focus(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    from app.tests.helpers.weekly_focus_fixtures import (
+        SUNDAY_AS_OF,
+        WEEK_ONE_END,
+        WEEK_ONE_START,
+        seed_weekly_focus_block,
+    )
+
+    seed_weekly_focus_block(
+        app_with_test_database,
+        block_id="blk-wf-patch-title",
+        focus_series_id="fs-patch",
+        focus_title="Before patch",
+        week_number=1,
+        start_date=WEEK_ONE_START,
+        end_date=WEEK_ONE_END,
+        status="active",
+    )
+
+    response = await client.patch(
+        "/api/training-blocks/blk-wf-patch-title",
+        json={"focus_title": "After patch"},
+        params={"as_of": SUNDAY_AS_OF.isoformat()},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["focus_title"] == "After patch"
+    assert payload["name"] == "After patch · Week 1"
+
+
+async def test_patch_focus_title_rejected_on_legacy_block(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    from app.schemas.training_blocks import TrainingBlockPatch
+    from app.tests.helpers.weekly_focus_fixtures import seed_legacy_active_block
+
+    assert "focus_title" in TrainingBlockPatch.model_fields, (
+        "WTL.B7 must allow focus_title on TrainingBlockPatch before legacy rejection "
+        "can be tested."
+    )
+
+    seed_legacy_active_block(
+        app_with_test_database,
+        block_id="blk-legacy-patch",
+        name="Legacy block",
+    )
+
+    response = await client.patch(
+        "/api/training-blocks/blk-legacy-patch",
+        json={"focus_title": "Should fail"},
+    )
+
+    assert response.status_code == 422
+    assert "legacy" in response.json()["detail"].lower()
+
+
+async def test_get_training_block_review_still_works_for_completed_weekly_focus(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    from app.tests.helpers.weekly_focus_fixtures import (
+        MONDAY_AS_OF,
+        WEEK_ONE_END,
+        WEEK_ONE_START,
+        seed_weekly_focus_block,
+    )
+
+    seed_weekly_focus_block(
+        app_with_test_database,
+        block_id="blk-wf-review",
+        focus_series_id="fs-review",
+        focus_title="Review focus",
+        week_number=1,
+        start_date=WEEK_ONE_START,
+        end_date=WEEK_ONE_END,
+        status="completed",
+    )
+    seed_activity_class(
+        app_with_test_database,
+        class_id="cls-foot-wf-review",
+        name="Foot Load",
+        class_type="performance",
+    )
+    seed_activity(
+        app_with_test_database,
+        activity_id="act-walk-wf-review",
+        activity_class_id="cls-foot-wf-review",
+        name="Morning Walk",
+        default_volume_unit="km",
+    )
+    seed_activity_log(
+        app_with_test_database,
+        log_id="log-wf-review",
+        activity_id="act-walk-wf-review",
+        logged_date=WEEK_ONE_START,
+        volume_value=1.0,
+        volume_unit="km",
+        rpe=3,
+    )
+
+    response = await client.get(
+        "/api/training-blocks/blk-wf-review/review",
+        params={"as_of": MONDAY_AS_OF.isoformat()},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["block"]["id"] == "blk-wf-review"
+    assert payload["block"]["focus_title"] == "Review focus"
+    assert payload["block"]["week_number"] == 1
+    assert payload["total_sessions"] == 1
