@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Column, ForeignKey, String, UniqueConstraint
+from sqlalchemy import Boolean, Column, ForeignKey, Index, String, UniqueConstraint, text
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.models.activity import Activity, ActivityClass
@@ -70,7 +70,24 @@ class Rule(SQLModel, table=True):
 
 class WeeklyTarget(SQLModel, table=True):
     __tablename__ = "weekly_targets"
-    __table_args__ = (UniqueConstraint("training_block_id", "activity_class_id"),)
+    __table_args__ = (
+        Index(
+            "uq_weekly_targets_training_block_id_activity_class_id_legacy",
+            "training_block_id",
+            "activity_class_id",
+            unique=True,
+            sqlite_where=text("activity_id IS NULL"),
+            postgresql_where=text("activity_id IS NULL"),
+        ),
+        Index(
+            "uq_weekly_targets_training_block_id_activity_id",
+            "training_block_id",
+            "activity_id",
+            unique=True,
+            sqlite_where=text("activity_id IS NOT NULL"),
+            postgresql_where=text("activity_id IS NOT NULL"),
+        ),
+    )
 
     id: str = Field(sa_column=Column(String, primary_key=True, autoincrement=False))
     training_block_id: str = Field(
@@ -79,13 +96,22 @@ class WeeklyTarget(SQLModel, table=True):
     activity_class_id: str = Field(
         sa_column=Column(String, ForeignKey("activity_classes.id"), nullable=False)
     )
+    activity_id: str | None = Field(
+        default=None,
+        sa_column=Column(String, ForeignKey("activities.id"), nullable=True),
+    )
     target_value: float
     target_unit: str
+    target_kind: str = Field(
+        default="minimum",
+        sa_column=Column(String, nullable=False, default="minimum", server_default="minimum"),
+    )
     created_at: datetime
     updated_at: datetime
 
     training_block: TrainingBlock = Relationship(back_populates="weekly_targets")
     activity_class: ActivityClass = Relationship(back_populates="weekly_targets")
+    activity: Activity | None = Relationship(back_populates="weekly_targets")
 
 
 class RecoveryTarget(SQLModel, table=True):

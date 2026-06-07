@@ -188,14 +188,23 @@ Purpose:
 
 - `id`
 - `training_block_id`
-- `activity_class_id`
+- `activity_class_id` — denormalized class lookup; required for legacy class targets
+- `activity_id` — nullable FK to `activities.id` for activity-scoped targets
 - `target_value`
-- `target_unit`
+- `target_unit` — e.g. `sessions`, `minutes`, or an activity volume unit such as `km`
+- `target_kind` — defaults to `minimum` (Monday–Sunday weekly minimum)
 - `created_at`
 - `updated_at`
 
+Uniqueness (partial):
+- Legacy class targets: unique on (`training_block_id`, `activity_class_id`) where `activity_id` IS NULL
+- Activity targets: unique on (`training_block_id`, `activity_id`) where `activity_id` IS NOT NULL
+- Partial uniques allow multiple activity-scoped targets in the same class without colliding with the legacy class key
+
 Purpose:
-- Weekly volume targets for performance activity classes during a training block
+- User-facing weekly minimum targets for any activity during a training block
+- Legacy class-scoped rows (`activity_id` null) remain readable for older performance-class targets
+- One active weekly target per `training_block_id` + `activity_id` when activity-scoped
 
 ### `recovery_targets`
 
@@ -209,7 +218,8 @@ Purpose:
 - `updated_at`
 
 Purpose:
-- Compliance-style goals for recovery activities that do not directly affect load
+- Legacy compliance-style recovery targets; weekly rows were migrated into `weekly_targets`
+- Daily rows remain as legacy storage pending owner decision on daily recovery streaks
 
 ## Relationships
 
@@ -220,7 +230,7 @@ Purpose:
 - One `activity_class` owns many `activities`.
 - One `activity_class` can be referenced by many `goals`, `rules`,
   `weekly_targets`, and `flare_up_incidents`.
-- One `activity` can be referenced by many `goals` and `rules` (exercise-scoped links).
+- One `activity` can be referenced by many `goals`, `rules`, and `weekly_targets` (activity-scoped links).
 - One `activity` owns many `activity_logs`.
 - One `daily_check_in` can surface zero or more linked `flare_up_incidents`,
   though Phase 1 behavior expects at most one check-in-sourced incident row.
