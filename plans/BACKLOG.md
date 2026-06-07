@@ -117,16 +117,34 @@ Recorded after S25 batch review; not in polish ticket scope unless noted.
 | Exercise-scoped rule **409** on class delete untested | S25.B8 | Implemented; only class-level rule test exists |
 | eslint `react-refresh/only-export-components` warnings (3) | lint | Pre-existing in UI files |
 | ~~Log create/edit optimistic pop on mutation failure~~ | S25.F4 (D3) | **Done** — async save with loading overlay + inline error |
-| Dashboard `weekly_progress` vs Goals after P25.9 | P25.9 follow-up | **Owner (2026-06-07): keep as-is** — dashboard “Last 7 days” chart still reads `weekly_targets`; Goals tab is the only place to edit aspirational targets. Monitor whether two progress surfaces confuse daily use; revisit migrate-to-goals or retire chart. |
-| `weekly_targets` API / table lifecycle | P25.9 follow-up | **Keep for now** (display-only chart). `weekly_targets` rows remain in DB/API; no Edit Rules UI. Re-seed locally does not remove table. |
+| ~~Dashboard `weekly_progress` vs Goals after P25.9~~ | P25.9 → WTL | **Superseded (WTL)** — dashboard **This week** and Goals **Weekly target** both use `weekly_targets`; Edit Rules no longer edits targets. |
+| ~~`weekly_targets` display-only lifecycle~~ | P25.9 → WTL | **Superseded (WTL)** — full activity-scoped CRUD on Goals; legacy class rows readable. |
 | `weekly_load_cap` in seed / local DB | Owner 2026-06-07 | Removed from `seed_data.py`; new creates blocked in API. **Production:** if legacy rows exist in Supabase, delete manually or leave disabled — engine still evaluates them if enabled. |
 
-## Weekly targets & load risk follow-ups (WTL batch)
+## Weekly targets, load risk & load tax (WTL batch)
 
-**Tickets:** `plans/tickets-weekly-targets-load-risk-2026-06-07.md`
+**Tickets:** `plans/tickets-weekly-targets-load-risk-2026-06-07.md` (WTL.B1–B6, F1–F6, D2 implemented; **OWTL.1** owner smoke pending)
+
+Delivered themes: activity-scoped weekly targets with migration from weekly `recovery_targets`; dashboard **This week** progress (Monday–Sunday); Goals weekly-target flow; load-tax graph (30-day series); load-risk `rule_limit_rows`; recovery streaks UI retired.
+
+| Item | Ticket | Status |
+| --- | --- | --- |
+| Weekly target schema + migration | WTL.B1 | Done |
+| Weekly target CRUD API | WTL.B2 | Done |
+| Dashboard weekly progress This week | WTL.B3, WTL.F1 | Done |
+| Goals weekly target UX | WTL.F2 | Done |
+| Weekly target suggestions | WTL.B4, WTL.F3 | Done |
+| Load-tax formula + graph series | WTL.B5, WTL.F4 | Done |
+| Load risk rule-limit rows | WTL.B6, WTL.F5 | Done |
+| Recovery streaks UI removed | WTL.F6 | Done |
+| Living docs sync | WTL.D2 | Done |
+
+### WTL deferred / not implemented
 
 | Item | Ticket | Note |
 | --- | --- | --- |
+| Weekly focus replaces month-style block UX | WTL.D1, WTL.B7, WTL.F7 | **Pending owner sign-off** — design at `plans/technical-design-weekly-focus-2026-06-07.md`; do not treat as shipped until B7/F7 land. |
+| Daily recovery streaks product path | — | **Legacy** — daily `recovery_targets` rows and `recovery_streaks` API field remain; no dashboard section. Owner decision still open: retire storage, or replan true streaks from weekly target history. |
 | Recovery streak feature (true streaks) | — | **Future** — derive consecutive-week completion from recovery-style **weekly target** history, not the retired F10.1 dashboard section or legacy `recovery_streaks` API field. Clean streak remains separate. |
 
 ## Product gaps still open (not in the list above)

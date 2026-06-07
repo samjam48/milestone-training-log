@@ -219,7 +219,8 @@ Purpose:
 
 Purpose:
 - Legacy compliance-style recovery targets; weekly rows were migrated into `weekly_targets`
-- Daily rows remain as legacy storage pending owner decision on daily recovery streaks
+- Daily rows remain as legacy storage; they still feed `recovery_streaks` on the dashboard API for compatibility but are **not** the user-facing weekly target path (Goals **Weekly target** + `weekly_targets` CRUD)
+- New weekly minimums should be created as `weekly_targets`, not weekly `recovery_targets`
 
 ## Relationships
 
@@ -239,6 +240,7 @@ Purpose:
 
 - **Rule copy on new block:** when a new `training_block` is created via `POST /api/training-blocks`, the block creation service copies all `rules` rows from the previous active block into the new block. No schema change needed — this is a service operation, not a schema constraint.
 - **Block end_date on archive:** the service sets `end_date = today` on the outgoing block if not already set, before marking it `completed`. This ensures `BlockReviewScreen` can always scope its queries to a closed date range.
+- **Weekly progress cadence:** dashboard `weekly_progress` sums activity logs in the Monday–Sunday ISO week containing `as_of`, scoped per `weekly_targets` row (activity-scoped or legacy class-scoped). Load risk and load-tax graph use rolling seven-day windows instead — see `docs/api-map.md`.
 
 ## Open Modeling Notes
 

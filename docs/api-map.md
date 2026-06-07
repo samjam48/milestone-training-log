@@ -105,20 +105,27 @@ Use this alongside:
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/api/training-blocks/{block_id}/weekly-targets` | List weekly targets for a training block |
-| `POST` | `/api/training-blocks/{block_id}/weekly-targets` | Create a weekly target for a performance class |
-| `PATCH` | `/api/weekly-targets/{target_id}` | Update a weekly target |
+| `GET` | `/api/training-blocks/{block_id}/weekly-targets` | List weekly targets for a training block (legacy class-scoped rows and activity-scoped rows) |
+| `POST` | `/api/training-blocks/{block_id}/weekly-targets` | Create a weekly minimum target for an activity (preferred) or legacy class |
+| `PATCH` | `/api/weekly-targets/{target_id}` | Update target value/unit or move to another activity (class derived from activity) |
+| `DELETE` | `/api/weekly-targets/{target_id}` | Remove a weekly target (`204`) |
 
-**P25.9 UI note:** Edit Rules and Settings block summary no longer surface weekly targets. Aspirational targets belong on the Goals tab only. The `weekly_targets` table and API remain for now.
+**Create body (`WeeklyTargetCreate`):** `id`, `activity_id` (preferred) *or* legacy `activity_class_id`, `target_value`, `target_unit` (`sessions`, `minutes`, or the activity volume unit such as `km`), optional `target_kind` defaulting to `minimum`. Server derives `activity_class_id` from `activity_id`. Returns `404` for missing block/activity/class, `409` for duplicate block+activity (or block+class), `422` for inactive activity, unsupported unit, or `target_value <= 0`.
 
-**Dashboard `weekly_progress` (Last 7 days):** Still computed from `weekly_targets` rows on the active block via `compute_weekly_progress` (`GET /api/dashboard` and `GET /api/load/summary`). Display-only on the dashboard chart; no create/edit UI after P25.9. Aligning `weekly_progress` with Goals or retiring `weekly_targets` is tracked in `plans/BACKLOG.md`.
+**Patch body (`WeeklyTargetPatch`):** optional `activity_id`, `target_value`, `target_unit` (explicit `null` rejected). Same error semantics as create for conflicts and validation.
 
-### Recovery Targets
+**Read shape (`WeeklyTargetRead`):** `id`, `training_block_id`, `activity_class_id`, `activity_id` nullable, `target_value`, `target_unit`, `target_kind`, `created_at`, `updated_at`.
+
+**UI note:** Goals tab exposes **Weekly target** and **Big goal** flows (WTL.F2). Edit Rules no longer surfaces weekly targets (P25.9). New targets should be activity-scoped; legacy class-scoped rows remain readable.
+
+### Recovery Targets (legacy)
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/api/training-blocks/{block_id}/recovery-targets` | List recovery targets for a training block |
-| `POST` | `/api/training-blocks/{block_id}/recovery-targets` | Create a recovery target for a recovery activity |
+| `GET` | `/api/training-blocks/{block_id}/recovery-targets` | List legacy recovery targets for a training block |
+| `POST` | `/api/training-blocks/{block_id}/recovery-targets` | Create a legacy recovery target (daily streak storage only; not the user-facing weekly target path) |
+
+Weekly `recovery_targets` rows were migrated into `weekly_targets` as `sessions` minimums. Daily rows remain for legacy streak calculation; dashboard suggestions and **This week** progress use `weekly_targets` only.
 
 ### Derived Load And Dashboard Data
 
@@ -127,7 +134,13 @@ Use this alongside:
 | `GET` | `/api/load/summary` | Class statuses, suggestions, weekly progress; optional `?as_of=` (default server-local today); snake_case JSON; 200 with neutral payloads when no active block |
 | `POST` | `/api/load/check-violations` | Dry-run all five rule types for a proposed log; body `activity_id`, `volume_value`, `rpe`, optional `as_of`; no DB write |
 | `GET` | `/api/load/delayed-tax` | Proactive 7-day load/rest risk plus symptom attribution when pain/flare recorded; optional `?as_of=`, `?risk_window_days=`, `?baseline_days=`, `?pain_threshold=` (default 3) |
-| `GET` | `/api/dashboard` | Aggregate dashboard payload; optional `?as_of=YYYY-MM-DD` (default server-local today). Top-level fields: `as_of`, `user_name`, `block`, `activity_classes`, `activities`, `logs` (30-day window ending on `as_of` only — full Log History is Phase 6 via `GET /api/activity-logs`), `incidents`, `goals` (all local goals for the Goals tab: active, achieved, paused, missed), `previous_blocks` (completed/archived blocks, summary only — no scores), `has_checked_in_today`, `class_statuses`, `suggestion_buckets` (do/rest/done rows with `bucket`, `scope`, `activity_class_id`, `description`), `goal_rows` (dashboard summary rows: `goal_id`, `title`, `status`, `activity_id`, `progress_value`, `progress_target`, `progress_unit`, `fill_ratio` 0..1 or `null` for qualitative, `is_qualitative`), `load_risk_summary` (`week_days` seven-day strip with `flagged`; `class_bars` for performance classes with enabled caps — `null` when no active block), `weekly_progress`, `daily_scores`, `load_series`, `graph_class_id` (activity class ID used for `load_series` and `week_load_threshold`; `null` when no active block), `flare_up_dates`, `week_load_threshold`, `clean_streak`, `recovery_streaks`. Returns 200 with `block: null` and neutral/empty derived fields when no active block |
+| `GET` | `/api/dashboard` | Aggregate dashboard payload; optional `?as_of=YYYY-MM-DD` (default server-local today). Top-level fields: `as_of`, `user_name`, `block`, `activity_classes`, `activities`, `logs` (30-day window ending on `as_of` only — full Log History is Phase 6 via `GET /api/activity-logs`), `incidents`, `goals` (all local goals for the Goals tab: active, achieved, paused, missed), `previous_blocks` (completed/archived blocks, summary only — no scores), `has_checked_in_today`, `class_statuses`, `suggestion_buckets` (do/rest/done rows with `bucket`, `scope`, `activity_class_id`, `description`), `goal_rows` (dashboard summary rows: `goal_id`, `title`, `status`, `activity_id`, `progress_value`, `progress_target`, `progress_unit`, `fill_ratio` 0..1 or `null` for qualitative, `is_qualitative`), `load_risk_summary` (see below; `null` when no active block), `weekly_progress` (see below), `daily_scores`, `load_series` (see below), `graph_class_id` (activity class ID used for `load_series` and `week_load_threshold`; `null` when no active block), `flare_up_dates`, `week_load_threshold` (`int` cap for graph overlay when an explicit load-tax threshold exists; otherwise `null` — do not treat `0` as a cap), `clean_streak`, `recovery_streaks` (legacy payload from daily `recovery_targets`; frontend no longer renders a Recovery streaks section). Returns 200 with `block: null` and neutral/empty derived fields when no active block |
+
+**`weekly_progress` (This week):** One row per `weekly_targets` row on the active block. Progress counts activity logs in the **Monday–Sunday week containing `as_of`** (inclusive), not block start through today. Each row: `weekly_target_id`, `activity_class_id`, `class_name`, optional `activity_id` / `activity_name`, `value`, `target`, `unit`, `state`, `period_start`, `period_end`. Also returned on `GET /api/load/summary`.
+
+**`load_series` (load tax graph):** Last **30 calendar days** ending on `as_of` for `graph_class_id`. Each point: `date`, `load` (recency-weighted rolling **seven-day load tax** for performance activities in that class), `daily_load` (same-day load tax). Recovery activities do not contribute. Raw `volume × rpe` is not used for the graph.
+
+**`load_risk_summary`:** Rolling **last seven days** ending on `as_of` (`today` plus previous six days). `week_days`: `{ date, flagged, state }` per day where `state` is aggregate load-tax pressure (`safe` / `caution` / `danger`). `rule_limit_rows`: one row per **enabled** rule limit (class- or exercise-scoped), not one bar per class. Each row: `id`, `scope` (`class` | `activity`), `rule_id`, `rule_type`, `activity_class_id`, `class_name`, optional `activity_id` / `activity_name`, `actual`, `limit`, `unit`, `state`, `label`, optional `display_mode` (e.g. rest-spacing status copy). Exercise-scoped rules never appear as class-wide rows. `class_bars` is removed.
 
 ### MCP Context (AI Stub)
 

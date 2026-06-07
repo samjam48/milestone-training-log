@@ -83,6 +83,14 @@ If scaffolding lands with different names, update this doc in the same change.
 - **Canonical example:** `backend/app/services/load_engine.py` called by `backend/app/services/dashboard.py` and thin analytics routes.
 - **Common mistake:** Recomputing the same formulas separately in the API layer and the frontend.
 
+## Load-tax stays in the load engine
+
+- **Pattern:** Compute **load tax** (per-session effort score, rolling seven-day series, and load-risk day states) in `backend/app/services/load_engine.py` — helpers such as `compute_log_load_tax`, `compute_load_series`, and `compute_load_risk_summary`. Dashboard and load routes call these; the frontend maps API payloads and renders graphs and rows only.
+- **Use when:** Changing how performance sessions contribute to the dashboard graph, the seven-day strip, or rule-limit proximity.
+- **Avoid when:** Duplicating tax tiers, recency weights, or rule-proximity math in `frontend/src/lib/engine.ts`, chart components, or card-level derived state.
+- **Canonical example:** `compute_load_series` producing `load` + `daily_load` per day; `compute_load_risk_summary` producing `week_days` and `rule_limit_rows`.
+- **Common mistake:** Reintroducing raw `volume × rpe` or client-side rolling windows that drift from backend constants and tests.
+
 ## Shared backend guards and helpers
 
 - **Pattern:** Put repeated domain guards and cross-cutting helpers in focused service modules or core helpers.
