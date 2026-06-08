@@ -13,7 +13,6 @@ import {
   LoginScreen,
   EditBlockRulesScreen,
   BlockReviewScreen,
-  NewTrainingBlockScreen,
   InlineLogSheet,
   NewActivitySheet,
 } from './components/screens';
@@ -116,15 +115,6 @@ function resolveStackScreen(
     const blockId = entry.params.blockId as string | undefined;
     return (
       <BlockReviewScreen engine={engine} blockId={blockId} onBack={onPop} />
-    );
-  }
-  if (entry.screen === 'new-training-block') {
-    return (
-      <NewTrainingBlockScreen
-        engine={engine}
-        onBack={onPop}
-        onComplete={onPop}
-      />
     );
   }
   if (entry.screen === 'edit-log') {
@@ -285,7 +275,6 @@ export function App(): React.ReactElement {
         engine={engine}
         onEditRules={() => pushScreen('edit-block-rules')}
         onReview={() => pushScreen('block-review')}
-        onNewBlock={() => pushScreen('new-training-block')}
         onViewBlock={(blockId) => pushScreen('block-review', { blockId })}
         onOpenNewActivity={openNewActivitySheet}
         onUnauthenticated={handleUnauthenticated}

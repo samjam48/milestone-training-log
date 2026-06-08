@@ -75,10 +75,6 @@ function createBaseline(): MilestoneEngineResult {
     deleteWeeklyTarget: () => undefined,
     weeklyTargetMutationError: null,
     clearWeeklyTargetMutationError: () => undefined,
-    createTrainingBlock: () => undefined,
-    setupWeeklyFocus: async () => undefined,
-    resetWeeklyFocus: async () => undefined,
-    patchFocusTitle: async () => undefined,
     // H10.2 — app shell query status
     isInitialLoading: false,
     isFatalError: false,

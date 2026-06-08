@@ -39,7 +39,6 @@ export interface SettingsScreenProps {
   engine: MilestoneEngineResult;
   onEditRules?: () => void;
   onReview?: () => void;
-  onNewBlock?: () => void;
   onViewBlock?: (blockId: ID) => void;
   onEditActivity?: (activity: Activity) => void;
   onOpenNewActivity?: () => void;

@@ -58,7 +58,7 @@ function makeEngine(overrides: Partial<typeof mockEngine> = {}): typeof mockEngi
 }
 
 function getBlockSummarySection(): HTMLElement {
-  const heading = screen.getByText(/^training block$/i);
+  const heading = screen.getByText(/^weekly rules$/i);
   const section = heading.closest('section');
   expect(section).not.toBeNull();
   return section as HTMLElement;

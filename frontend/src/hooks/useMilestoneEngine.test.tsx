@@ -8,7 +8,7 @@
  *
  * Extends with tests for the new queries (goals, rules, weeklyTargets,
  * previousBlocks) and mutations (submitNewActivity, createGoal, archiveGoal,
- * createRule, deleteRule, createTrainingBlock, updateGoal, updateRule,
+ * createRule, deleteRule, updateGoal, updateRule,
  * updateActivity, deactivateActivity).
  *
  * H10.1 — delayed-tax useQuery on useMilestoneEngine.
@@ -62,7 +62,6 @@ vi.mock('../lib/api', () => ({
   deleteRule: vi.fn(),
   createWeeklyTarget: vi.fn(),
   patchWeeklyTarget: vi.fn(),
-  createTrainingBlock: vi.fn(),
   createActivity: vi.fn(),
   createActivityClass: vi.fn(),
   patchActivityClass: vi.fn(),
@@ -92,7 +91,6 @@ import {
   deleteRule as deleteRuleApi,
   createWeeklyTarget as createWeeklyTargetApi,
   patchWeeklyTarget as patchWeeklyTargetApi,
-  createTrainingBlock as createTrainingBlockApi,
   createActivity,
   createActivityClass,
   patchActivityClass,
@@ -231,7 +229,6 @@ function setupDefaultApiMocks(): void {
   vi.mocked(createRuleApi).mockResolvedValue(ruleFixture);
   vi.mocked(patchRule).mockResolvedValue(ruleFixture);
   vi.mocked(deleteRuleApi).mockResolvedValue(undefined);
-  vi.mocked(createTrainingBlockApi).mockResolvedValue(activeBlockFixture);
   vi.mocked(createActivity).mockResolvedValue({
     id: MOCK_UUID,
     activityClassId: 'cls-foot',
@@ -1208,44 +1205,10 @@ describe('useMilestoneEngine data plane (F2.0)', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // createTrainingBlock mutation
-  // ---------------------------------------------------------------------------
-
-  it('createTrainingBlock calls createTrainingBlockApi with a generated id', async () => {
-    const { result, queryClient } = renderHookWithProviders(() => useMilestoneEngine());
-    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
-
-    await waitFor(() => {
-      expect(result.current.todayDate).toBe(dashboardPayload.todayDate);
-    });
-
-    act(() => {
-      result.current.createTrainingBlock({
-        name: 'Phase 3 Build',
-        startDate: '2026-06-01',
-      });
-    });
-
-    await waitFor(() => {
-      expect(createTrainingBlockApi).toHaveBeenCalledTimes(1);
-    });
-
-    const draft = vi.mocked(createTrainingBlockApi).mock.calls[0]?.[0];
-    expect(draft?.id).toBe(MOCK_UUID);
-    expect(draft?.name).toBe('Phase 3 Build');
-    expect(draft?.startDate).toBe('2026-06-01');
-
-    await waitFor(() => {
-      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['dashboard'] });
-    });
-    expect(invalidateSpy).not.toHaveBeenCalledWith({ queryKey: ['training-blocks'] });
-  });
-
-  // ---------------------------------------------------------------------------
   // New draft interfaces exported from hook module
   // ---------------------------------------------------------------------------
 
-  it('exports NewActivityDraft, GoalDraft, GoalPatch, RuleDraft, RulePatch, BlockDraft type shapes (compile-time)', async () => {
+  it('exports NewActivityDraft, GoalDraft, GoalPatch, RuleDraft, and RulePatch type shapes (compile-time)', async () => {
     // This test validates that the hook module exports the required draft
     // interfaces. It is a structural/type test: if the types are missing the
     // TypeScript compiler will error before the test even runs.
@@ -1296,7 +1259,10 @@ describe('useMilestoneEngine data plane (F2.0)', () => {
     expect(typeof result.current.deleteRule).toBe('function');
     expect(typeof result.current.createWeeklyTarget).toBe('function');
     expect(typeof result.current.patchWeeklyTarget).toBe('function');
-    expect(typeof result.current.createTrainingBlock).toBe('function');
+    expect('createTrainingBlock' in result.current).toBe(false);
+    expect('setupWeeklyFocus' in result.current).toBe(false);
+    expect('resetWeeklyFocus' in result.current).toBe(false);
+    expect('patchFocusTitle' in result.current).toBe(false);
   });
 });
 

@@ -19,7 +19,7 @@ import { createGoal, listGoals } from './goals';
 import { getHealth } from './health';
 import { createRecoveryTarget, listRecoveryTargetsByBlock } from './recoveryTargets';
 import { createRule, listRulesByBlock } from './rules';
-import { createTrainingBlock, listTrainingBlocks } from './trainingBlocks';
+import { listTrainingBlocks } from './trainingBlocks';
 import { createWeeklyTarget, listWeeklyTargetsByBlock } from './weeklyTargets';
 import {
   activityLogReadSnake,
@@ -335,13 +335,6 @@ describe('F1.4 api resource wrappers', () => {
       currentStreakDays: 1,
     });
     await listTrainingBlocks();
-    await createTrainingBlock({
-      id: 'blk-new',
-      name: 'Spring block',
-      startDate: '2026-05-01',
-      status: 'active',
-      isReviewMilestoneHit: false,
-    });
 
     expect(fetchMock).toHaveBeenCalledWith('/api/goals', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/training-blocks/blk-1/rules', expect.any(Object));

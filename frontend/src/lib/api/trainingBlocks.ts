@@ -2,7 +2,6 @@ import type { DailySafetyScore, ISODate, TrainingBlock } from '../../types';
 import type { LoadPoint } from '../load';
 import { apiFetch, apiFetchOrNullOn404 } from './client';
 import {
-  mapTrainingBlockCreateBody,
   mapTrainingBlockFromApi,
   mapTrainingBlockPatchBody,
   mapDailySafetyScoreFromApi,
@@ -21,16 +20,6 @@ export async function getActiveTrainingBlock(): Promise<TrainingBlockRead | null
   return raw == null ? null : mapTrainingBlockFromApi(raw);
 }
 
-export async function createTrainingBlock(
-  draft: Record<string, unknown>,
-): Promise<TrainingBlockRead> {
-  const raw = await apiFetch<Record<string, unknown>>('/training-blocks', {
-    method: 'POST',
-    body: JSON.stringify(mapTrainingBlockCreateBody(draft)),
-  });
-  return mapTrainingBlockFromApi(raw);
-}
-
 export async function patchTrainingBlock(
   blockId: string,
   draft: Record<string, unknown>,
@@ -38,30 +27,6 @@ export async function patchTrainingBlock(
   const raw = await apiFetch<Record<string, unknown>>(`/training-blocks/${blockId}`, {
     method: 'PATCH',
     body: JSON.stringify(mapTrainingBlockPatchBody(draft)),
-  });
-  return mapTrainingBlockFromApi(raw);
-}
-
-export interface WeeklyFocusTitleInput {
-  focusTitle: string;
-}
-
-export async function setupWeeklyFocus(
-  input: WeeklyFocusTitleInput,
-): Promise<TrainingBlockRead> {
-  const raw = await apiFetch<Record<string, unknown>>('/training-blocks/active/setup', {
-    method: 'POST',
-    body: JSON.stringify({ focus_title: input.focusTitle }),
-  });
-  return mapTrainingBlockFromApi(raw);
-}
-
-export async function resetWeeklyFocus(
-  input: WeeklyFocusTitleInput,
-): Promise<TrainingBlockRead> {
-  const raw = await apiFetch<Record<string, unknown>>('/training-blocks/active/reset-focus', {
-    method: 'POST',
-    body: JSON.stringify({ focus_title: input.focusTitle }),
   });
   return mapTrainingBlockFromApi(raw);
 }

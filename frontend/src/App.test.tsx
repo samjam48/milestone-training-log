@@ -103,7 +103,7 @@ describe('App shell (F1.1)', () => {
     renderWithProviders(<App />);
     await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Goals' }));
     expect(screen.getByRole('heading', { name: /goals/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /\+ new goal/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /big goal/i })).toBeInTheDocument();
   });
 
   it('shows Settings screen on Settings tab', async () => {
@@ -284,7 +284,7 @@ describe('Screen stack — push/pop navigation (F8.2)', () => {
 
     // Navigate to Goals tab and click the "+ New Goal" button which will push goal-editor
     await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Goals' }));
-    await user.click(screen.getByRole('button', { name: /\+ new goal/i }));
+    await user.click(screen.getByRole('button', { name: /big goal/i }));
 
     // Stack overlay must appear
     expect(screen.getByTestId('stack-screen-overlay')).toBeInTheDocument();
@@ -298,7 +298,7 @@ describe('Screen stack — push/pop navigation (F8.2)', () => {
 
     // Push goal-editor onto the stack
     await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Goals' }));
-    await user.click(screen.getByRole('button', { name: /\+ new goal/i }));
+    await user.click(screen.getByRole('button', { name: /big goal/i }));
 
     expect(screen.getByTestId('stack-screen-overlay')).toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
@@ -406,24 +406,6 @@ describe('Settings stack navigation (F9.4)', () => {
     expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /go back/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /block review/i })).toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: /go back/i }));
-
-    expect(screen.queryByTestId('stack-screen-overlay')).not.toBeInTheDocument();
-    expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
-  });
-
-  it('opens new-training-block through the visible Settings flow, then pops back out', async () => {
-    const user = userEvent.setup();
-    renderWithProviders(<App />);
-
-    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Settings' }));
-    await user.click(screen.getByRole('button', { name: /\+ new training block/i }));
-
-    expect(screen.getByTestId('stack-screen-overlay')).toBeInTheDocument();
-    expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /go back/i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /new training block/i })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /go back/i }));
 
@@ -779,7 +761,7 @@ describe('S2.3 — Browser history integration (Android system Back)', () => {
     renderWithProviders(<App />);
 
     await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Goals' }));
-    await user.click(screen.getByRole('button', { name: /\+ new goal/i }));
+    await user.click(screen.getByRole('button', { name: /big goal/i }));
 
     expect(screen.getByTestId('stack-screen-overlay')).toBeInTheDocument();
     expect(historySpies.pushState).toHaveBeenCalled();

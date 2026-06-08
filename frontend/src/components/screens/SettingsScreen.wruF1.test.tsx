@@ -57,7 +57,6 @@ function renderSettings(props: {
   onEditRules?: () => void;
   onReview?: () => void;
   onViewBlock?: (blockId: string) => void;
-  onNewBlock?: () => void;
 }): void {
   renderWithProviders(
     <SettingsScreen
@@ -65,7 +64,6 @@ function renderSettings(props: {
       onEditRules={props.onEditRules}
       onReview={props.onReview}
       onViewBlock={props.onViewBlock}
-      onNewBlock={props.onNewBlock}
     />,
   );
 }

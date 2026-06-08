@@ -23,7 +23,6 @@ import { LogIncidentScreen } from './LogIncidentScreen';
 import { GoalEditorScreen } from './GoalEditorScreen';
 import { EditBlockRulesScreen } from './EditBlockRulesScreen';
 import { BlockReviewScreen } from './BlockReviewScreen';
-import { NewTrainingBlockScreen } from './NewTrainingBlockScreen';
 import { ActivityManagerScreen } from './ActivityManagerScreen';
 
 const SCREENS_DIR = resolve(dirname(fileURLToPath(import.meta.url)));
@@ -35,7 +34,6 @@ const TIER3_STACK_SCREEN_FILES = [
   'GoalEditorScreen.tsx',
   'EditBlockRulesScreen.tsx',
   'BlockReviewScreen.tsx',
-  'NewTrainingBlockScreen.tsx',
   'ActivityManagerScreen.tsx',
 ] as const;
 
@@ -130,16 +128,6 @@ describe('S2.4 — Tier 3 / stack screen back header (RTL)', () => {
   it('BlockReviewScreen renders shared back header with safe-top', () => {
     expectSharedBackHeaderRenders(
       <BlockReviewScreen engine={mockEngine} blockId="blk-active" onBack={vi.fn()} />,
-    );
-  });
-
-  it('NewTrainingBlockScreen renders shared back header with safe-top', () => {
-    expectSharedBackHeaderRenders(
-      <NewTrainingBlockScreen
-        engine={mockEngine}
-        onBack={vi.fn()}
-        onComplete={vi.fn()}
-      />,
     );
   });
 
