@@ -39,6 +39,7 @@
 | Settings weekly rules UI + previous-weeks modal | WRU.F1 |
 | Remove new-block screen and dead hooks/APIs | WRU.F2 |
 | Docs + backlog | WRU.D1 |
+| Post-WRU test suite alignment | WRU.T1 |
 | Owner smoke | OWRU.1 |
 
 ## Ticket ordering rationale
@@ -46,7 +47,9 @@
 1. **WRU.B1** wipes legacy data shape, re-seeds rules into one current week, updates seed script.
 2. **WRU.B2** makes every read path use that weekly model and auto-create the current week when missing.
 3. **WRU.F1** / **WRU.F2** replace Settings UX and delete dead create/focus flows.
-4. **WRU.D1** + **OWRU.1** before merge to `main`.
+4. **WRU.D1** documents the weekly-rules model.
+5. **WRU.T1** aligns stale tests/fixtures with WRU.B2 auto-create and WRU.B1 migration wipe — **`make test` green** before merge.
+6. **OWRU.1** before merge to `main`.
 
 ---
 
@@ -182,10 +185,57 @@
 
 ---
 
+## WRU.T1 — Post-WRU test suite alignment
+
+**Type:** backend tests + fixtures (minimal production change only if a true bug is found)  
+**Depends on:** WRU.B2, WRU.D1  
+**Blocks:** OWRU.1  
+**Reuse:** `backend/app/tests/`, `backend/app/tests/helpers/`, `conftest.py`
+
+### Context
+
+After WRU.B1/B2, **`make test`** reports **25 backend failures** (frontend green). Behaviour is correct per WRU; tests and fixtures still assume legacy “no active block”, block-start weekly windows, pre-WRU migration state, and month-style block names.
+
+### Acceptance criteria
+
+- **`make test`** passes from repo root (backend + frontend quality gates).
+- **`make lint`** remains clean.
+- No new features; prefer **test and fixture updates** only.
+- Production code changes allowed **only** when a failure reveals a real bug (e.g. review-milestone `as_of` on log create) — document in review notes; prefer test-seed fixes first.
+
+### Failure groups to fix (25 tests)
+
+| Group | Tests | Fix |
+| --- | --- | --- |
+| **A** No-active-block obsolete | 5 | `test_mcp_context_api.py` (2), `test_dashboard_graph_class_id_api.py` (1), `test_load_api.py` `test_get_delayed_tax_elevated_load_without_active_block`, `test_review_milestone_api.py` `…without_active_block` — expect auto-created `weekly_focus` or rename/repurpose tests for WRU.B2 semantics |
+| **B** Weekly progress window | 1 | `test_get_load_summary_weekly_progress_uses_active_block_start_through_as_of` — Mon–Sun week bounds (WTL.B3) |
+| **C** WTL.B1 migration post-WRU | 6 | `test_wtl_b1_weekly_target_schema.py` — stop upgrade at `20260607_0005` for data tests or re-seed; do not assert rows wiped by `20260608_0006` |
+| **D** Stage 2.5 migration fixture | 1 | `test_stage_2_5_migration_disables_existing_weekly_activity_count_rules` — seed rule at `20260606_0002` without WRU wipe |
+| **E** Schema metadata | 1 | `test_models_schema.py` — add `period_kind`, `focus_series_id`, `focus_title`, `week_number` to `training_blocks` expected columns |
+| **F** Recovery streak side-effect | 6 | `test_recovery_targets_api.py` streak tests — use `seed_weekly_focus_block` / stable active block so log POST does not roll test block via `maybe_update_review_milestone_after_log`; product fix only if seed approach insufficient |
+| **G** Review milestone block id | 2 | `test_review_milestone_api.py` — seed weekly_focus with known id; assert milestone on resolved active block |
+| **H** MCP seeded name | 1 | `test_get_mcp_context_seeded_db…` — calendar week `name` from seed, not “Mock Training Block” |
+| **I** Deploy first-use doc | 1 | `test_deploy_first_run_s2_9.py` — “weekly rules” step instead of “training block” |
+| **J** Prototype seed auth | 1 | `test_dashboard_api.py` `app_with_prototype_seed` — `monkeypatch` `AUTH_PASSWORD=""` like `app_with_test_database` |
+| **K** Docker build | 1 | `test_production_dockerfile_b11_3.py` — verify `docker build` passes; fix Dockerfile only if genuinely broken |
+
+### Edge cases
+
+- Recovery streak tests: first log must not complete/replace the block under test before streak recalculation finishes.
+- WTL.B1 migration tests must not upgrade through WRU.B1 big-bang when asserting pre-wipe data shapes.
+- Postgres migration tests (`RUN_POSTGRES_TESTS=1`) remain green if already in CI scope.
+
+### Test strategy
+
+- Run `make test` after fixes; full suite is the gate (no partial handoff).
+- Run targeted pytest per group while iterating.
+
+---
+
 ## OWRU.1 — Owner smoke
 
 **Type:** owner acceptance  
-**Depends on:** WRU.D1  
+**Depends on:** WRU.T1  
 **Blocks:** merge to `main`
 
 ### Acceptance criteria
@@ -211,4 +261,4 @@
 
 ## Planner status
 
-**SIGNED OFF** — owner confirmed Q1–Q4 and WRU.B1 scope (no legacy history conversion; update seed). Ready for orchestrator on `fix/stage-2-5-lingering-issues` or `feat/weekly-rules-unification`.
+**SIGNED OFF** — owner confirmed Q1–Q4 and WRU.B1 scope (no legacy history conversion; update seed). WRU.B1–D1 complete; **WRU.T1** active for `make test` green before OWRU.1 merge.
