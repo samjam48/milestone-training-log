@@ -17,6 +17,7 @@ from sqlmodel import Session
 from app.database import get_session
 from app.main import create_app
 from app.services.training_blocks import calendar_week_bounds
+from app.tests.conftest import _reload_app_modules
 from app.tests.helpers.load_api_seed import seed_dashboard_mock_graph
 from app.tests.helpers.load_api_test_utils import FROZEN_TODAY, foot_status, freeze_server_today
 from app.tests.helpers.load_engine_fixtures import AS_OF, WEEKLY_TARGETS
@@ -28,7 +29,7 @@ from app.tests.helpers.seed import (
     seed_training_block,
 )
 from app.tests.helpers.weekly_focus_fixtures import seed_weekly_focus_block
-from app.tests.test_seed_data import PROTOTYPE_TODAY, _make_migrated_engine, _run_seed
+from app.tests.test_seed_data import _make_migrated_engine, _run_seed
 
 DASHBOARD_URL = "/api/dashboard"
 SUMMARY_URL = "/api/load/summary"
@@ -421,8 +422,14 @@ async def test_get_dashboard_seeded_response_completes_under_500ms(
 
 
 @pytest.fixture
-def app_with_prototype_seed(tmp_path: Path) -> Iterator[FastAPI]:
+def app_with_prototype_seed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> Iterator[FastAPI]:
     """Migrated SQLite DB populated via backend/scripts/seed.py (includes violations)."""
+    monkeypatch.setenv("AUTH_PASSWORD", "")
+    monkeypatch.setenv("APP_DEV_MODE", "true")
+    _reload_app_modules()
     database_path = tmp_path / "dashboard-prototype-seed.db"
     database_url = f"sqlite:///{database_path}"
     _make_migrated_engine(database_path)
@@ -455,9 +462,11 @@ async def prototype_seed_client(
 async def test_get_dashboard_returns_200_after_prototype_seed_with_violations(
     prototype_seed_client: AsyncClient,
 ) -> None:
+    # Weekly rules daily_scores cover the active calendar week only; use a date
+    # within the seeded violation window (May 19–25 week).
     response = await prototype_seed_client.get(
         DASHBOARD_URL,
-        params={"as_of": PROTOTYPE_TODAY.isoformat()},
+        params={"as_of": "2026-05-24"},
     )
 
     assert response.status_code == 200, response.text
@@ -465,8 +474,8 @@ async def test_get_dashboard_returns_200_after_prototype_seed_with_violations(
 
     violation_rule_ids = [
         violation["rule_id"]
-        for score in payload["daily_scores"]
-        for violation in score["violations"]
+        for log in payload["logs"]
+        for violation in log.get("rule_violations_at_log") or []
     ]
     assert violation_rule_ids
     assert all(rule_id == "rule-rest-foot" for rule_id in violation_rule_ids)

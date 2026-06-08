@@ -120,11 +120,11 @@ async def test_get_dashboard_graph_class_id_falls_back_to_first_performance_clas
     assert payload["week_load_threshold"] is None
 
 
-async def test_get_dashboard_graph_class_id_null_without_active_block(
+async def test_get_dashboard_graph_class_id_null_without_weekly_load_cap_on_active_block(
     app_with_test_database: FastAPI,
     client: AsyncClient,
 ) -> None:
-    """No active block → graph_class_id null, consistent with empty load_series."""
+    """Auto-created weekly rules without weekly_load_cap → graph_class_id null."""
     seed_activity_class(
         app_with_test_database,
         class_id="cls-foot",
@@ -159,9 +159,10 @@ async def test_get_dashboard_graph_class_id_null_without_active_block(
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["block"] is None
-    assert payload["load_series"] == []
-    assert payload["graph_class_id"] is None
+    assert payload["block"] is not None
+    assert payload["block"]["period_kind"] == "weekly_focus"
+    assert payload["graph_class_id"] == "cls-foot"
+    assert payload["load_series"]
 
 
 async def test_get_dashboard_seeded_mock_graph_class_id_matches_load_series_class(

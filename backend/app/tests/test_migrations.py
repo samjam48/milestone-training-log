@@ -326,7 +326,7 @@ def test_stage_2_5_migration_disables_existing_weekly_activity_count_rules(
             )
         )
 
-    command.upgrade(config, "head")
+    command.upgrade(config, STAGE_2_5_HEAD_REVISION)
 
     with engine.connect() as connection:
         enabled = connection.execute(

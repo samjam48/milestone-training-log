@@ -83,7 +83,7 @@ def create_activity_log(session: Session, payload: ActivityLogCreate) -> Activit
     )
     from app.services.review_milestone import maybe_update_review_milestone_after_log
 
-    maybe_update_review_milestone_after_log(session)
+    maybe_update_review_milestone_after_log(session, as_of=activity_log.logged_date)
     return activity_log
 
 

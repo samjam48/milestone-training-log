@@ -7,6 +7,8 @@ import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
 
+from app.services.training_blocks import calendar_week_bounds
+from app.tests.helpers.load_api_test_utils import freeze_server_today_as
 from app.tests.helpers.seed import (
     seed_activity,
     seed_activity_class,
@@ -14,6 +16,7 @@ from app.tests.helpers.seed import (
     seed_recovery_target,
     seed_training_block,
 )
+from app.tests.helpers.weekly_focus_fixtures import seed_weekly_focus_block
 
 
 def _seed_recovery_target_graph(
@@ -24,13 +27,24 @@ def _seed_recovery_target_graph(
     block_start: date = date(2026, 5, 1),
     block_end: date | None = None,
     activity_id: str = "act-mobility",
+    block_anchor: date | None = None,
+    block_span: tuple[date, date] | None = None,
 ) -> None:
-    seed_training_block(
+    if block_span is not None:
+        week_start, week_end = block_span
+    elif block_end is not None:
+        week_start, week_end = block_start, block_end
+    else:
+        anchor = block_anchor or date(2026, 5, 27)
+        week_start, week_end = calendar_week_bounds(anchor)
+    seed_weekly_focus_block(
         app_with_test_database,
         block_id=block_id,
-        name="Recovery Block",
-        start_date=block_start,
-        end_date=block_end,
+        focus_series_id="fs-recovery-test",
+        focus_title=None,
+        week_number=1,
+        start_date=week_start,
+        end_date=week_end if block_status == "active" else block_end,
         status=block_status,
     )
     seed_activity_class(
@@ -493,7 +507,9 @@ async def test_recovery_target_patch_and_delete_routes_are_not_available(
 async def test_daily_streak_counts_consecutive_calendar_days_meeting_target(
     app_with_test_database: FastAPI,
     client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    freeze_server_today_as(monkeypatch, date(2026, 5, 27))
     _seed_recovery_target_graph(app_with_test_database)
     await _create_recovery_target(
         client,
@@ -534,10 +550,13 @@ async def test_daily_streak_counts_consecutive_calendar_days_meeting_target(
 async def test_daily_streak_backfilled_log_recalculates_as_of_logged_date(
     app_with_test_database: FastAPI,
     client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    freeze_server_today_as(monkeypatch, date(2026, 1, 14))
     _seed_recovery_target_graph(
         app_with_test_database,
         block_start=date(2026, 1, 1),
+        block_anchor=date(2026, 1, 12),
     )
     await _create_recovery_target(
         client,
@@ -548,12 +567,12 @@ async def test_daily_streak_backfilled_log_recalculates_as_of_logged_date(
         frequency_unit="daily",
     )
 
-    for day_offset, log_id in enumerate(["log-jan-10", "log-jan-11", "log-jan-12"]):
+    for day_offset, log_id in enumerate(["log-jan-12", "log-jan-13", "log-jan-14"]):
         await _create_recovery_log(
             client,
             log_id=log_id,
             activity_id="act-mobility",
-            logged_date=date(2026, 1, 10) + timedelta(days=day_offset),
+            logged_date=date(2026, 1, 12) + timedelta(days=day_offset),
         )
 
     streak = await _get_recovery_target_streak(
@@ -608,7 +627,9 @@ async def test_daily_streak_is_zero_when_ending_day_does_not_meet_target(
 async def test_daily_streak_requires_target_frequency_logs_on_each_day(
     app_with_test_database: FastAPI,
     client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    freeze_server_today_as(monkeypatch, date(2026, 5, 27))
     _seed_recovery_target_graph(app_with_test_database)
     await _create_recovery_target(
         client,
@@ -649,8 +670,13 @@ async def test_daily_streak_requires_target_frequency_logs_on_each_day(
 async def test_weekly_streak_counts_consecutive_iso_weeks_meeting_target(
     app_with_test_database: FastAPI,
     client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _seed_recovery_target_graph(app_with_test_database)
+    freeze_server_today_as(monkeypatch, date(2026, 5, 27))
+    _seed_recovery_target_graph(
+        app_with_test_database,
+        block_span=(date(2026, 5, 1), date(2026, 5, 31)),
+    )
     await _create_recovery_target(
         client,
         block_id="blk-active",
@@ -725,7 +751,9 @@ async def test_weekly_streak_is_zero_when_ending_week_does_not_meet_target(
 async def test_delete_recovery_log_reduces_daily_streak_on_recalculation(
     app_with_test_database: FastAPI,
     client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    freeze_server_today_as(monkeypatch, date(2026, 5, 27))
     _seed_recovery_target_graph(app_with_test_database)
     await _create_recovery_target(
         client,
@@ -767,7 +795,9 @@ async def test_delete_recovery_log_reduces_daily_streak_on_recalculation(
 async def test_patch_recovery_log_date_recalculates_streak_from_latest_affected_date(
     app_with_test_database: FastAPI,
     client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    freeze_server_today_as(monkeypatch, date(2026, 5, 27))
     _seed_recovery_target_graph(app_with_test_database)
     await _create_recovery_target(
         client,

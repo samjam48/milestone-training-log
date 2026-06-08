@@ -111,6 +111,7 @@ def seed_weekly_focus_block(
     start_date: date,
     end_date: date | None,
     status: str,
+    is_review_milestone_hit: bool = False,
 ) -> None:
     require_wtl_b7_training_block_schema()
     service = require_weekly_focus_service()
@@ -141,7 +142,7 @@ def seed_weekly_focus_block(
                 week_number=week_number,
                 related_goal_id=None,
                 notes=None,
-                is_review_milestone_hit=False,
+                is_review_milestone_hit=is_review_milestone_hit,
                 created_at=utc_datetime(8),
                 updated_at=utc_datetime(8),
             )

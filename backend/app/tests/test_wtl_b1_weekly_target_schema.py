@@ -45,6 +45,8 @@ BACKEND_ROOT = Path(__file__).resolve().parents[2]
 DATABASE_SCHEMA_DOC = REPO_ROOT / "docs" / "database-schema.md"
 
 STAGE_2_5_HEAD_REVISION = "20260606_0002"
+WTL_B1_HEAD_REVISION = "20260607_0005"
+WTL_B1_SCHEMA_BEFORE_CONFLICT_SEED = "20260607_0003"
 
 WTL_B1_WEEKLY_TARGET_COLUMNS = {
     "activity_id",
@@ -419,7 +421,7 @@ def test_wtl_b1_migration_preserves_readable_legacy_class_weekly_targets(
         _seed_wtl_b1_migration_base(connection)
         _insert_legacy_class_weekly_target(connection)
 
-    command.upgrade(config, "head")
+    command.upgrade(config, WTL_B1_HEAD_REVISION)
 
     _require_wtl_b1_weekly_target_schema(engine)
 
@@ -463,7 +465,7 @@ def test_wtl_b1_migration_converts_two_weekly_recovery_targets_in_same_class(
             target_frequency=2,
         )
 
-    command.upgrade(config, "head")
+    command.upgrade(config, WTL_B1_HEAD_REVISION)
     _require_wtl_b1_weekly_target_schema(engine)
 
     with engine.connect() as connection:
@@ -497,7 +499,7 @@ def test_wtl_b1_migration_converts_weekly_recovery_targets_to_activity_weekly_ta
         _seed_wtl_b1_migration_base(connection)
         _insert_weekly_recovery_target(connection, target_frequency=4)
 
-    command.upgrade(config, "head")
+    command.upgrade(config, WTL_B1_HEAD_REVISION)
     _require_wtl_b1_weekly_target_schema(engine)
 
     with engine.connect() as connection:
@@ -526,7 +528,7 @@ def test_wtl_b1_migration_leaves_daily_recovery_targets_unconverted(
         _seed_wtl_b1_migration_base(connection)
         _insert_daily_recovery_target(connection)
 
-    command.upgrade(config, "head")
+    command.upgrade(config, WTL_B1_HEAD_REVISION)
     _require_wtl_b1_weekly_target_schema(engine)
 
     with engine.connect() as connection:
@@ -560,12 +562,7 @@ def test_wtl_b1_migration_keeps_existing_weekly_target_on_recovery_conflict(
         _seed_wtl_b1_migration_base(connection)
         _insert_weekly_recovery_target(connection, target_frequency=5)
 
-    schema_revision = _revision_before_head(config)
-    assert schema_revision is not None, (
-        "WTL.B1 conflict migration test needs a revision before head to seed "
-        "an existing activity-scoped weekly target."
-    )
-    command.upgrade(config, schema_revision)
+    command.upgrade(config, WTL_B1_SCHEMA_BEFORE_CONFLICT_SEED)
     _require_wtl_b1_weekly_target_schema(engine)
 
     with engine.begin() as connection:
@@ -576,7 +573,7 @@ def test_wtl_b1_migration_keeps_existing_weekly_target_on_recovery_conflict(
             target_value=2.0,
         )
 
-    command.upgrade(config, "head")
+    command.upgrade(config, WTL_B1_HEAD_REVISION)
 
     with engine.connect() as connection:
         rows = _weekly_target_rows_for_activity(
@@ -624,7 +621,7 @@ def test_wtl_b1_migration_leaves_orphan_weekly_recovery_targets_unconverted(
         connection.execute(text("PRAGMA foreign_keys=OFF"))
         connection.execute(text("DELETE FROM activities WHERE id = 'act-missing'"))
 
-    command.upgrade(config, "head")
+    command.upgrade(config, WTL_B1_HEAD_REVISION)
     _require_wtl_b1_weekly_target_schema(engine)
 
     with engine.connect() as connection:
@@ -785,7 +782,7 @@ def test_wtl_b1_postgres_migration_converts_weekly_recovery_targets(
             _seed_wtl_b1_migration_base(connection)
             _insert_weekly_recovery_target(connection, target_frequency=3)
 
-    command.upgrade(config, "head")
+    command.upgrade(config, WTL_B1_HEAD_REVISION)
 
     with postgres_engine(postgres_database_url) as engine:
         _require_wtl_b1_weekly_target_schema(engine)

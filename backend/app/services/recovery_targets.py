@@ -76,12 +76,7 @@ def recalculate_recovery_streaks_for_activity(
     *,
     anchor_date: date,
 ) -> None:
-    active_block = _get_active_training_block_or_none(session)
-    if active_block is None:
-        return
-
     statement = select(RecoveryTarget).where(
-        RecoveryTarget.training_block_id == active_block.id,
         RecoveryTarget.activity_id == activity_id,
     )
     targets = list(session.exec(statement).all())
@@ -90,10 +85,13 @@ def recalculate_recovery_streaks_for_activity(
 
     recalculation_date = anchor_date
     for target in targets:
+        block = session.get(TrainingBlock, target.training_block_id)
+        if block is None or block.status != "active":
+            continue
         new_streak = _calculate_streak(
             session,
             target,
-            active_block,
+            block,
             recalculation_date,
         )
         target.current_streak_days = new_streak
@@ -219,14 +217,6 @@ def _log_count_for_week(
 
 def _iso_week_start(day: date) -> date:
     return day - timedelta(days=day.weekday())
-
-
-def _get_active_training_block_or_none(session: Session) -> TrainingBlock | None:
-    statement = select(TrainingBlock).where(
-        TrainingBlock.user_id == LOCAL_USER_ID,
-        TrainingBlock.status == "active",
-    )
-    return session.exec(statement).first()
 
 
 def _ensure_local_training_block_exists(session: Session, block_id: str) -> None:

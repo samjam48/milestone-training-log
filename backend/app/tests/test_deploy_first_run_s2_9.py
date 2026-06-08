@@ -68,8 +68,8 @@ def test_first_use_steps_documented_in_order(deploy_text: str) -> None:
         (_pos(r"activity\s+class|create\s+(?:an?\s+)?class"), "create activity class"),
         (_pos(r"create\s+(?:an?\s+)?activity|new\s+activity"), "create activity"),
         (
-            _pos(r"training\s+block|new\s+(?:training\s+)?block"),
-            "create training block",
+            _pos(r"weekly\s+rules|training\s+block|new\s+(?:training\s+)?block"),
+            "weekly rules",
         ),
         (
             _pos(r"log\s+activity|log\s+a\s+session|check[- ]?in"),
@@ -83,7 +83,7 @@ def test_first_use_steps_documented_in_order(deploy_text: str) -> None:
 
     assert positions == sorted(positions), (
         "First-use steps must appear in order: "
-        "sign in → activity class → activity → training block → log/check-in (S2.9)."
+        "sign in → activity class → activity → weekly rules → log/check-in (S2.9)."
     )
 
 

@@ -69,9 +69,16 @@ def get_active_training_block(
     session: Session,
     *,
     as_of: date | None = None,
+    create_if_missing: bool = True,
 ) -> TrainingBlock:
     resolved_as_of = as_of if as_of is not None else _server_local_today()
-    return ensure_active_weekly_focus(session, resolved_as_of)
+    if create_if_missing:
+        return ensure_active_weekly_focus(session, resolved_as_of)
+    week_start, _week_end = calendar_week_bounds(resolved_as_of)
+    block = _find_active_weekly_focus_for_week(session, week_start)
+    if block is None:
+        raise TrainingBlockNotFoundError
+    return block
 
 
 def ensure_active_weekly_focus(
@@ -123,6 +130,15 @@ def ensure_active_weekly_focus(
         session.expire_on_commit = previous_expire_on_commit
 
 
+def _weekly_focus_covers_week(
+    block: TrainingBlock,
+    week_start: date,
+) -> bool:
+    week_end = week_start + timedelta(days=6)
+    block_end = block.end_date if block.end_date is not None else week_end
+    return block.start_date <= week_start and block_end >= week_end
+
+
 def _complete_misaligned_active_weekly_focus(
     session: Session,
     week_start: date,
@@ -135,6 +151,8 @@ def _complete_misaligned_active_weekly_focus(
     )
     misaligned = session.exec(statement).first()
     if misaligned is None:
+        return None
+    if _weekly_focus_covers_week(misaligned, week_start):
         return None
 
     misaligned.status = "completed"
@@ -350,13 +368,31 @@ def update_training_block(
 
 
 def _find_active_weekly_focus_for_week(session: Session, week_start: date) -> TrainingBlock | None:
-    statement = select(TrainingBlock).where(
+    week_end = week_start + timedelta(days=6)
+    exact_match = select(TrainingBlock).where(
         TrainingBlock.user_id == LOCAL_USER_ID,
         TrainingBlock.period_kind == PERIOD_KIND_WEEKLY_FOCUS,
         TrainingBlock.status == "active",
         TrainingBlock.start_date == week_start,
     )
-    return session.exec(statement).first()
+    exact = session.exec(exact_match).first()
+    if exact is not None:
+        return exact
+
+    covering = (
+        select(TrainingBlock)
+        .where(
+            TrainingBlock.user_id == LOCAL_USER_ID,
+            TrainingBlock.period_kind == PERIOD_KIND_WEEKLY_FOCUS,
+            TrainingBlock.status == "active",
+            TrainingBlock.start_date <= week_start,
+        )
+        .order_by(col(TrainingBlock.start_date).desc())
+    )
+    for block in session.exec(covering):
+        if block.end_date is None or block.end_date >= week_end:
+            return block
+    return None
 
 
 def _find_rollover_source(session: Session, week_start: date) -> TrainingBlock | None:
