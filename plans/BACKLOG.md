@@ -162,7 +162,7 @@ Supersedes WTL.B7 lazy cutover, WTL.F7 focus-title/setup/reset UX, and month-sty
 | Settings weekly rules UI + previous-weeks modal | WRU.F1 | Done |
 | Remove new-block screen + dead APIs | WRU.F2 | Done |
 | Living docs + backlog sync | WRU.D1 | Done |
-| Post-WRU test suite alignment (`make test` green) | WRU.T1 | In progress |
+| Post-WRU test suite alignment (`make test` green) | WRU.T1 | Done |
 | Owner smoke before merge | OWRU.1 | Pending (owner smoke OK; blocked on WRU.T1) |
 
 ## Product gaps still open (not in the list above)
