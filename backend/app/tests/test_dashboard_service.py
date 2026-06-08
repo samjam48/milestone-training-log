@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from datetime import date, timedelta
 from typing import Any
 
@@ -547,7 +547,7 @@ def test_get_dashboard_skips_recovery_streak_when_activity_missing(
 # ---------------------------------------------------------------------------
 
 
-def _bucket_ids(rows: list[object], bucket: str) -> set[str]:
+def _bucket_ids(rows: Sequence[object], bucket: str) -> set[str]:
     return {row.id for row in rows if row.bucket == bucket}  # type: ignore[attr-defined]
 
 

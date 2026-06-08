@@ -6,6 +6,7 @@ from pathlib import Path
 
 from alembic import command
 from sqlalchemy import create_engine, inspect
+from sqlalchemy.engine import Engine
 
 from app.models.block import TrainingBlock
 from app.tests.test_migrations import (
@@ -35,7 +36,7 @@ def _wtl_b7_revision_paths() -> list[Path]:
     ]
 
 
-def _run_upgrade(database_url: str) -> object:
+def _run_upgrade(database_url: str) -> Engine:
     command.upgrade(_make_alembic_config(database_url), "head")
     return create_engine(database_url)
 

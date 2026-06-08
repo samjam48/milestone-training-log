@@ -34,16 +34,6 @@ from app.services.load_engine import (
     parse_iso_date,
     rolling_load,
 )
-from app.tests.helpers.wtl_b5_fixtures import (
-    WTL_B5_ACTIVITIES,
-    WTL_B5_ACTIVITY_CLASSES,
-    WTL_B5_AS_OF,
-    WTL_B5_CLASS_ID,
-    WTL_B5_STRETCH_ID,
-    WTL_B5_WALK_ID,
-    wtl_b5_log,
-    wtl_b5_rule,
-)
 from app.tests.helpers.load_engine_fixtures import (
     ACTIVITIES,
     ACTIVITY_CLASSES,
@@ -54,6 +44,16 @@ from app.tests.helpers.load_engine_fixtures import (
     PERIOD_START,
     RULES,
     WEEKLY_TARGETS,
+)
+from app.tests.helpers.wtl_b5_fixtures import (
+    WTL_B5_ACTIVITIES,
+    WTL_B5_ACTIVITY_CLASSES,
+    WTL_B5_AS_OF,
+    WTL_B5_CLASS_ID,
+    WTL_B5_STRETCH_ID,
+    WTL_B5_WALK_ID,
+    wtl_b5_log,
+    wtl_b5_rule,
 )
 
 # ---------------------------------------------------------------------------
@@ -1854,7 +1854,9 @@ def test_compute_weekly_progress_monday_as_of_uses_new_week_window() -> None:
 def test_compute_weekly_progress_activity_scoped_counts_only_that_activity() -> None:
     logs = [
         _wtl_b3_log("log-walk", WTL_B3_WALK, "2026-06-03", volume_value=3.0),
-        _wtl_b3_log("log-bike", WTL_B3_BIKE, "2026-06-04", volume_value=20.0, volume_unit="minutes"),
+        _wtl_b3_log(
+            "log-bike", WTL_B3_BIKE, "2026-06-04", volume_value=20.0, volume_unit="minutes"
+        ),
     ]
     progress = compute_weekly_progress(
         [_wtl_b3_target("wt-walk", activity_id=WTL_B3_WALK, target_unit="sessions")],
@@ -1901,8 +1903,16 @@ def test_compute_weekly_progress_legacy_class_target_has_null_activity_fields() 
 def test_compute_weekly_progress_legacy_class_target_counts_active_class_activities() -> None:
     logs = [
         _wtl_b3_log("log-walk", WTL_B3_WALK, "2026-06-03", volume_value=3.0),
-        _wtl_b3_log("log-bike", WTL_B3_BIKE, "2026-06-04", volume_value=20.0, volume_unit="minutes"),
-        _wtl_b3_log("log-stretch", WTL_B3_STRETCH, "2026-06-05", volume_value=15.0, volume_unit="minutes"),
+        _wtl_b3_log(
+            "log-bike", WTL_B3_BIKE, "2026-06-04", volume_value=20.0, volume_unit="minutes"
+        ),
+        _wtl_b3_log(
+            "log-stretch",
+            WTL_B3_STRETCH,
+            "2026-06-05",
+            volume_value=15.0,
+            volume_unit="minutes",
+        ),
     ]
     progress = compute_weekly_progress(
         [_wtl_b3_target("wt-class", target_unit="sessions")],

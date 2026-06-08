@@ -7,16 +7,15 @@ from typing import Any
 
 from fastapi import FastAPI
 
+from app.services.training_blocks import calendar_week_bounds
 from app.tests.helpers.load_engine_fixtures import (
     ACTIVITIES,
     ACTIVITY_CLASSES,
     AS_OF,
-    BLOCK_START,
+    CREATED_AT,
     LOGS,
     USER_ID,
-    CREATED_AT,
 )
-from app.services.training_blocks import calendar_week_bounds
 from app.tests.helpers.seed import (
     seed_activity,
     seed_activity_class,
@@ -183,7 +182,7 @@ def seed_wtl_b6_dashboard_graph(app_with_test_database: FastAPI) -> None:
             log_id=log["id"],
             activity_id=log["activity_id"],
             logged_date=date.fromisoformat(log["logged_date"]),
-            duration_minutes=log.get("duration_minutes"),
+            duration_minutes=int(log.get("duration_minutes") or 30),
             volume_value=log["volume_value"],
             volume_unit=log.get("volume_unit"),
             rpe=log.get("rpe"),

@@ -16,10 +16,10 @@ from sqlmodel import Session
 
 from app.database import get_session
 from app.main import create_app
+from app.services.training_blocks import calendar_week_bounds
 from app.tests.helpers.load_api_seed import seed_dashboard_mock_graph
 from app.tests.helpers.load_api_test_utils import FROZEN_TODAY, foot_status, freeze_server_today
 from app.tests.helpers.load_engine_fixtures import AS_OF, WEEKLY_TARGETS
-from app.services.training_blocks import calendar_week_bounds
 from app.tests.helpers.seed import (
     seed_activity,
     seed_activity_class,
@@ -943,7 +943,8 @@ def _wtl_b6_rule_limit_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
     summary = payload["load_risk_summary"]
     assert summary is not None
     assert "rule_limit_rows" in summary, "WTL.B6 requires rule_limit_rows on load_risk_summary"
-    return summary["rule_limit_rows"]
+    rows: list[dict[str, Any]] = summary["rule_limit_rows"]
+    return rows
 
 
 def _wtl_b6_row_by_rule_id(payload: dict[str, Any], rule_id: str) -> dict[str, Any]:

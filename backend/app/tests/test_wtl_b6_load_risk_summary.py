@@ -265,7 +265,14 @@ def test_compute_load_risk_summary_rest_row_safe_when_no_prior_session() -> None
     summary = _call_load_risk_summary(
         as_of=AS_OF,
         logs=[],
-        rules=[wtl_b6_rule(id="rule-rest-only", rule_type="rest_between_class", threshold_value=3, window_days=3)],
+        rules=[
+            wtl_b6_rule(
+                id="rule-rest-only",
+                rule_type="rest_between_class",
+                threshold_value=3,
+                window_days=3,
+            )
+        ],
         delayed_tax_hits=[],
     )
     row = _row_by_rule_id(summary, "rule-rest-only")
@@ -522,7 +529,10 @@ def test_compute_load_risk_summary_ignores_disabled_rules() -> None:
             enabled=True,
         ),
     ]
-    logs = [_make_log("act-walk", AS_OF), _make_log("act-bike", add_days(AS_OF, -1), volume_value=20, rpe=5)]
+    logs = [
+        _make_log("act-walk", AS_OF),
+        _make_log("act-bike", add_days(AS_OF, -1), volume_value=20, rpe=5),
+    ]
     summary = _call_load_risk_summary(
         as_of=AS_OF,
         logs=logs,

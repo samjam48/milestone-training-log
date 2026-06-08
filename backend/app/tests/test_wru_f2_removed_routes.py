@@ -17,6 +17,7 @@ from app.tests.helpers.weekly_focus_fixtures import (
     seed_weekly_focus_block,
 )
 
+
 @pytest.mark.parametrize(
     ("path", "body"),
     [

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Iterator
-from datetime import date
 
 import pytest
 from fastapi import FastAPI
@@ -178,7 +177,8 @@ def test_dashboard_block_uses_calendar_label_without_requiring_focus_title(
         WRU_B2_WEEK_END,
     )
     # UI uses calendar label only; focus_title must not be required for rendering.
-    assert dashboard.block.focus_title is None or dashboard.block.focus_title == dashboard.block.name
+    focus_title = dashboard.block.focus_title
+    assert focus_title is None or focus_title == dashboard.block.name
 
 
 def test_dashboard_never_returns_legacy_period_kind(

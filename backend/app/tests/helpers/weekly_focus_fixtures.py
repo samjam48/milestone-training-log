@@ -5,13 +5,11 @@ from __future__ import annotations
 import importlib
 from collections.abc import Iterator
 from datetime import date
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from fastapi import FastAPI
-from sqlmodel import Session
-
-from sqlmodel import select
+from sqlmodel import Session, select
 
 from app.models.block import TrainingBlock
 from app.tests.helpers.seed import seed_training_block, utc_datetime, with_session
@@ -77,7 +75,7 @@ def require_weekly_focus_service() -> Any:
 
 def calendar_week_bounds(as_of: date) -> tuple[date, date]:
     service = require_weekly_focus_service()
-    return service.calendar_week_bounds(as_of)
+    return cast(tuple[date, date], service.calendar_week_bounds(as_of))
 
 
 def seed_legacy_active_block(

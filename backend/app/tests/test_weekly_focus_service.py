@@ -8,6 +8,7 @@ and lazy legacy cutover tests were removed for WRU.B1.
 from __future__ import annotations
 
 from collections import Counter
+
 from fastapi import FastAPI
 from sqlmodel import col, select
 
