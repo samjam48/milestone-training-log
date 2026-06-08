@@ -162,7 +162,34 @@ Supersedes WTL.B7 lazy cutover, WTL.F7 focus-title/setup/reset UX, and month-sty
 | Settings weekly rules UI + previous-weeks modal | WRU.F1 | Done |
 | Remove new-block screen + dead APIs | WRU.F2 | Done |
 | Living docs + backlog sync | WRU.D1 | Done |
-| Owner smoke before merge | OWRU.1 | Pending |
+| Owner smoke before merge | OWRU.1 | Pending (owner smoke OK; **merge blocked** on green `make test`) |
+| Lint clean | — | Done (`8eb0a7f`) |
+| Doc drift polish (api-map, WTL footer) | WRU.D1 follow-up | Done (pending commit) |
+| Test suite green before merge | **TEST.GREEN** | **Open** — see inventory below |
+
+### TEST.GREEN — `make test` failure inventory (2026-06-08)
+
+**Run:** `make test` → **25 failed**, 824 passed, 5 skipped (backend); frontend green.
+
+**Recommendation:** One focused ticket **`TEST.GREEN`** (test-only + minimal fixture helpers, no product changes unless a true bug is found). Group fixes below; no owner decisions required for the bulk — behaviour is defined by WRU.
+
+| Group | Count | Root cause | Fix approach | Ticket? |
+| --- | --- | --- | --- | --- |
+| **A. “No active block” obsolete** | 5 | WRU.B2 auto-creates current week via `ensure_active_weekly_focus`; tests still expect `null` block or **404** | Update tests to expect auto-created `weekly_focus` row, or seed explicit empty DB without calling active resolver before assert. Files: `test_mcp_context_api.py` (2), `test_dashboard_graph_class_id_api.py` (1), `test_load_api.py` `test_get_delayed_tax_elevated_load_without_active_block` (1), `test_review_milestone_api.py` `…without_active_block` (1) | TEST.GREEN |
+| **B. Weekly progress window** | 1 | `test_get_load_summary_weekly_progress_uses_active_block_start_through_as_of` expects block-start→`as_of`; WTL.B3 uses Mon–Sun week | Update expected `period_start`/`period_end` and progress values to calendar-week semantics | TEST.GREEN |
+| **C. WTL.B1 migration tests post-WRU** | 6 | Tests upgrade through `20260608_0006` which **wipes** all blocks; fixtures expect pre-wipe rows | Stop migration at `20260607_0005` for WTL.B1 data tests, or re-seed after partial upgrade; align with WRU.B1 test patterns | TEST.GREEN |
+| **D. Stage 2.5 migration fixture** | 1 | `test_stage_2_5_migration_disables_existing_weekly_activity_count_rules` — `NoResultFound` after WRU big-bang deletes seeded block | Seed rule on block at revision `20260606_0002` only (pre-WRU), or insert rule directly in migration test DB | TEST.GREEN |
+| **E. Schema metadata snapshot** | 1 | `test_phase_one_metadata_contains_exact_tables_and_columns` — `training_blocks` missing `period_kind`, `focus_series_id`, `focus_title`, `week_number` in expected column set | Extend expected columns in `test_models_schema.py` | TEST.GREEN |
+| **F. Recovery streak side-effect** | 6 | `maybe_update_review_milestone_after_log` → `get_active_training_block()` auto-creates week and completes `blk-active` after **first** log; streak recalc then targets wrong block → `streak == 1` | Seed `seed_weekly_focus_block` in recovery tests **or** pass `as_of=logged_date` into review-milestone helper **or** make streak recalc use target's `training_block_id` (product fix — only if intended) | TEST.GREEN (prefer test seed fix first) |
+| **G. Review milestone block id** | 2 | Tests expect fixed `blk-ms-active`; log POST triggers auto-create → new UUID block | Seed weekly_focus block with known id; assert `is_review_milestone_hit` on resolved active block, not hard-coded id | TEST.GREEN |
+| **H. MCP seeded name** | 1 | `test_get_mcp_context_seeded_db…` expects `'Mock Training Block'`; seed now uses calendar week `name` | Update assertion to calendar label from seed week bounds | TEST.GREEN |
+| **I. Deploy first-use doc** | 1 | `test_first_use_steps_documented_in_order` searches for “training block”; `deploy.md` now says **Weekly rules** | Update test regex/order to `weekly\s+rules` (and step order string) | TEST.GREEN |
+| **J. Prototype seed auth** | 1 | `test_get_dashboard_returns_200_after_prototype_seed_with_violations` — **401**; `app_with_prototype_seed` fixture does not `monkeypatch` `AUTH_PASSWORD=""` unlike `app_with_test_database` | Add auth-disable monkeypatch to prototype seed fixture | TEST.GREEN |
+| **K. Docker build** | 1 | `test_backend_dockerfile_builds_from_backend_directory` — `docker build` failed in CI/sandbox run | Re-run with Docker available; fix Dockerfile only if build is genuinely broken (may be env-only) | Verify locally first |
+
+**Not a WRU product gap:** Groups A–E, H, I, J are test/doc drift. Group F may expose whether review-milestone auto-create should use log date as `as_of` (low-risk improvement). Group K needs local Docker confirmation.
+
+**Suggested ticket file:** `plans/tickets-test-green-post-wru-2026-06-08.md` with single implementer pass, no new features.
 
 ## Product gaps still open (not in the list above)
 

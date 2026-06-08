@@ -327,9 +327,7 @@ Update `docs/api-map.md` and `docs/database-schema.md` in WTL.D2 after B7/F7.
 
 ## Status
 
-**NEEDS OWNER** — design recommends reusing `training_blocks` (not a fork requiring A/B). Owner sign-off requested on:
-
-1. Lazy legacy cutover on first access (vs one-shot migration converting the active legacy row in Alembic).
-2. Snapshotted `focus_title` on historical weeks (vs rewriting all series rows on title edit).
-
-If both defaults are accepted, B7 may proceed without further design work.
+**Superseded (WRU, 2026-06-08)** — Owner decisions and implementation live in
+[`plans/tickets-weekly-rules-unification-2026-06-08.md`](tickets-weekly-rules-unification-2026-06-08.md).
+Big-bang migration, weekly rules only, calendar labels, no focus setup/reset UX. This document
+remains as historical WTL.B7/F7 design context only.
