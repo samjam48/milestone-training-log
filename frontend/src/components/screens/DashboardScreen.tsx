@@ -8,12 +8,14 @@ import { Card } from '../ui/Card';
 import { ProgressBar } from '../ui/ProgressBar';
 import { StatusDot } from '../ui/StatusDot';
 import { SuggestedActivityCard } from '../composites/SuggestedActivityCard';
-import { WeeklyLoadGraph } from '../composites/WeeklyLoadGraph';
+import { WeeklyLoadGraph, LOAD_GRAPH_SUBTITLE, LOAD_GRAPH_WINDOW_DAYS } from '../composites/WeeklyLoadGraph';
+import { addDays } from '../../lib/load';
 import { BlockSafetyMapSection } from '../composites/BlockSafetyMapSection';
 import { LoadRiskSection } from '../composites/LoadRiskSection';
 import { GoalsCard } from '../composites/GoalsCard';
+import { allWeeklyTargetsComplete } from '../../lib/engine';
 import type { MilestoneEngineResult } from '../../hooks/useMilestoneEngine';
-import type { Activity, ActivityClass, RecoveryStreak, SafetyState } from '../../types';
+import type { Activity, ActivityClass, SafetyState } from '../../types';
 
 interface Props {
   engine: MilestoneEngineResult;
@@ -41,6 +43,28 @@ function progressLabel(value: number, unit: string): string {
   return `${value} ${unit}`;
 }
 
+function weeklyProgressRowLabel(
+  activityName: string | null | undefined,
+  className: string,
+): string {
+  return activityName ?? className;
+}
+
+function weeklyProgressDisplayState(
+  value: number,
+  target: number,
+  state: SafetyState | 'neutral',
+): SafetyState | 'neutral' {
+  if (target > 0 && value >= target) {
+    return 'safe';
+  }
+  return state;
+}
+
+function formatWeekPeriod(start: string, end: string): string {
+  return `${formatShort(start)} – ${formatShort(end)}`;
+}
+
 function loadGraphTitle(
   graphClassId: string | null,
   activityClasses: ActivityClass[],
@@ -56,16 +80,6 @@ function classStatusLabel(
   activityClasses: ActivityClass[],
 ): string {
   return activityClasses.find((c) => c.id === activityClassId)?.name ?? 'Unknown class';
-}
-
-function formatRecoveryStreakCopy(streak: RecoveryStreak): string {
-  const { activityName, frequencyUnit, currentStreakDays } = streak;
-  if (frequencyUnit === 'weekly') {
-    const weekWord = currentStreakDays === 1 ? 'week' : 'weeks';
-    return `${activityName}: ${currentStreakDays} ${weekWord} in a row`;
-  }
-  const dayWord = currentStreakDays === 1 ? 'day' : 'days';
-  return `${activityName}: ${currentStreakDays} ${dayWord} in a row`;
 }
 
 // ---------------------------------------------------------------------------
@@ -128,12 +142,13 @@ export const DashboardScreen: React.FC<Props> = ({
   const {
     todayDate, userName, hasCheckedInToday,
     suggestionBuckets, weeklyProgress, classStatuses,
-    loadSeries, graphClassId, flareUpDates, weekLoadThreshold, cleanStreak, recoveryStreaks,
-    block, activityClasses, activities, loadRiskSummary,
+    loadSeries, graphClassId, flareUpDates, weekLoadThreshold, cleanStreak,
+    activityClasses, activities, loadRiskSummary,
     goalRows,
   } = engine;
 
   const weeklyLoadGraphTitle = loadGraphTitle(graphClassId, activityClasses);
+  const loadGraphStartDate = addDays(todayDate, -(LOAD_GRAPH_WINDOW_DAYS - 1));
 
   return (
     <div className="flex flex-col gap-5 px-4 pt-5 pb-4">
@@ -149,6 +164,7 @@ export const DashboardScreen: React.FC<Props> = ({
       {/* ── Suggested activities ── */}
       <SuggestedActivityCard
         suggestionBuckets={suggestionBuckets}
+        allWeeklyTargetsComplete={allWeeklyTargetsComplete(weeklyProgress)}
         onPick={(s) => {
           const activity = activities.find((candidate) => candidate.id === s.id);
           if (activity != null && onQuickLog != null) {
@@ -160,61 +176,45 @@ export const DashboardScreen: React.FC<Props> = ({
         asOf="Today"
       />
 
-      {/* ── Last 7 days: weekly targets ── */}
+      {/* ── This week: weekly targets ── */}
       <div>
-        <SectionLabel>Last 7 days</SectionLabel>
+        <SectionLabel>This week</SectionLabel>
+        {weeklyProgress[0]?.periodStart != null && weeklyProgress[0]?.periodEnd != null ? (
+          <p className="text-caption text-ink-muted -mt-1 mb-2">
+            {formatWeekPeriod(weeklyProgress[0].periodStart, weeklyProgress[0].periodEnd)}
+          </p>
+        ) : null}
         <Card pad="md">
-          <div className="flex flex-col gap-4">
-            {weeklyProgress.map(wp => (
-              <ProgressBar
-                key={wp.weeklyTargetId}
-                value={wp.value}
-                target={wp.target}
-                state={wp.state as SafetyState | 'neutral'}
-                label={wp.className}
-                valueText={`${progressLabel(wp.value, wp.unit)} / ${progressLabel(wp.target, wp.unit)}`}
-              />
-            ))}
-          </div>
+          {weeklyProgress.length === 0 ? (
+            <p className="text-caption text-ink-muted">No weekly targets configured.</p>
+          ) : (
+            <div className="flex flex-col gap-4">
+              {weeklyProgress.map((wp) => (
+                <ProgressBar
+                  key={wp.weeklyTargetId}
+                  value={wp.value}
+                  target={wp.target}
+                  state={weeklyProgressDisplayState(wp.value, wp.target, wp.state)}
+                  label={weeklyProgressRowLabel(wp.activityName, wp.className)}
+                  valueText={`${progressLabel(wp.value, wp.unit)} / ${progressLabel(wp.target, wp.unit)}`}
+                />
+              ))}
+            </div>
+          )}
         </Card>
       </div>
 
       <GoalsCard goalRows={goalRows} />
 
-      {/* ── Recovery streaks ── */}
-      {block.id ? (
-        <div>
-          <SectionLabel>Recovery streaks</SectionLabel>
-          <Card pad="sm">
-            {recoveryStreaks.length === 0 ? (
-              <p className="text-caption text-ink-muted py-2.5">
-                No recovery targets in this block.
-              </p>
-            ) : (
-              <ul className="flex flex-col divide-y divide-border-subtle">
-                {recoveryStreaks.map((streak) => (
-                  <li
-                    key={streak.recoveryTargetId}
-                    className="py-2.5 text-body font-medium text-ink truncate"
-                  >
-                    {formatRecoveryStreakCopy(streak)}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
-        </div>
-      ) : null}
-
       {/* ── Load graph ── */}
       <WeeklyLoadGraph
-        startDate={block.startDate}
+        startDate={loadGraphStartDate}
         endDate={todayDate}
         series={loadSeries}
         threshold={weekLoadThreshold}
         flareUpDates={flareUpDates}
         title={weeklyLoadGraphTitle}
-        subtitle="Rolling 7-day · full block"
+        subtitle={LOAD_GRAPH_SUBTITLE}
       />
 
       <LoadRiskSection loadRiskSummary={loadRiskSummary} />

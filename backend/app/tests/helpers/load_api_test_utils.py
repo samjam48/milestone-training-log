@@ -21,6 +21,10 @@ def freeze_server_today_as(monkeypatch: pytest.MonkeyPatch, today: date) -> None
         "app.services.load_queries._server_local_today",
         lambda: today,
     )
+    monkeypatch.setattr(
+        "app.services.training_blocks._server_local_today",
+        lambda: today,
+    )
 
 
 def foot_status(payload: dict[str, Any]) -> dict[str, Any]:

@@ -5,13 +5,15 @@
  */
 
 import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest';
-import { cleanup, screen, within } from '@testing-library/react';
+import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { App } from '../../App';
 import { renderWithProviders } from '../../test/renderWithProviders';
 import { mockEngine, resetMockEngine } from '../../test/mockEngine';
 import type { ActivityLog, DailySafetyScore, ISODate, LoadPoint, TrainingBlock } from '../../types';
+import { WTL_F7_PREVIOUS_WEEK_2 } from '../../test/wtlF7WeeklyFocusFixtures';
+import { formatCalendarWeekRange } from '../../test/wruF1WeeklyRulesFixtures';
 import { BlockReviewScreen } from './BlockReviewScreen';
 
 vi.mock('../../hooks/useMilestoneEngine', () => ({
@@ -50,6 +52,8 @@ vi.mock('../../components/composites/CalendarHeatmap', () => ({
 }));
 
 vi.mock('../../components/composites/WeeklyLoadGraph', () => ({
+  LOAD_GRAPH_WINDOW_DAYS: 30,
+  LOAD_GRAPH_SUBTITLE: 'Rolling 7-day effort load',
   WeeklyLoadGraph: ({
     startDate,
     endDate,
@@ -95,6 +99,16 @@ const PREVIOUS_BLOCK: TrainingBlock = {
   isReviewMilestoneHit: true,
   createdAt: '2026-05-01T00:00:00Z',
 };
+
+const PREVIOUS_BLOCK_LABEL = formatCalendarWeekRange(
+  PREVIOUS_BLOCK.startDate,
+  PREVIOUS_BLOCK.endDate,
+);
+
+const WTL_F7_PREVIOUS_WEEK_2_LABEL = formatCalendarWeekRange(
+  WTL_F7_PREVIOUS_WEEK_2.startDate,
+  WTL_F7_PREVIOUS_WEEK_2.endDate,
+);
 
 const REVIEW_RESPONSE = {
   block: PREVIOUS_BLOCK,
@@ -174,10 +188,14 @@ async function openActiveBlockReview(): Promise<void> {
   await user.click(screen.getByRole('button', { name: 'Review' }));
 }
 
-async function openPreviousBlockReview(): Promise<void> {
+async function openPreviousBlockReview(
+  label: string = PREVIOUS_BLOCK_LABEL,
+): Promise<void> {
   const user = userEvent.setup();
   await openSettings();
-  await user.click(screen.getByRole('button', { name: 'View' }));
+  const previousWeekRow = screen.getByText(label).closest('button');
+  expect(previousWeekRow).not.toBeNull();
+  await user.click(previousWeekRow as HTMLElement);
 }
 
 beforeEach(() => {
@@ -361,5 +379,58 @@ describe('BlockReviewScreen — F10.6 review milestone badge', () => {
     renderWithProviders(<BlockReviewScreen engine={mockEngine} onBack={vi.fn()} />);
 
     expect(screen.getByText(REVIEW_MILESTONE_BADGE)).toBeInTheDocument();
+  });
+});
+
+describe('BlockReviewScreen — WTL.F7 historical weekly focus review', () => {
+  it('shows calendar week range in header for a historical weekly focus review', async () => {
+    mockEngine.previousBlocks = [WTL_F7_PREVIOUS_WEEK_2];
+    getTrainingBlockReviewMock.mockResolvedValue({
+      ...REVIEW_RESPONSE,
+      block: WTL_F7_PREVIOUS_WEEK_2,
+    });
+
+    renderApp();
+    await openPreviousBlockReview(WTL_F7_PREVIOUS_WEEK_2_LABEL);
+
+    const review = within(screen.getByTestId('stack-screen-overlay'));
+    expect(review.getByText(WTL_F7_PREVIOUS_WEEK_2_LABEL)).toBeInTheDocument();
+    expect(review.queryByText(/return to walking/i)).not.toBeInTheDocument();
+    expect(review.queryByText(/week 2/i)).not.toBeInTheDocument();
+  });
+
+  it('fetches review by historical weekly focus block id', async () => {
+    mockEngine.previousBlocks = [WTL_F7_PREVIOUS_WEEK_2];
+    getTrainingBlockReviewMock.mockResolvedValue({
+      ...REVIEW_RESPONSE,
+      block: WTL_F7_PREVIOUS_WEEK_2,
+    });
+
+    renderApp();
+    await openPreviousBlockReview(WTL_F7_PREVIOUS_WEEK_2_LABEL);
+
+    expect(getTrainingBlockReviewMock).toHaveBeenCalledWith(WTL_F7_PREVIOUS_WEEK_2.id);
+  });
+
+  it('renders historical weekly focus header when BlockReviewScreen is opened by block id', async () => {
+    mockEngine.previousBlocks = [WTL_F7_PREVIOUS_WEEK_2];
+    getTrainingBlockReviewMock.mockResolvedValue({
+      ...REVIEW_RESPONSE,
+      block: WTL_F7_PREVIOUS_WEEK_2,
+    });
+
+    renderWithProviders(
+      <BlockReviewScreen
+        engine={mockEngine}
+        blockId={WTL_F7_PREVIOUS_WEEK_2.id}
+        onBack={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(WTL_F7_PREVIOUS_WEEK_2_LABEL)).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/return to walking/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/week 2/i)).not.toBeInTheDocument();
   });
 });

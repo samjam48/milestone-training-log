@@ -228,6 +228,33 @@ describe('LogActivityScreen — S25.F3 log date picker', () => {
     );
   });
 
+  it('checks rule warnings against the selected log date', async () => {
+    const user = userEvent.setup();
+    const checkViolations = vi.fn().mockReturnValue([]);
+    const engine = createLogActivityEngine({
+      todayDate: TODAY,
+      checkViolations,
+    });
+
+    renderWithProviders(
+      <LogActivityScreen engine={engine} onBack={vi.fn()} onComplete={vi.fn()} />,
+    );
+
+    await selectWalkAndOpenDetails(user);
+    await user.click(screen.getByTestId('log-date-field'));
+    await user.click(screen.getByTestId(`date-picker-day-${YESTERDAY}`));
+    await fillMinimumSession(user);
+
+    expect(checkViolations).toHaveBeenLastCalledWith(
+      logActivityWalk.id,
+      0,
+      5,
+      20,
+      'km',
+      YESTERDAY,
+    );
+  });
+
   it('does not allow selecting a future date in the picker', async () => {
     const user = userEvent.setup();
     const engine = createLogActivityEngine({ todayDate: TODAY });

@@ -26,10 +26,19 @@ export interface WeeklyProgress {
   weeklyTargetId: ID;
   activityClassId: ID;
   className: string;
+  activityId?: ID | null;
+  activityName?: string | null;
   value: number;
   target: number;
   unit: VolumeUnit | 'sessions';
   state: SafetyState | 'neutral';
+  periodStart?: ISODate;
+  periodEnd?: ISODate;
+}
+
+/** True when the user has weekly targets and every row meets or exceeds its target. */
+export function allWeeklyTargetsComplete(weeklyProgress: WeeklyProgress[]): boolean {
+  return weeklyProgress.length > 0 && weeklyProgress.every((row) => row.value >= row.target);
 }
 
 export type SuggestionBucket = 'do' | 'rest' | 'done';
@@ -49,32 +58,11 @@ export interface Suggestion {
   description?: string;
 }
 
-export interface LoadRiskDay {
-  date: ISODate;
-  flagged: boolean;
-}
-
-export interface LoadRiskExerciseBar {
-  activityId: ID;
-  activityName: string;
-  actual: number;
-  limit: number;
-  unit: string;
-}
-
-export interface LoadRiskClassBar {
-  activityClassId: ID;
-  className: string;
-  actual: number;
-  limit: number;
-  unit: string;
-  exercises: LoadRiskExerciseBar[];
-}
-
-export interface LoadRiskSummary {
-  weekDays: LoadRiskDay[];
-  classBars: LoadRiskClassBar[];
-}
+export type {
+  LoadRiskDayCell as LoadRiskDay,
+  LoadRiskRuleLimitRow,
+  LoadRiskSummary,
+} from '../types';
 
 const DESCRIPTION_MAX_LEN = 80;
 

@@ -20,6 +20,29 @@ import {
   fastApiDetailErrorBody,
   fastApiValidationErrorBody,
 } from './testFixtures';
+import {
+  weeklyProgressActivityScopedSnake,
+  weeklyProgressLegacyClassSnake,
+  WTL_F1_PERIOD_END,
+  WTL_F1_PERIOD_START,
+} from '../../test/wtlF1WeeklyProgressFixtures';
+import {
+  WTL_F4_AS_OF,
+  WTL_F4_GRAPH_START,
+  WTL_F4_GRAPH_WINDOW_DAYS,
+  wtlF4LoadSeriesSnake,
+} from '../../test/wtlF4LoadGraphFixtures';
+import {
+  wtlF5BikeDailyVolumeRow,
+  wtlF5ClassFrequencyRow,
+  wtlF5ClassRestRow,
+  wtlF5EmptySummarySnake,
+  wtlF5FootLoadSummarySnake,
+  wtlF5WalkWeeklyVolumeRow,
+  wtlF5WeekDays,
+  type LoadRiskSummaryWtlF5,
+} from '../../test/wtlF5LoadRiskFixtures';
+import type { LoadRiskSummary } from '../engine';
 import { parseApiError } from './client';
 import {
   buildQuery,
@@ -33,6 +56,7 @@ import {
   mapDashboardFromApi,
   mapDelayedTaxResponseFromApi,
   mapFlareUpIncidentFromApi,
+  mapLoadRiskSummaryFromApi,
   mapLoadSummaryFromApi,
   mapRuleViolationFromApi,
 } from './mappers';
@@ -163,15 +187,21 @@ describe('mapDashboardFromApi', () => {
         },
       ],
       load_risk_summary: {
-        week_days: [{ date: '2026-05-28', flagged: true }],
-        class_bars: [
+        week_days: [{ date: '2026-05-28', flagged: true, state: 'caution' }],
+        rule_limit_rows: [
           {
+            id: 'row-foot-km',
+            scope: 'class',
+            rule_id: 'rule-foot-km',
+            rule_type: 'weekly_volume_cap',
             activity_class_id: 'cls-foot',
             class_name: 'Foot load',
             actual: 4,
             limit: 10,
             unit: 'km',
-            exercises: [],
+            state: 'safe',
+            label: 'Foot load weekly volume',
+            display_mode: 'bar',
           },
         ],
       },
@@ -183,7 +213,7 @@ describe('mapDashboardFromApi', () => {
       scope: 'activity',
     });
     expect(mapped.loadRiskSummary?.weekDays).toHaveLength(1);
-    expect(mapped.loadRiskSummary?.classBars[0]?.className).toBe('Foot load');
+    expect(mapped.loadRiskSummary?.ruleLimitRows[0]?.className).toBe('Foot load');
   });
 
   it('maps block null to null (not undefined)', () => {
@@ -596,5 +626,189 @@ describe('parseApiError', () => {
     expect(error.message).toBeTruthy();
     expect(error.message).not.toBe('');
     expect(error.detail).toBeUndefined();
+  });
+});
+
+describe('mapDashboardFromApi — WTL.F1 weekly progress period and activity fields', () => {
+  it('maps period_start and period_end on each weekly progress row', () => {
+    const mapped = mapDashboardFromApi({
+      ...dashboardReadSnake,
+      weekly_progress: [weeklyProgressActivityScopedSnake],
+    });
+
+    expect(mapped.weeklyProgress[0]).toMatchObject({
+      periodStart: WTL_F1_PERIOD_START,
+      periodEnd: WTL_F1_PERIOD_END,
+    });
+  });
+
+  it('maps activity_id and activity_name for activity-scoped weekly targets', () => {
+    const mapped = mapDashboardFromApi({
+      ...dashboardReadSnake,
+      weekly_progress: [weeklyProgressActivityScopedSnake],
+    });
+
+    expect(mapped.weeklyProgress[0]).toMatchObject({
+      activityId: weeklyProgressActivityScopedSnake.activity_id,
+      activityName: weeklyProgressActivityScopedSnake.activity_name,
+    });
+  });
+
+  it('maps legacy class-scoped rows with null activity fields', () => {
+    const mapped = mapDashboardFromApi({
+      ...dashboardReadSnake,
+      weekly_progress: [weeklyProgressLegacyClassSnake],
+    });
+
+    expect(mapped.weeklyProgress[0]).toMatchObject({
+      className: weeklyProgressLegacyClassSnake.class_name,
+      activityId: null,
+      activityName: null,
+    });
+  });
+});
+
+describe('mapDashboardFromApi — WTL.F4 load-tax graph contract', () => {
+  it('maps week_load_threshold null to null instead of coercing to zero', () => {
+    const mapped = mapDashboardFromApi({
+      ...dashboardReadSnake,
+      week_load_threshold: null,
+    });
+
+    expect(mapped.weekLoadThreshold).toBeNull();
+  });
+
+  it('maps a 30-day load_series with load-tax daily_load fields', () => {
+    const mapped = mapDashboardFromApi({
+      ...dashboardReadSnake,
+      as_of: WTL_F4_AS_OF,
+      load_series: wtlF4LoadSeriesSnake,
+      week_load_threshold: null,
+    });
+
+    expect(mapped.loadSeries).toHaveLength(WTL_F4_GRAPH_WINDOW_DAYS);
+    expect(mapped.loadSeries[0]).toMatchObject({
+      date: WTL_F4_GRAPH_START,
+      load: expect.any(Number),
+      dailyLoad: expect.any(Number),
+    });
+    expect(mapped.loadSeries.at(-1)).toMatchObject({
+      date: WTL_F4_AS_OF,
+      load: expect.any(Number),
+      dailyLoad: expect.any(Number),
+    });
+  });
+});
+
+/** Bridge until mapLoadRiskSummaryFromApi returns ruleLimitRows (WTL.F5). */
+function asWtlF5LoadRiskSummary(
+  mapped: LoadRiskSummary | null,
+): LoadRiskSummaryWtlF5 | null {
+  return mapped as unknown as LoadRiskSummaryWtlF5 | null;
+}
+
+describe('mapLoadRiskSummaryFromApi — WTL.F5 rule-limit row shape', () => {
+  it('maps rule_limit_rows with scope, rule metadata, and display fields', () => {
+    const mapped = asWtlF5LoadRiskSummary(mapLoadRiskSummaryFromApi(wtlF5FootLoadSummarySnake));
+
+    expect(mapped?.ruleLimitRows).toHaveLength(wtlF5FootLoadSummarySnake.rule_limit_rows.length);
+    expect(mapped?.ruleLimitRows[0]).toMatchObject({
+      id: wtlF5ClassFrequencyRow.id,
+      scope: 'class',
+      ruleId: wtlF5ClassFrequencyRow.ruleId,
+      ruleType: wtlF5ClassFrequencyRow.ruleType,
+      activityClassId: wtlF5ClassFrequencyRow.activityClassId,
+      className: wtlF5ClassFrequencyRow.className,
+      actual: wtlF5ClassFrequencyRow.actual,
+      limit: wtlF5ClassFrequencyRow.limit,
+      unit: wtlF5ClassFrequencyRow.unit,
+      state: wtlF5ClassFrequencyRow.state,
+      label: wtlF5ClassFrequencyRow.label,
+      displayMode: 'bar',
+    });
+  });
+
+  it('maps activity-scoped rows with activity_id and activity_name', () => {
+    const mapped = asWtlF5LoadRiskSummary(mapLoadRiskSummaryFromApi(wtlF5FootLoadSummarySnake));
+    const walkRow = mapped?.ruleLimitRows.find((row) => row.id === wtlF5WalkWeeklyVolumeRow.id);
+    const bikeRow = mapped?.ruleLimitRows.find((row) => row.id === wtlF5BikeDailyVolumeRow.id);
+
+    expect(walkRow).toMatchObject({
+      scope: 'activity',
+      activityId: wtlF5WalkWeeklyVolumeRow.activityId,
+      activityName: wtlF5WalkWeeklyVolumeRow.activityName,
+      unit: 'km',
+    });
+    expect(bikeRow).toMatchObject({
+      scope: 'activity',
+      activityId: wtlF5BikeDailyVolumeRow.activityId,
+      activityName: wtlF5BikeDailyVolumeRow.activityName,
+      unit: 'minutes',
+    });
+  });
+
+  it('maps rest_between_class rows with display_mode status', () => {
+    const mapped = asWtlF5LoadRiskSummary(mapLoadRiskSummaryFromApi(wtlF5FootLoadSummarySnake));
+    const restRow = mapped?.ruleLimitRows.find((row) => row.id === wtlF5ClassRestRow.id);
+
+    expect(restRow).toMatchObject({
+      ruleType: 'rest_between_class',
+      displayMode: 'status',
+      label: wtlF5ClassRestRow.label,
+    });
+  });
+
+  it('maps week_days with load-tax state on each cell', () => {
+    const mapped = asWtlF5LoadRiskSummary(mapLoadRiskSummaryFromApi(wtlF5FootLoadSummarySnake));
+
+    expect(mapped?.weekDays).toHaveLength(7);
+    mapped?.weekDays.forEach((day, index) => {
+      expect(day).toMatchObject({
+        date: wtlF5WeekDays[index]!.date,
+        flagged: wtlF5WeekDays[index]!.flagged,
+        state: wtlF5WeekDays[index]!.state,
+      });
+    });
+  });
+
+  it('maps empty rule_limit_rows to an empty array', () => {
+    const mapped = asWtlF5LoadRiskSummary(mapLoadRiskSummaryFromApi(wtlF5EmptySummarySnake));
+
+    expect(mapped?.ruleLimitRows).toEqual([]);
+    expect(mapped?.weekDays).toHaveLength(7);
+  });
+
+  it('maps load_risk_summary through dashboard payload', () => {
+    const mapped = mapDashboardFromApi({
+      ...dashboardReadSnake,
+      load_risk_summary: wtlF5FootLoadSummarySnake,
+    });
+    const loadRisk = asWtlF5LoadRiskSummary(mapped.loadRiskSummary);
+
+    expect(loadRisk?.ruleLimitRows).toHaveLength(
+      wtlF5FootLoadSummarySnake.rule_limit_rows.length,
+    );
+    expect(loadRisk?.weekDays[0]).toMatchObject({
+      date: wtlF5WeekDays[0]!.date,
+      state: wtlF5WeekDays[0]!.state,
+    });
+  });
+});
+
+describe('mapLoadSummaryFromApi — WTL.F1 weekly progress metadata', () => {
+  it('maps period and activity fields on weekly_progress rows', () => {
+    const mapped = mapLoadSummaryFromApi({
+      as_of: WTL_F1_PERIOD_END,
+      class_statuses: [],
+      suggestions: [],
+      weekly_progress: [weeklyProgressActivityScopedSnake],
+    });
+
+    expect(mapped.weeklyProgress[0]).toMatchObject({
+      periodStart: WTL_F1_PERIOD_START,
+      periodEnd: WTL_F1_PERIOD_END,
+      activityId: weeklyProgressActivityScopedSnake.activity_id,
+      activityName: weeklyProgressActivityScopedSnake.activity_name,
+    });
   });
 });

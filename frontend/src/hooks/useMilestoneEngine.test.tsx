@@ -8,7 +8,7 @@
  *
  * Extends with tests for the new queries (goals, rules, weeklyTargets,
  * previousBlocks) and mutations (submitNewActivity, createGoal, archiveGoal,
- * createRule, deleteRule, createTrainingBlock, updateGoal, updateRule,
+ * createRule, deleteRule, updateGoal, updateRule,
  * updateActivity, deactivateActivity).
  *
  * H10.1 — delayed-tax useQuery on useMilestoneEngine.
@@ -46,6 +46,7 @@ vi.mock('../lib/api', () => ({
   listActivityLogs: vi.fn(),
   createActivityLog: vi.fn(),
   patchActivityLog: vi.fn(),
+  deleteActivityLog: vi.fn(),
   createDailyCheckIn: vi.fn(),
   createFlareUpIncident: vi.fn(),
   checkViolations: vi.fn(),
@@ -61,7 +62,6 @@ vi.mock('../lib/api', () => ({
   deleteRule: vi.fn(),
   createWeeklyTarget: vi.fn(),
   patchWeeklyTarget: vi.fn(),
-  createTrainingBlock: vi.fn(),
   createActivity: vi.fn(),
   createActivityClass: vi.fn(),
   patchActivityClass: vi.fn(),
@@ -77,6 +77,7 @@ import {
   listActivityLogs,
   createActivityLog,
   patchActivityLog,
+  deleteActivityLog,
   checkViolations as checkViolationsApi,
   // F2.0 additions
   listGoals,
@@ -90,7 +91,6 @@ import {
   deleteRule as deleteRuleApi,
   createWeeklyTarget as createWeeklyTargetApi,
   patchWeeklyTarget as patchWeeklyTargetApi,
-  createTrainingBlock as createTrainingBlockApi,
   createActivity,
   createActivityClass,
   patchActivityClass,
@@ -229,7 +229,6 @@ function setupDefaultApiMocks(): void {
   vi.mocked(createRuleApi).mockResolvedValue(ruleFixture);
   vi.mocked(patchRule).mockResolvedValue(ruleFixture);
   vi.mocked(deleteRuleApi).mockResolvedValue(undefined);
-  vi.mocked(createTrainingBlockApi).mockResolvedValue(activeBlockFixture);
   vi.mocked(createActivity).mockResolvedValue({
     id: MOCK_UUID,
     activityClassId: 'cls-foot',
@@ -255,6 +254,7 @@ function setupDefaultApiMocks(): void {
   });
   vi.mocked(deleteActivityClass).mockResolvedValue(undefined);
   vi.mocked(patchActivity).mockResolvedValue(activityFixture);
+  vi.mocked(deleteActivityLog).mockResolvedValue(undefined);
   vi.mocked(listActivities).mockResolvedValue([]);
   vi.mocked(listDailyCheckIns).mockResolvedValue([
     {
@@ -516,6 +516,28 @@ describe('useMilestoneEngine API rewire (F1.3)', () => {
         volumeValue: 2.5,
         rpe: 5,
         asOf: dashboardPayload.todayDate,
+      });
+    });
+  });
+
+  it('checkViolations uses an explicit as_of when the form supplies one', async () => {
+    const { result } = renderHookWithProviders(() => useMilestoneEngine());
+
+    result.current.checkViolations(
+      'act-walk',
+      2.5,
+      5,
+      undefined,
+      undefined,
+      '2026-05-20',
+    );
+
+    await waitFor(() => {
+      expect(checkViolationsApi).toHaveBeenCalledWith({
+        activityId: 'act-walk',
+        volumeValue: 2.5,
+        rpe: 5,
+        asOf: '2026-05-20',
       });
     });
   });
@@ -1183,44 +1205,10 @@ describe('useMilestoneEngine data plane (F2.0)', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // createTrainingBlock mutation
-  // ---------------------------------------------------------------------------
-
-  it('createTrainingBlock calls createTrainingBlockApi with a generated id', async () => {
-    const { result, queryClient } = renderHookWithProviders(() => useMilestoneEngine());
-    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
-
-    await waitFor(() => {
-      expect(result.current.todayDate).toBe(dashboardPayload.todayDate);
-    });
-
-    act(() => {
-      result.current.createTrainingBlock({
-        name: 'Phase 3 Build',
-        startDate: '2026-06-01',
-      });
-    });
-
-    await waitFor(() => {
-      expect(createTrainingBlockApi).toHaveBeenCalledTimes(1);
-    });
-
-    const draft = vi.mocked(createTrainingBlockApi).mock.calls[0]?.[0];
-    expect(draft?.id).toBe(MOCK_UUID);
-    expect(draft?.name).toBe('Phase 3 Build');
-    expect(draft?.startDate).toBe('2026-06-01');
-
-    await waitFor(() => {
-      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['dashboard'] });
-    });
-    expect(invalidateSpy).not.toHaveBeenCalledWith({ queryKey: ['training-blocks'] });
-  });
-
-  // ---------------------------------------------------------------------------
   // New draft interfaces exported from hook module
   // ---------------------------------------------------------------------------
 
-  it('exports NewActivityDraft, GoalDraft, GoalPatch, RuleDraft, RulePatch, BlockDraft type shapes (compile-time)', async () => {
+  it('exports NewActivityDraft, GoalDraft, GoalPatch, RuleDraft, and RulePatch type shapes (compile-time)', async () => {
     // This test validates that the hook module exports the required draft
     // interfaces. It is a structural/type test: if the types are missing the
     // TypeScript compiler will error before the test even runs.
@@ -1271,7 +1259,10 @@ describe('useMilestoneEngine data plane (F2.0)', () => {
     expect(typeof result.current.deleteRule).toBe('function');
     expect(typeof result.current.createWeeklyTarget).toBe('function');
     expect(typeof result.current.patchWeeklyTarget).toBe('function');
-    expect(typeof result.current.createTrainingBlock).toBe('function');
+    expect('createTrainingBlock' in result.current).toBe(false);
+    expect('setupWeeklyFocus' in result.current).toBe(false);
+    expect('resetWeeklyFocus' in result.current).toBe(false);
+    expect('patchFocusTitle' in result.current).toBe(false);
   });
 });
 
@@ -1728,6 +1719,25 @@ describe('useMilestoneEngine — S25.F8/F9 check-ins and activity class mutation
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['dashboard'] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['activity-classes'] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['activities'] });
+  });
+
+  it('deleteLog DELETEs and invalidates dashboard, activity logs, activities, and delayed tax', async () => {
+    const { result, queryClient } = renderHookWithProviders(() => useMilestoneEngine());
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    await waitFor(() => {
+      expect(result.current.todayDate).toBe(dashboardPayload.todayDate);
+    });
+
+    await act(async () => {
+      await result.current.deleteLog('log-1');
+    });
+
+    expect(deleteActivityLog).toHaveBeenCalledWith('log-1');
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['dashboard'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['activity-logs'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['activities'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['delayed-tax'] });
   });
 
   it('submitCheckIn invalidates daily-check-ins on success', async () => {

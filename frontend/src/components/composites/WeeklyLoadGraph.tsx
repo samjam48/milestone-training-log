@@ -43,8 +43,8 @@ export interface WeeklyLoadGraphProps {
   series?: LoadPoint[];
   /** Rolling-window size. Defaults to 7 (matches our weekly cap rule). */
   windowDays?: number;
-  /** Weekly load cap from the active Training Block's rule. */
-  threshold: number;
+  /** Weekly load cap from the active Training Block's rule; null hides cap UI. */
+  threshold: number | null;
   /** Dates the user logged a FlareUpIncident — rendered as red discs. */
   flareUpDates?: ISODate[];
   /** Card title. */
@@ -72,6 +72,18 @@ const PLOT_H = VB_H - PAD_T - PAD_B;
 // the cap" signal before they breach it. Tunable; matches DESIGN.md's
 // "pushing it" definition.
 const CAUTION_RATIO = 0.8;
+
+/** Dashboard graph window — last N days ending on as-of (WTL.B5 / WTL.F4). */
+export const LOAD_GRAPH_WINDOW_DAYS = 30;
+
+export const LOAD_GRAPH_SUBTITLE = 'Rolling 7-day effort load · last 30 days';
+
+export const LOAD_TAX_FORMULA_COPY =
+  'Performance sessions weighted by effort, rule pressure, and recency';
+
+function hasLoadCap(threshold: number | null): threshold is number {
+  return threshold != null && threshold > 0;
+}
 
 function stateForLoad(load: number, threshold: number): SafetyState {
   if (load >= threshold) return 'danger';
@@ -114,10 +126,18 @@ export const WeeklyLoadGraph: React.FC<WeeklyLoadGraphProps> = ({
     return buildLoadSeries(logs, startDate, endDate, windowDays);
   }, [series, logs, startDate, endDate, windowDays]);
 
-  // y-domain: 0 → max(threshold * 1.2, max load) so the threshold line is always
-  // visible AND a breach doesn't get clipped at the top.
+  // y-domain: when a cap exists, pad above threshold; otherwise scale to data only.
   const maxLoad = data.reduce((m, p) => Math.max(m, p.load), 0);
-  const yMax = Math.max(threshold * 1.2, maxLoad, 1);
+  const showCap = hasLoadCap(threshold);
+  const yMax = showCap
+    ? Math.max(threshold * 1.2, maxLoad, 1)
+    : Math.max(maxLoad, 1);
+
+  const yTicks = showCap
+    ? [0, threshold / 2, threshold]
+    : maxLoad <= 0
+      ? [0]
+      : [0, maxLoad / 2];
 
   // x scale: index-based, evenly spaced (one tick per day).
   const n = data.length;
@@ -138,7 +158,7 @@ export const WeeklyLoadGraph: React.FC<WeeklyLoadGraphProps> = ({
 
   // Current state = state of the most recent point (what the user feels NOW).
   const latest = data[data.length - 1];
-  const currentState: SafetyState = latest
+  const currentState: SafetyState = latest && showCap
     ? stateForLoad(latest.load, threshold)
     : 'safe';
 
@@ -161,7 +181,7 @@ export const WeeklyLoadGraph: React.FC<WeeklyLoadGraphProps> = ({
           size="sm"
           state={currentState}
           value={latest ? Math.round(latest.load) : 0}
-          unit={`/ ${Math.round(threshold)}`}
+          unit={showCap ? `/ ${Math.round(threshold)}` : undefined}
           caption={`${windowDays}d load`}
         />
       </CardHeader>
@@ -186,8 +206,8 @@ export const WeeklyLoadGraph: React.FC<WeeklyLoadGraphProps> = ({
             rx={4}
           />
 
-          {/* Y-axis gridlines + labels at 0, ½ threshold, threshold. */}
-          {[0, threshold / 2, threshold].map((v, i) => (
+          {/* Y-axis gridlines + labels. */}
+          {yTicks.map((v, i) => (
             <g key={i}>
               <line
                 x1={PAD_L}
@@ -196,10 +216,10 @@ export const WeeklyLoadGraph: React.FC<WeeklyLoadGraphProps> = ({
                 y2={yAt(v)}
                 className={cn(
                   'stroke-border-subtle',
-                  v === threshold && 'stroke-caution-border',
+                  showCap && v === threshold && 'stroke-caution-border',
                 )}
-                strokeWidth={v === threshold ? 1 : 0.5}
-                strokeDasharray={v === threshold ? '4 3' : undefined}
+                strokeWidth={showCap && v === threshold ? 1 : 0.5}
+                strokeDasharray={showCap && v === threshold ? '4 3' : undefined}
               />
               <text
                 x={PAD_L - 4}
@@ -213,16 +233,17 @@ export const WeeklyLoadGraph: React.FC<WeeklyLoadGraphProps> = ({
             </g>
           ))}
 
-          {/* Threshold annotation — small "cap" tag at the dashed line's right end. */}
-          <text
-            x={PAD_L + PLOT_W - 4}
-            y={yAt(threshold) - 4}
-            textAnchor="end"
-            className="fill-caution-fg uppercase"
-            style={{ fontSize: 7, letterSpacing: '0.08em' }}
-          >
-            cap
-          </text>
+          {showCap ? (
+            <text
+              x={PAD_L + PLOT_W - 4}
+              y={yAt(threshold) - 4}
+              textAnchor="end"
+              className="fill-caution-fg uppercase"
+              style={{ fontSize: 7, letterSpacing: '0.08em' }}
+            >
+              cap
+            </text>
+          ) : null}
 
           {/* Area fill under the curve. */}
           <path d={areaPath} className={fill[currentState]} />
@@ -244,7 +265,7 @@ export const WeeklyLoadGraph: React.FC<WeeklyLoadGraphProps> = ({
               cx={xAt(i)}
               cy={yAt(p.load)}
               r={1.4}
-              className={stroke[stateForLoad(p.load, threshold)]}
+              className={stroke[showCap ? stateForLoad(p.load, threshold) : 'safe']}
               strokeWidth={1}
               fill="currentColor"
             />
@@ -289,12 +310,19 @@ export const WeeklyLoadGraph: React.FC<WeeklyLoadGraphProps> = ({
         </svg>
       )}
 
-      {/* Legend row — explains the dashed line and the red dots in one breath. */}
-      <div className="mt-3 flex items-center gap-4 text-caption text-ink-muted">
-        <LegendSwatch className="bg-caution" dashed />
-        <span>Weekly cap</span>
-        <LegendSwatch className="bg-danger" round />
-        <span>Flare-up</span>
+      {/* Legend row — cap swatch only when a threshold exists. */}
+      <div className="mt-3 flex flex-col gap-2">
+        <p className="text-caption text-ink-muted">{LOAD_TAX_FORMULA_COPY}</p>
+        <div className="flex items-center gap-4 text-caption text-ink-muted">
+          {showCap ? (
+            <>
+              <LegendSwatch className="bg-caution" dashed />
+              <span>Weekly cap</span>
+            </>
+          ) : null}
+          <LegendSwatch className="bg-danger" round />
+          <span>Flare-up</span>
+        </div>
       </div>
     </Card>
   );

@@ -2,7 +2,6 @@ import type { DailySafetyScore, ISODate, TrainingBlock } from '../../types';
 import type { LoadPoint } from '../load';
 import { apiFetch, apiFetchOrNullOn404 } from './client';
 import {
-  mapTrainingBlockCreateBody,
   mapTrainingBlockFromApi,
   mapTrainingBlockPatchBody,
   mapDailySafetyScoreFromApi,
@@ -19,16 +18,6 @@ export async function listTrainingBlocks(): Promise<TrainingBlockRead[]> {
 export async function getActiveTrainingBlock(): Promise<TrainingBlockRead | null> {
   const raw = await apiFetchOrNullOn404<Record<string, unknown>>('/training-blocks/active');
   return raw == null ? null : mapTrainingBlockFromApi(raw);
-}
-
-export async function createTrainingBlock(
-  draft: Record<string, unknown>,
-): Promise<TrainingBlockRead> {
-  const raw = await apiFetch<Record<string, unknown>>('/training-blocks', {
-    method: 'POST',
-    body: JSON.stringify(mapTrainingBlockCreateBody(draft)),
-  });
-  return mapTrainingBlockFromApi(raw);
 }
 
 export async function patchTrainingBlock(

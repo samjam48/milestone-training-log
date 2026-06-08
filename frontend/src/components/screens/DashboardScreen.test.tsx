@@ -6,6 +6,8 @@
  * Load-risk panel removed from dashboard (owner feedback 2026-06-04); delayed tax kept on incident/check-in flows.
  * F10.5 — Load graph title from engine.graphClassId (plans/tickets-phase-10-polish-2026-06-04.md).
  * S25.F2 — Goals dashboard card (plans/tickets-stage-2-5-usage-logic-2026-06-06.md).
+ * WTL.F1 — This Week weekly progress card (plans/tickets-weekly-targets-load-risk-2026-06-07.md).
+ * WTL.F6 — Remove Recovery streaks dashboard section (plans/tickets-weekly-targets-load-risk-2026-06-07.md).
  *
  * Mocking strategy (mirrors BlockReviewScreen.test.tsx):
  *   - CalendarHeatmap: stubbed to a simple div — tests verify screen wiring, not heatmap internals
@@ -14,7 +16,7 @@
  *   - DashboardScreen receives engine directly as a prop
  */
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { screen, cleanup, within } from '@testing-library/react';
 import { renderWithProviders } from '../../test/renderWithProviders';
 import { mockEngine, resetMockEngine } from '../../test/mockEngine';
@@ -27,6 +29,16 @@ import {
   goalDashboardRowQualitative,
   type GoalDashboardRow,
 } from '../../test/goalDashboardRowFixtures';
+import {
+  WTL_F1_PERIOD_END,
+  WTL_F1_PERIOD_START,
+  activityScopedWeeklyProgress,
+  completeWeeklyProgress,
+  legacyClassWeeklyProgress,
+  overCompleteWeeklyProgress,
+  type WeeklyProgressWtlF1,
+} from '../../test/wtlF1WeeklyProgressFixtures';
+import type { WeeklyProgress } from '../../lib/engine';
 import { DashboardScreen } from './DashboardScreen';
 
 type EngineWithGoalRows = MilestoneEngineResult & { goalRows: GoalDashboardRow[] };
@@ -143,30 +155,44 @@ const ARM_PERFORMANCE_CLASS: ActivityClass = {
 
 const LOAD_RISK_SUMMARY: LoadRiskSummary = {
   weekDays: [
-    { date: '2026-05-22', flagged: true },
-    { date: '2026-05-23', flagged: false },
-    { date: '2026-05-24', flagged: true },
-    { date: '2026-05-25', flagged: false },
-    { date: '2026-05-26', flagged: false },
-    { date: '2026-05-27', flagged: false },
-    { date: '2026-05-28', flagged: false },
+    { date: '2026-05-22', flagged: true, state: 'caution' },
+    { date: '2026-05-23', flagged: false, state: 'safe' },
+    { date: '2026-05-24', flagged: true, state: 'caution' },
+    { date: '2026-05-25', flagged: false, state: 'safe' },
+    { date: '2026-05-26', flagged: false, state: 'safe' },
+    { date: '2026-05-27', flagged: false, state: 'safe' },
+    { date: '2026-05-28', flagged: false, state: 'safe' },
   ],
-  classBars: [
+  ruleLimitRows: [
     {
+      id: 'row-foot-km',
+      scope: 'class',
+      ruleId: 'rule-foot-km',
+      ruleType: 'weekly_volume_cap',
       activityClassId: 'cls-foot',
       className: 'Foot load',
       actual: 8,
       limit: 10,
       unit: 'km',
-      exercises: [
-        {
-          activityId: 'act-walk',
-          activityName: 'Walking',
-          actual: 5,
-          limit: 6,
-          unit: 'km',
-        },
-      ],
+      state: 'safe',
+      label: 'Foot load weekly volume',
+      displayMode: 'bar',
+    },
+    {
+      id: 'row-walk-km',
+      scope: 'activity',
+      ruleId: 'rule-walk-km',
+      ruleType: 'weekly_volume_cap',
+      activityClassId: 'cls-foot',
+      className: 'Foot load',
+      activityId: 'act-walk',
+      activityName: 'Walking',
+      actual: 5,
+      limit: 6,
+      unit: 'km',
+      state: 'caution',
+      label: 'Walking weekly volume',
+      displayMode: 'bar',
     },
   ],
 };
@@ -233,6 +259,35 @@ function renderDashboard() {
       onOpenLogActivity={vi.fn()}
     />,
   );
+}
+
+function setupDashboardWeeklyProgress(
+  weeklyProgress: WeeklyProgressWtlF1[],
+  options: { todayDate?: string } = {},
+): void {
+  mockEngine.block = ACTIVE_BLOCK;
+  mockEngine.dailyScores = DAILY_SCORES;
+  mockEngine.previousBlocks = [];
+  mockEngine.recoveryStreaks = [];
+  mockEngine.weeklyProgress = weeklyProgress as WeeklyProgress[];
+  if (options.todayDate != null) {
+    mockEngine.todayDate = options.todayDate;
+  }
+}
+
+function weeklyProgressSection(): HTMLElement {
+  const heading = screen.getByText('This week');
+  const section = heading.closest('div');
+  if (section == null) {
+    throw new Error('Expected weekly progress section wrapper');
+  }
+  return section;
+}
+
+function progressBarFillForLabel(label: string): HTMLElement | null {
+  const labelEl = within(weeklyProgressSection()).getByText(label);
+  const barRoot = labelEl.closest('.w-full');
+  return barRoot?.querySelector<HTMLElement>('[role="progressbar"] > div') ?? null;
 }
 
 describe('DashboardScreen — BlockSafetyMapSection: active block heatmap', () => {
@@ -350,56 +405,94 @@ describe('DashboardScreen — BlockSafetyMapSection: no active block', () => {
   });
 });
 
-describe('DashboardScreen — F10.1 recovery streaks section', () => {
-  it('renders a Recovery streaks section below Last 7 days with daily and weekly copy', () => {
-    mockEngine.block = ACTIVE_BLOCK;
-    mockEngine.dailyScores = DAILY_SCORES;
-    mockEngine.previousBlocks = [];
-    mockEngine.recoveryStreaks = [DAILY_RECOVERY_STREAK, WEEKLY_RECOVERY_STREAK];
+/**
+ * WTL.F6 implementer: record a future recovery-streak feature in plans/BACKLOG.md
+ * (weekly-target completion history, not the retired dashboard section).
+ */
+const recoveryWeeklyTargetProgress: WeeklyProgressWtlF1 = {
+  weeklyTargetId: 'wt-wtl-contrast',
+  activityClassId: 'cls-recovery',
+  className: 'Recovery',
+  activityId: 'act-contrast',
+  activityName: 'Contrast therapy',
+  value: 2,
+  target: 3,
+  unit: 'sessions',
+  state: 'safe',
+  periodStart: WTL_F1_PERIOD_START,
+  periodEnd: WTL_F1_PERIOD_END,
+};
 
+function setupDashboardWtlF6(options: {
+  recoveryStreaks?: RecoveryStreak[];
+  weeklyProgress?: WeeklyProgressWtlF1[];
+  cleanStreak?: number;
+} = {}): void {
+  mockEngine.block = ACTIVE_BLOCK;
+  mockEngine.dailyScores = DAILY_SCORES;
+  mockEngine.previousBlocks = [];
+  mockEngine.recoveryStreaks = options.recoveryStreaks ?? [];
+  mockEngine.weeklyProgress = (options.weeklyProgress ?? []) as WeeklyProgress[];
+  if (options.cleanStreak != null) {
+    mockEngine.cleanStreak = options.cleanStreak;
+  }
+}
+
+describe('DashboardScreen — WTL.F6 remove recovery streaks section', () => {
+  beforeEach(() => {
     useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
-
-    renderDashboard();
-
-    const weeklyLabel = screen.getByText('Last 7 days');
-    const recoveryLabel = screen.getByText('Recovery streaks');
-    assertAppearsAfter(weeklyLabel, recoveryLabel);
-
-    expect(screen.getByText(/Stretching: 4 days in a row/i)).toBeInTheDocument();
-    expect(screen.getByText(/Contrast therapy: 2 weeks in a row/i)).toBeInTheDocument();
   });
 
-  it('shows compact empty copy when recoveryStreaks is empty on an active block', () => {
-    mockEngine.block = ACTIVE_BLOCK;
-    mockEngine.dailyScores = DAILY_SCORES;
-    mockEngine.previousBlocks = [];
-    mockEngine.recoveryStreaks = [];
-
-    useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
+  it('does not render a Recovery streaks section when recoveryStreaks has entries', () => {
+    setupDashboardWtlF6({
+      recoveryStreaks: [DAILY_RECOVERY_STREAK, WEEKLY_RECOVERY_STREAK],
+    });
 
     renderDashboard();
 
-    expect(screen.getByText('Recovery streaks')).toBeInTheDocument();
+    expect(screen.queryByText('Recovery streaks')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Stretching: 4 days in a row/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Contrast therapy: 2 weeks in a row/i)).not.toBeInTheDocument();
+  });
+
+  it('does not show No recovery targets in this block empty copy', () => {
+    setupDashboardWtlF6({ recoveryStreaks: [] });
+
+    renderDashboard();
+
+    expect(screen.queryByText('Recovery streaks')).not.toBeInTheDocument();
     expect(
-      screen.getByText(/No recovery targets in this block/i),
-    ).toBeInTheDocument();
+      screen.queryByText(/No recovery targets in this block/i),
+    ).not.toBeInTheDocument();
   });
 
-  it('keeps recovery streaks separate from the clean streak section', () => {
-    mockEngine.block = ACTIVE_BLOCK;
-    mockEngine.dailyScores = DAILY_SCORES;
-    mockEngine.previousBlocks = [];
-    mockEngine.recoveryStreaks = [DAILY_RECOVERY_STREAK];
-    mockEngine.cleanStreak = 3;
-
-    useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
+  it('shows recovery weekly targets in the This week section as progress bars', () => {
+    setupDashboardWtlF6({
+      recoveryStreaks: [WEEKLY_RECOVERY_STREAK],
+      weeklyProgress: [recoveryWeeklyTargetProgress],
+    });
 
     renderDashboard();
 
-    expect(screen.getByText('Recovery streaks')).toBeInTheDocument();
+    const section = weeklyProgressSection();
+    expect(within(section).getByText('Contrast therapy')).toBeInTheDocument();
+    expect(within(section).getByText(/2 sessions \/ 3 sessions/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Contrast therapy: 2 weeks in a row/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('Recovery streaks')).not.toBeInTheDocument();
+  });
+
+  it('keeps clean streak separate and unaffected by recoveryStreaks payload', () => {
+    setupDashboardWtlF6({
+      recoveryStreaks: [DAILY_RECOVERY_STREAK],
+      cleanStreak: 3,
+    });
+
+    renderDashboard();
+
     expect(screen.getByText('Clean streak')).toBeInTheDocument();
-    expect(screen.getByText(/Stretching: 4 days in a row/i)).toBeInTheDocument();
     expect(screen.getByText(/3 clean sessions in a row/i)).toBeInTheDocument();
+    expect(screen.queryByText('Recovery streaks')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Stretching: 4 days in a row/i)).not.toBeInTheDocument();
   });
 });
 
@@ -485,7 +578,7 @@ describe('DashboardScreen — F10.5 load graph title (engine.graphClassId / B10.
 });
 
 describe('DashboardScreen — Load risk visual panel (engine.loadRiskSummary)', () => {
-  it('renders Load risk after the load graph with week strip and class bars', () => {
+  it('renders Load risk after the load graph with week strip and rule rows', () => {
     setupDashboardWithLoadRisk(LOAD_RISK_SUMMARY);
     useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
 
@@ -498,7 +591,7 @@ describe('DashboardScreen — Load risk visual panel (engine.loadRiskSummary)', 
     assertAppearsAfter(section, blockSafetyLabel);
 
     expect(screen.getByTestId('load-risk-week-strip')).toBeInTheDocument();
-    expect(screen.getByTestId('load-risk-class-bars')).toBeInTheDocument();
+    expect(screen.getByTestId('load-risk-rule-rows')).toBeInTheDocument();
     expect(screen.getByText('8 / 10 km')).toBeInTheDocument();
   });
 
@@ -533,7 +626,7 @@ describe('DashboardScreen — S25.F2 Goals card', () => {
     assignGoalRows(goalRows);
   }
 
-  it('renders GoalsCard below Last 7 days when engine.goalRows has entries', () => {
+  it('renders GoalsCard below This week when engine.goalRows has entries', () => {
     setupDashboardWithGoalRows([
       goalDashboardRowNumeric,
       goalDashboardRowQualitative,
@@ -543,7 +636,7 @@ describe('DashboardScreen — S25.F2 Goals card', () => {
 
     renderDashboard();
 
-    const weeklyLabel = screen.getByText('Last 7 days');
+    const weeklyLabel = screen.getByText('This week');
     const goalsCard = screen.getByTestId('goals-card');
     assertAppearsAfter(weeklyLabel, goalsCard);
 
@@ -604,6 +697,76 @@ describe('DashboardScreen — S25.F2 Goals card', () => {
     const row = screen.getByTestId(`goals-card-row-${goalDashboardRowAchieved.goalId}`);
     expect(row).toHaveAttribute('data-achieved', 'true');
     expect(row.className).toMatch(/opacity-|text-ink-muted|text-ink-faint/);
+  });
+});
+
+describe('DashboardScreen — WTL.F1 This Week weekly progress card', () => {
+  beforeEach(() => {
+    useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
+  });
+
+  it('labels the weekly targets section This week instead of Last 7 days', () => {
+    setupDashboardWeeklyProgress([]);
+    renderDashboard();
+
+    expect(screen.getByText('This week')).toBeInTheDocument();
+    expect(screen.queryByText('Last 7 days')).not.toBeInTheDocument();
+  });
+
+  it('shows neutral empty copy when no weekly targets are configured', () => {
+    setupDashboardWeeklyProgress([]);
+    renderDashboard();
+
+    expect(
+      within(weeklyProgressSection()).getByText(/No weekly targets configured/i),
+    ).toBeInTheDocument();
+  });
+
+  it('shows activity names for activity-scoped targets and class names for legacy targets', () => {
+    setupDashboardWeeklyProgress([
+      activityScopedWeeklyProgress,
+      legacyClassWeeklyProgress,
+    ]);
+    renderDashboard();
+
+    const section = weeklyProgressSection();
+    expect(within(section).getByText('Morning Walk')).toBeInTheDocument();
+    expect(within(section).getByText('WTL Foot Load')).toBeInTheDocument();
+    expect(within(section).queryAllByText('WTL Foot Load')).toHaveLength(1);
+  });
+
+  it('shows the Monday–Sunday period instead of rolling seven-day copy', () => {
+    setupDashboardWeeklyProgress([activityScopedWeeklyProgress], {
+      todayDate: WTL_F1_PERIOD_END,
+    });
+    renderDashboard();
+
+    const section = weeklyProgressSection();
+    expect(within(section).queryByText(/last 7 days/i)).not.toBeInTheDocument();
+    expect(within(section).queryByText(/rolling/i)).not.toBeInTheDocument();
+    expect(within(section).queryByText(/past 7/i)).not.toBeInTheDocument();
+    expect(within(section).getByText(/Jun 1.*Jun 7/i)).toBeInTheDocument();
+  });
+
+  it('renders a met minimum target as safe, not danger', () => {
+    setupDashboardWeeklyProgress([completeWeeklyProgress]);
+    renderDashboard();
+
+    const fill = progressBarFillForLabel('Stationary Bike');
+    expect(fill).not.toBeNull();
+    expect(fill?.className).toMatch(/bg-safe/);
+    expect(fill?.className).not.toMatch(/bg-danger/);
+  });
+
+  it('does not render an over-complete minimum target as danger', () => {
+    setupDashboardWeeklyProgress([overCompleteWeeklyProgress]);
+    renderDashboard();
+
+    const fill = progressBarFillForLabel('Morning Walk');
+    expect(fill).not.toBeNull();
+    expect(fill?.className).toMatch(/bg-safe/);
+    expect(fill?.className).not.toMatch(/bg-danger/);
+    expect(fill?.className).not.toMatch(/bg-caution/);
   });
 });
 

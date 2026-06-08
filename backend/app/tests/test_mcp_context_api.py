@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import date, timedelta
 
 import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
 
+from app.services.training_blocks import calendar_week_bounds, calendar_week_label
 from app.tests.helpers.load_api_seed import seed_daily_check_in, seed_dashboard_mock_graph
 from app.tests.helpers.load_api_test_utils import FROZEN_TODAY, foot_status, freeze_server_today
-from app.tests.helpers.load_engine_fixtures import AS_OF, BLOCK_START
+from app.tests.helpers.load_engine_fixtures import AS_OF
 from app.tests.helpers.seed import (
     seed_activity,
     seed_activity_class,
@@ -86,8 +87,9 @@ async def test_get_mcp_context_seeded_db_returns_200_with_all_required_keys(
     assert active_block is not None
     assert set(active_block.keys()) == ACTIVE_BLOCK_KEYS
     assert active_block["id"] == "blk-1"
-    assert active_block["name"] == "Mock Training Block"
-    assert active_block["start_date"] == BLOCK_START
+    week_start, week_end = calendar_week_bounds(date.fromisoformat(AS_OF))
+    assert active_block["name"] == calendar_week_label(week_start, week_end)
+    assert active_block["start_date"] == week_start.isoformat()
     assert active_block["status"] == "active"
     assert active_block["is_review_milestone_hit"] is False
 
@@ -113,7 +115,7 @@ async def test_get_mcp_context_seeded_db_returns_200_with_all_required_keys(
     assert walk_log["load_score"] == 4.5
 
 
-async def test_get_mcp_context_without_active_block_returns_null_block_without_500(
+async def test_get_mcp_context_auto_creates_weekly_focus_when_no_block_exists(
     app_with_test_database: FastAPI,
     client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -136,10 +138,16 @@ async def test_get_mcp_context_without_active_block_returns_null_block_without_5
     assert response.status_code == 200
     payload = response.json()
     assert set(payload.keys()) == EXPECTED_TOP_LEVEL_KEYS
-    assert payload["active_block"] is None
+    active_block = payload["active_block"]
+    assert active_block is not None
+    assert set(active_block.keys()) == ACTIVE_BLOCK_KEYS
+    assert active_block["status"] == "active"
+    assert active_block["is_review_milestone_hit"] is False
     assert payload["recent_logs"] == []
     assert payload["today_check_in"] is None
-    assert payload["class_statuses"] == []
+    assert payload["class_statuses"]
+    foot = foot_status(payload)
+    assert foot["state"] == "safe"
 
 
 async def test_get_mcp_context_today_check_in_when_check_in_exists_for_server_today(

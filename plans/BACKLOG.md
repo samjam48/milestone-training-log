@@ -42,7 +42,7 @@ Phase 10 ticket set that closed the last gaps.
 | Log History via `GET /api/activity-logs` | `LogHistoryScreen` + hook `activityLogs` query (Phase 6 F1.3) |
 | `activityClasses` display labels (was F1.4 / `cls-foot`) | Dashboard graph title + class status; `delayedTaxDisplay`; log rows use `activities` lookup |
 | Delayed-tax / load-risk panel | `LoadRiskSection` on `DashboardScreen` (F10.3); symptom attribution on check-in/incident (F10.4) |
-| Recovery streaks UI | **Dashboard** section (F10.1) — owner D1 moved off Settings |
+| ~~Recovery streaks UI~~ | **Retired (WTL.F6)** — F10.1 dashboard section removed; recovery weekly targets live in **This week** |
 | `CalendarHeatmap` + block review | `BlockSafetyMapSection` on Dashboard; `BlockReviewScreen` from Settings **Review** / **View** |
 | Edit goal | `GoalEditorScreen` via `GoalsScreen` → `onEditGoal` |
 | Edit / deactivate activity | `ActivityManagerScreen` + Settings inline confirm; `updateActivity` / `deactivateActivity` on hook |
@@ -117,9 +117,53 @@ Recorded after S25 batch review; not in polish ticket scope unless noted.
 | Exercise-scoped rule **409** on class delete untested | S25.B8 | Implemented; only class-level rule test exists |
 | eslint `react-refresh/only-export-components` warnings (3) | lint | Pre-existing in UI files |
 | ~~Log create/edit optimistic pop on mutation failure~~ | S25.F4 (D3) | **Done** — async save with loading overlay + inline error |
-| Dashboard `weekly_progress` vs Goals after P25.9 | P25.9 follow-up | **Owner (2026-06-07): keep as-is** — dashboard “Last 7 days” chart still reads `weekly_targets`; Goals tab is the only place to edit aspirational targets. Monitor whether two progress surfaces confuse daily use; revisit migrate-to-goals or retire chart. |
-| `weekly_targets` API / table lifecycle | P25.9 follow-up | **Keep for now** (display-only chart). `weekly_targets` rows remain in DB/API; no Edit Rules UI. Re-seed locally does not remove table. |
+| ~~Dashboard `weekly_progress` vs Goals after P25.9~~ | P25.9 → WTL | **Superseded (WTL)** — dashboard **This week** and Goals **Weekly target** both use `weekly_targets`; Edit Rules no longer edits targets. |
+| ~~`weekly_targets` display-only lifecycle~~ | P25.9 → WTL | **Superseded (WTL)** — full activity-scoped CRUD on Goals; legacy class rows readable. |
 | `weekly_load_cap` in seed / local DB | Owner 2026-06-07 | Removed from `seed_data.py`; new creates blocked in API. **Production:** if legacy rows exist in Supabase, delete manually or leave disabled — engine still evaluates them if enabled. |
+
+## Weekly targets, load risk & load tax (WTL batch)
+
+**Tickets:** `plans/tickets-weekly-targets-load-risk-2026-06-07.md` (WTL.B1–B7, F1–F7, D1–D2 implemented; **OWTL.1** owner smoke pending)
+
+Delivered themes: activity-scoped weekly targets with migration from weekly `recovery_targets`; dashboard **This week** progress (Monday–Sunday); Goals weekly-target flow; load-tax graph (30-day series); load-risk `rule_limit_rows`; recovery streaks UI retired.
+
+| Item | Ticket | Status |
+| --- | --- | --- |
+| Weekly target schema + migration | WTL.B1 | Done |
+| Weekly target CRUD API | WTL.B2 | Done |
+| Dashboard weekly progress This week | WTL.B3, WTL.F1 | Done |
+| Goals weekly target UX | WTL.F2 | Done |
+| Weekly target suggestions | WTL.B4, WTL.F3 | Done |
+| Load-tax formula + graph series | WTL.B5, WTL.F4 | Done |
+| Load risk rule-limit rows | WTL.B6, WTL.F5 | Done |
+| Recovery streaks UI removed | WTL.F6 | Done |
+| Weekly focus lifecycle design | WTL.D1 | Done — **superseded by WRU** (see below) |
+| Weekly focus backend lifecycle | WTL.B7 | Done — **lazy cutover path superseded by WRU.B1** |
+| Settings weekly focus UI | WTL.F7 | Done — **focus-title / setup / reset UX superseded by WRU.F1** |
+| Living docs sync | WTL.D2 | Done — refreshed again in **WRU.D1** |
+
+### WTL legacy / future (not weekly focus)
+
+| Item | Ticket | Note |
+| --- | --- | --- |
+| Daily recovery streaks product path | — | **Legacy** — daily `recovery_targets` rows and `recovery_streaks` API field remain; no dashboard section. Owner decision still open: retire storage, or replan true streaks from weekly target history. |
+| Recovery streak feature (true streaks) | — | **Future** — derive consecutive-week completion from recovery-style **weekly target** history, not the retired F10.1 dashboard section or legacy `recovery_streaks` API field. Clean streak remains separate. |
+
+## Weekly rules unification (WRU batch)
+
+**Tickets:** `plans/tickets-weekly-rules-unification-2026-06-08.md` (WRU.B1–F2, D1 implemented on `fix/stage-2-5-lingering-issues`; **OWRU.1** owner smoke pending)
+
+Supersedes WTL.B7 lazy cutover, WTL.F7 focus-title/setup/reset UX, and month-style **Training Block** create flows. One **weekly rules** path only.
+
+| Item | Ticket | Status |
+| --- | --- | --- |
+| Big-bang migration + seed weekly periods | WRU.B1 | Done |
+| Always-weekly resolution + auto-create | WRU.B2 | Done |
+| Settings weekly rules UI + previous-weeks modal | WRU.F1 | Done |
+| Remove new-block screen + dead APIs | WRU.F2 | Done |
+| Living docs + backlog sync | WRU.D1 | Done |
+| Post-WRU test suite alignment (`make test` green) | WRU.T1 | Done |
+| Owner smoke before merge | OWRU.1 | Pending (owner smoke OK; blocked on WRU.T1) |
 
 ## Product gaps still open (not in the list above)
 

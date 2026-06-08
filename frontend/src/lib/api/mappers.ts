@@ -333,6 +333,10 @@ export function mapTrainingBlockFromApi(
     relatedGoalId: (raw.related_goal_id as string | null) ?? undefined,
     notes: (raw.notes as string | null) ?? undefined,
     isReviewMilestoneHit: Boolean(raw.is_review_milestone_hit),
+    periodKind: (raw.period_kind as TrainingBlock['periodKind']) ?? undefined,
+    focusSeriesId: (raw.focus_series_id as string | null) ?? undefined,
+    focusTitle: (raw.focus_title as string | null) ?? undefined,
+    weekNumber: raw.week_number != null ? Number(raw.week_number) : undefined,
     ...readTimestamped(raw),
   };
 }
@@ -377,6 +381,7 @@ export function mapWeeklyTargetFromApi(raw: Record<string, unknown>): WeeklyTarg
     id: String(raw.id),
     trainingBlockId: String(raw.training_block_id),
     activityClassId: String(raw.activity_class_id),
+    ...(raw.activity_id != null ? { activityId: String(raw.activity_id) } : {}),
     targetValue: Number(raw.target_value),
     targetUnit: raw.target_unit as VolumeUnit,
     ...readTimestamped(raw),
@@ -484,29 +489,26 @@ function mapSuggestionFromApi(raw: Record<string, unknown>): Suggestion {
   };
 }
 
-function mapLoadRiskExerciseBarFromApi(raw: Record<string, unknown>) {
+function mapLoadRiskRuleLimitRowFromApi(raw: Record<string, unknown>) {
+  const displayMode = raw.display_mode;
   return {
-    activityId: String(raw.activity_id),
-    activityName: String(raw.activity_name),
-    actual: Number(raw.actual),
-    limit: Number(raw.limit),
-    unit: String(raw.unit),
-  };
-}
-
-function mapLoadRiskClassBarFromApi(raw: Record<string, unknown>) {
-  const exercises = raw.exercises;
-  return {
+    id: String(raw.id),
+    scope: raw.scope as LoadRiskSummary['ruleLimitRows'][number]['scope'],
+    ruleId: String(raw.rule_id),
+    ruleType: String(raw.rule_type),
     activityClassId: String(raw.activity_class_id),
     className: String(raw.class_name),
     actual: Number(raw.actual),
     limit: Number(raw.limit),
     unit: String(raw.unit),
-    exercises: Array.isArray(exercises)
-      ? exercises.map((item) =>
-          mapLoadRiskExerciseBarFromApi(isRecord(item) ? item : {}),
-        )
-      : [],
+    state: raw.state as LoadRiskSummary['ruleLimitRows'][number]['state'],
+    label: String(raw.label),
+    activityId: raw.activity_id == null ? null : String(raw.activity_id),
+    activityName: raw.activity_name == null ? null : String(raw.activity_name),
+    displayMode:
+      displayMode === 'status'
+        ? ('status' as const)
+        : ('bar' as const),
   };
 }
 
@@ -517,7 +519,7 @@ export function mapLoadRiskSummaryFromApi(
     return null;
   }
   const weekDays = raw.week_days;
-  const classBars = raw.class_bars;
+  const ruleLimitRows = raw.rule_limit_rows;
   return {
     weekDays: Array.isArray(weekDays)
       ? weekDays.map((item) => {
@@ -525,11 +527,14 @@ export function mapLoadRiskSummaryFromApi(
           return {
             date: String(day.date) as ISODate,
             flagged: Boolean(day.flagged),
+            state: day.state as LoadRiskSummary['weekDays'][number]['state'],
           };
         })
       : [],
-    classBars: Array.isArray(classBars)
-      ? classBars.map((item) => mapLoadRiskClassBarFromApi(isRecord(item) ? item : {}))
+    ruleLimitRows: Array.isArray(ruleLimitRows)
+      ? ruleLimitRows.map((item) =>
+          mapLoadRiskRuleLimitRowFromApi(isRecord(item) ? item : {}),
+        )
       : [],
   };
 }
@@ -539,10 +544,15 @@ function mapWeeklyProgressFromApi(raw: Record<string, unknown>): WeeklyProgress 
     weeklyTargetId: String(raw.weekly_target_id),
     activityClassId: String(raw.activity_class_id),
     className: String(raw.class_name),
+    activityId: raw.activity_id != null ? String(raw.activity_id) : null,
+    activityName: raw.activity_name != null ? String(raw.activity_name) : null,
     value: Number(raw.value),
     target: Number(raw.target),
     unit: raw.unit as WeeklyProgress['unit'],
     state: raw.state as WeeklyProgress['state'],
+    periodStart:
+      raw.period_start != null ? (String(raw.period_start) as ISODate) : undefined,
+    periodEnd: raw.period_end != null ? (String(raw.period_end) as ISODate) : undefined,
   };
 }
 
@@ -596,7 +606,7 @@ export interface DashboardPayload {
   loadSeries: LoadPoint[];
   graphClassId: string | null;
   flareUpDates: ISODate[];
-  weekLoadThreshold: number;
+  weekLoadThreshold: number | null;
   cleanStreak: number;
   recoveryStreaks: RecoveryStreak[];
   goals: WithoutUserId<Goal>[];
@@ -637,7 +647,8 @@ export function mapDashboardFromApi(raw: Record<string, unknown>): DashboardPayl
     flareUpDates: Array.isArray(raw.flare_up_dates)
       ? raw.flare_up_dates.map((date) => String(date) as ISODate)
       : [],
-    weekLoadThreshold: Number(raw.week_load_threshold),
+    weekLoadThreshold:
+      raw.week_load_threshold == null ? null : Number(raw.week_load_threshold),
     cleanStreak: Number(raw.clean_streak),
     recoveryStreaks: mapList(raw.recovery_streaks, mapRecoveryStreakFromApi),
     goals: mapList(raw.goals, mapGoalFromApi),

@@ -224,7 +224,6 @@ interface SettingsScreenCallbackProps {
   engine: typeof mockEngine;
   onEditRules?: () => void;
   onReview?: () => void;
-  onNewBlock?: () => void;
   onViewBlock?: (blockId: string) => void;
   onOpenNewActivity?: () => void;
 }
@@ -254,12 +253,27 @@ function getInactiveSection(): HTMLElement {
   return section as HTMLElement;
 }
 
-/** Previous-blocks list row (name cell → inner column → flex row). */
-function withinPreviousBlockRow(blockName: string) {
-  const nameEl = screen.getByText(blockName);
-  const row = nameEl.parentElement?.parentElement;
+/** Previous-week list row (calendar label cell → inner column → flex row). */
+function calendarWeekLabel(block: Pick<TrainingBlock, 'startDate' | 'endDate'>): string {
+  const formatShort = (iso: string): string =>
+    new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      timeZone: 'UTC',
+    });
+  const endDate = block.endDate ?? block.startDate;
+  return `${formatShort(block.startDate)} – ${formatShort(endDate)}`;
+}
+
+function previousWeekRowButton(block: Pick<TrainingBlock, 'startDate' | 'endDate'>): HTMLElement {
+  const label = screen.getByText(calendarWeekLabel(block));
+  const row = label.closest('button');
   expect(row).not.toBeNull();
-  return within(row as HTMLElement);
+  return row as HTMLElement;
+}
+
+function withinPreviousWeekRow(block: Pick<TrainingBlock, 'startDate' | 'endDate'>) {
+  return within(previousWeekRowButton(block));
 }
 
 const REVIEW_MILESTONE_BADGE = /review milestone reached/i;
@@ -355,7 +369,7 @@ function renderStatefulSettingsScreen(options: {
 // ---------------------------------------------------------------------------
 
 describe('SettingsScreen — Active Block card', () => {
-  it('renders block name when an active block exists', () => {
+  it('renders calendar week range when an active block exists', () => {
     const engine = makeEngine({
       block: ACTIVE_BLOCK,
       rules: [],
@@ -365,7 +379,7 @@ describe('SettingsScreen — Active Block card', () => {
 
     renderWithProviders(<SettingsScreen engine={engine} />);
 
-    expect(screen.getByText(ACTIVE_BLOCK.name)).toBeInTheDocument();
+    expect(screen.getByText(calendarWeekLabel(ACTIVE_BLOCK))).toBeInTheDocument();
   });
 
   it('renders block start date when an active block exists', () => {
@@ -411,7 +425,7 @@ describe('SettingsScreen — Weekly Targets', () => {
 
     renderWithProviders(<SettingsScreen engine={engine} />);
 
-    const blockSection = getSectionByHeading(/^training block$/i);
+    const blockSection = getSectionByHeading(/^weekly rules$/i);
     expect(within(blockSection).queryByText(/weekly targets/i)).not.toBeInTheDocument();
     expect(within(blockSection).queryByText(/weekly goal/i)).not.toBeInTheDocument();
     expect(within(blockSection).queryByText(/20/)).not.toBeInTheDocument();
@@ -427,7 +441,7 @@ describe('SettingsScreen — Weekly Targets', () => {
 
     renderWithProviders(<SettingsScreen engine={engine} />);
 
-    const blockSection = getSectionByHeading(/^training block$/i);
+    const blockSection = getSectionByHeading(/^weekly rules$/i);
     expect(within(blockSection).queryByText('Running')).not.toBeInTheDocument();
     expect(within(blockSection).queryByText(/weekly targets/i)).not.toBeInTheDocument();
   });
@@ -442,7 +456,7 @@ describe('SettingsScreen — Weekly Targets', () => {
 
     renderWithProviders(<SettingsScreen engine={engine} />);
 
-    const blockSection = getSectionByHeading(/^training block$/i);
+    const blockSection = getSectionByHeading(/^weekly rules$/i);
     expect(within(blockSection).queryByText('cls-unknown-xyz')).not.toBeInTheDocument();
     expect(within(blockSection).queryByText(/weekly targets/i)).not.toBeInTheDocument();
   });
@@ -522,6 +536,29 @@ describe('SettingsScreen — Recovery Rules', () => {
     expect(screen.getByText(/all classes/i)).toBeInTheDocument();
   });
 
+  it('labels exercise-specific rules with the exercise name', () => {
+    const exerciseRule: Rule = {
+      ...RULE_FREQ,
+      id: 'rule-run-frequency',
+      activityId: ACTIVITY_RUNNING.id,
+    };
+
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      rules: [exerciseRule],
+      weeklyTargets: [],
+      activityClasses: [CLASS_RUNNING],
+      activities: [ACTIVITY_RUNNING],
+    });
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    const recoveryRules = screen.getByText(/recovery rules/i).parentElement;
+    expect(recoveryRules).not.toBeNull();
+    expect(within(recoveryRules!).getByText(ACTIVITY_RUNNING.name)).toBeInTheDocument();
+    expect(within(recoveryRules!).queryByText(CLASS_RUNNING.name)).not.toBeInTheDocument();
+  });
+
   it('falls back to raw ruleType when rule type is not in taxonomy map', () => {
     const unknownRule: Rule = {
       ...RULE_REST,
@@ -557,6 +594,7 @@ describe('SettingsScreen — No active block fallback', () => {
     status: 'active' as const,
     isReviewMilestoneHit: false,
     createdAt: '1970-01-01T00:00:00Z',
+    periodKind: 'legacy' as const,
   };
 
   it('shows "No active training block" card when block id is empty', () => {
@@ -569,7 +607,7 @@ describe('SettingsScreen — No active block fallback', () => {
 
     renderWithProviders(<SettingsScreen engine={engine} />);
 
-    expect(screen.getByText(/no active training block/i)).toBeInTheDocument();
+    expect(screen.getByText(/no active weekly rules/i)).toBeInTheDocument();
   });
 
   it('hides or disables Edit Rules when there is no active block', () => {
@@ -596,8 +634,8 @@ describe('SettingsScreen — No active block fallback', () => {
 // 6. Previous Blocks section
 // ---------------------------------------------------------------------------
 
-describe('SettingsScreen — Previous Blocks', () => {
-  it('renders Previous Blocks section from engine.previousBlocks', () => {
+describe('SettingsScreen — Previous weeks', () => {
+  it('renders Previous weeks section from engine.previousBlocks', () => {
     const engine = makeEngine({
       block: ACTIVE_BLOCK,
       previousBlocks: [PREVIOUS_BLOCK_1],
@@ -608,11 +646,11 @@ describe('SettingsScreen — Previous Blocks', () => {
 
     renderWithProviders(<SettingsScreen engine={engine} />);
 
-    expect(screen.getByText(/previous blocks/i)).toBeInTheDocument();
-    expect(screen.getByText(PREVIOUS_BLOCK_1.name)).toBeInTheDocument();
+    expect(screen.getByText(/previous weeks/i)).toBeInTheDocument();
+    expect(screen.getByText(calendarWeekLabel(PREVIOUS_BLOCK_1))).toBeInTheDocument();
   });
 
-  it('renders multiple previous blocks', () => {
+  it('renders only the most recent previous week inline when multiple exist', () => {
     const engine = makeEngine({
       block: ACTIVE_BLOCK,
       previousBlocks: [PREVIOUS_BLOCK_1, PREVIOUS_BLOCK_2],
@@ -623,8 +661,8 @@ describe('SettingsScreen — Previous Blocks', () => {
 
     renderWithProviders(<SettingsScreen engine={engine} />);
 
-    expect(screen.getByText(PREVIOUS_BLOCK_1.name)).toBeInTheDocument();
-    expect(screen.getByText(PREVIOUS_BLOCK_2.name)).toBeInTheDocument();
+    expect(screen.getByText(calendarWeekLabel(PREVIOUS_BLOCK_1))).toBeInTheDocument();
+    expect(screen.queryByText(calendarWeekLabel(PREVIOUS_BLOCK_2))).not.toBeInTheDocument();
   });
 
   it('renders a View action button for each previous block', () => {
@@ -638,10 +676,10 @@ describe('SettingsScreen — Previous Blocks', () => {
 
     renderWithProviders(<SettingsScreen engine={engine} />);
 
-    expect(screen.getByRole('button', { name: /view/i })).toBeInTheDocument();
+    expect(previousWeekRowButton(PREVIOUS_BLOCK_1)).toBeInTheDocument();
   });
 
-  it('does not render Previous Blocks section when previousBlocks is empty', () => {
+  it('does not render Previous weeks section when previousBlocks is empty', () => {
     const engine = makeEngine({
       block: ACTIVE_BLOCK,
       previousBlocks: [],
@@ -652,7 +690,7 @@ describe('SettingsScreen — Previous Blocks', () => {
 
     renderWithProviders(<SettingsScreen engine={engine} />);
 
-    expect(screen.queryByText(/previous blocks/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^previous weeks$/i)).not.toBeInTheDocument();
   });
 });
 
@@ -795,22 +833,7 @@ describe('SettingsScreen — stack action callbacks', () => {
     expect(onReview).toHaveBeenCalledTimes(1);
   });
 
-  it('calls onNewBlock and does not open the inline sheet when + New Training Block is clicked', async () => {
-    const user = userEvent.setup();
-    const onNewBlock = vi.fn();
-    const engine = makeEngine({
-      block: ACTIVE_BLOCK,
-    });
-
-    renderSettingsScreenWithCallbacks({ engine, onNewBlock });
-
-    await user.click(screen.getByRole('button', { name: /\+ new training block/i }));
-
-    expect(onNewBlock).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole('dialog', { name: /new training block/i })).not.toBeInTheDocument();
-  });
-
-  it('calls onViewBlock with the previous block id when View is clicked', async () => {
+  it('calls onViewBlock with the previous block id when the inline week row is clicked', async () => {
     const user = userEvent.setup();
     const onViewBlock = vi.fn();
     const engine = makeEngine({
@@ -823,7 +846,7 @@ describe('SettingsScreen — stack action callbacks', () => {
 
     renderSettingsScreenWithCallbacks({ engine, onViewBlock });
 
-    await user.click(screen.getByRole('button', { name: /view/i }));
+    await user.click(previousWeekRowButton(PREVIOUS_BLOCK_1));
 
     expect(onViewBlock).toHaveBeenCalledTimes(1);
     expect(onViewBlock).toHaveBeenCalledWith(PREVIOUS_BLOCK_1.id);
@@ -935,8 +958,8 @@ describe('SettingsScreen — Q9.11B inactive activity recovery flow', () => {
 
 // ---------------------------------------------------------------------------
 // F10.10 — Remove inline EditRulesForm / NewTrainingBlockSheet
-// Rule and block create/edit coverage: EditBlockRulesScreen.test.tsx,
-// NewTrainingBlockScreen.test.tsx. plans/tickets-phase-10-polish-2026-06-04.md
+// Rule edit coverage: EditBlockRulesScreen.test.tsx.
+// WRU.F2 — new-block create flow removed; see SettingsScreen.wruF1.test.tsx.
 // ---------------------------------------------------------------------------
 
 describe('SettingsScreen — F10.10 remove inline rule and block sheets', () => {
@@ -965,7 +988,6 @@ describe('SettingsScreen — F10.10 remove inline rule and block sheets', () => 
       <SettingsScreen
         engine={engine}
         onEditRules={vi.fn()}
-        onNewBlock={vi.fn()}
       />,
     );
 
@@ -990,36 +1012,17 @@ describe('SettingsScreen — F10.10 remove inline rule and block sheets', () => 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('does not mount the inline New Training Block dialog in the document', () => {
+  it('does not render + New Training Block (WRU.F2)', () => {
     const engine = makeEngine({ block: ACTIVE_BLOCK });
 
-    renderWithProviders(
-      <SettingsScreen
-        engine={engine}
-        onEditRules={vi.fn()}
-        onNewBlock={vi.fn()}
-      />,
-    );
+    renderWithProviders(<SettingsScreen engine={engine} onEditRules={vi.fn()} />);
 
+    expect(
+      screen.queryByRole('button', { name: /\+ new training block/i }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole('dialog', { name: /new training block/i }),
     ).not.toBeInTheDocument();
-  });
-
-  it('clicking + New Training Block without onNewBlock does not open an inline sheet', async () => {
-    const user = userEvent.setup();
-    const createTrainingBlock = vi.fn();
-    const engine = makeEngine({
-      block: ACTIVE_BLOCK,
-      createTrainingBlock,
-    });
-
-    renderWithProviders(<SettingsScreen engine={engine} />);
-
-    await user.click(screen.getByRole('button', { name: /\+ new training block/i }));
-
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(createTrainingBlock).not.toHaveBeenCalled();
   });
 
   it('keeps the dev Reset mock data control when VITE_DEV_MODE is true', () => {
@@ -1030,7 +1033,6 @@ describe('SettingsScreen — F10.10 remove inline rule and block sheets', () => 
       <SettingsScreen
         engine={engine}
         onEditRules={vi.fn()}
-        onNewBlock={vi.fn()}
       />,
     );
 
@@ -1089,10 +1091,10 @@ describe('SettingsScreen — Preferences section', () => {
 
   it('Metric units toggle is local-only (no engine API calls on toggle)', async () => {
     const user = userEvent.setup();
-    const createTrainingBlock = vi.fn();
+    const createRule = vi.fn();
     const engine = makeEngine({
       block: ACTIVE_BLOCK,
-      createTrainingBlock,
+      createRule,
     });
 
     renderWithProviders(<SettingsScreen engine={engine} />);
@@ -1100,7 +1102,7 @@ describe('SettingsScreen — Preferences section', () => {
     const metricSwitch = screen.getByRole('switch', { name: /metric units/i });
     await user.click(metricSwitch);
 
-    expect(createTrainingBlock).not.toHaveBeenCalled();
+    expect(createRule).not.toHaveBeenCalled();
   });
 
   it('toggles Notifications switch state on click (local state)', async () => {
@@ -1343,26 +1345,7 @@ describe('SettingsScreen — F10.6 review milestone badge', () => {
     expect(screen.queryByText(REVIEW_MILESTONE_BADGE)).not.toBeInTheDocument();
   });
 
-  it('shows review milestone indicator on previous block rows when pb.isReviewMilestoneHit is true', () => {
-    const engine = makeEngine({
-      block: ACTIVE_BLOCK,
-      previousBlocks: [PREVIOUS_BLOCK_1, PREVIOUS_BLOCK_2],
-      rules: [],
-      weeklyTargets: [],
-      activityClasses: [],
-    });
-
-    renderWithProviders(<SettingsScreen engine={engine} />);
-
-    expect(
-      withinPreviousBlockRow(PREVIOUS_BLOCK_1.name).getByText(REVIEW_MILESTONE_BADGE),
-    ).toBeInTheDocument();
-    expect(
-      withinPreviousBlockRow(PREVIOUS_BLOCK_2.name).queryByText(REVIEW_MILESTONE_BADGE),
-    ).not.toBeInTheDocument();
-  });
-
-  it('allows an accessible label on previous-block milestone indicator (icon-only row)', () => {
+  it('shows review milestone indicator on the inline previous week row when isReviewMilestoneHit is true', () => {
     const engine = makeEngine({
       block: ACTIVE_BLOCK,
       previousBlocks: [PREVIOUS_BLOCK_1],
@@ -1374,7 +1357,23 @@ describe('SettingsScreen — F10.6 review milestone badge', () => {
     renderWithProviders(<SettingsScreen engine={engine} />);
 
     expect(
-      withinPreviousBlockRow(PREVIOUS_BLOCK_1.name).getByLabelText(REVIEW_MILESTONE_BADGE),
+      withinPreviousWeekRow(PREVIOUS_BLOCK_1).getByText(REVIEW_MILESTONE_BADGE),
+    ).toBeInTheDocument();
+  });
+
+  it('allows an accessible label on previous-week milestone indicator (icon-only row)', () => {
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      previousBlocks: [PREVIOUS_BLOCK_1],
+      rules: [],
+      weeklyTargets: [],
+      activityClasses: [],
+    });
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    expect(
+      withinPreviousWeekRow(PREVIOUS_BLOCK_1).getByLabelText(REVIEW_MILESTONE_BADGE),
     ).toBeInTheDocument();
   });
 });
@@ -1711,7 +1710,7 @@ describe('SettingsScreen — edge cases', () => {
     }).not.toThrow();
   });
 
-  it('handles no previous blocks gracefully (no Previous Blocks section)', () => {
+  it('handles no previous blocks gracefully (no Previous weeks section)', () => {
     const engine = makeEngine({
       block: ACTIVE_BLOCK,
       previousBlocks: [],
@@ -1719,7 +1718,7 @@ describe('SettingsScreen — edge cases', () => {
 
     renderWithProviders(<SettingsScreen engine={engine} />);
 
-    expect(screen.queryByText(/previous blocks/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^previous weeks$/i)).not.toBeInTheDocument();
   });
 
   it('handles empty rules list gracefully', () => {
@@ -1745,7 +1744,7 @@ describe('SettingsScreen — edge cases', () => {
 
     renderWithProviders(<SettingsScreen engine={engine} />);
 
-    const blockSection = getSectionByHeading(/^training block$/i);
+    const blockSection = getSectionByHeading(/^weekly rules$/i);
     expect(within(blockSection).queryByText('cls-unknown-xyz')).not.toBeInTheDocument();
   });
 
@@ -1759,6 +1758,7 @@ describe('SettingsScreen — edge cases', () => {
       status: 'active' as const,
       isReviewMilestoneHit: false,
       createdAt: '1970-01-01T00:00:00Z',
+      periodKind: 'legacy' as const,
     };
 
     const engine = makeEngine({
@@ -1775,7 +1775,7 @@ describe('SettingsScreen — edge cases', () => {
       renderWithProviders(<SettingsScreen engine={engine} />);
     }).not.toThrow();
 
-    expect(screen.getByText(/no active training block/i)).toBeInTheDocument();
+    expect(screen.getByText(/no active weekly rules/i)).toBeInTheDocument();
     expect(screen.queryByText(/previous blocks/i)).not.toBeInTheDocument();
   });
 });

@@ -7,10 +7,11 @@ from datetime import date
 from fastapi import FastAPI
 
 from app.models.checkin import DailyCheckIn, FlareUpIncident
+from app.services.training_blocks import calendar_week_bounds
 from app.tests.helpers.load_engine_fixtures import (
     ACTIVITIES,
     ACTIVITY_CLASSES,
-    BLOCK_START,
+    AS_OF,
     CHECK_INS,
     INCIDENTS,
     LOGS,
@@ -22,15 +23,19 @@ from app.tests.helpers.seed import (
     seed_activity_class,
     seed_activity_log,
     seed_rule,
-    seed_training_block,
     seed_weekly_target,
     utc_datetime,
     with_session,
 )
 
 
+def _mock_active_week_bounds() -> tuple[date, date]:
+    return calendar_week_bounds(date.fromisoformat(AS_OF))
+
+
 def seed_load_mock_graph(app_with_test_database: FastAPI) -> None:
     """Active block blk-1, mock classes/activities/logs/rules/targets."""
+    week_start, week_end = _mock_active_week_bounds()
     for cls in ACTIVITY_CLASSES:
         seed_activity_class(
             app_with_test_database,
@@ -52,11 +57,16 @@ def seed_load_mock_graph(app_with_test_database: FastAPI) -> None:
             is_active=activity["is_active"],
         )
 
-    seed_training_block(
+    from app.tests.helpers.weekly_focus_fixtures import seed_weekly_focus_block
+
+    seed_weekly_focus_block(
         app_with_test_database,
         block_id="blk-1",
-        name="Mock Training Block",
-        start_date=date.fromisoformat(BLOCK_START),
+        focus_series_id="fs-mock-1",
+        focus_title=None,
+        week_number=1,
+        start_date=week_start,
+        end_date=week_end,
         status="active",
     )
 
@@ -246,11 +256,17 @@ def seed_delayed_tax_foot_graph(app_with_test_database: FastAPI) -> None:
             default_volume_unit=activity["default_volume_unit"],
             is_active=activity["is_active"],
         )
-    seed_training_block(
+    week_start, week_end = _mock_active_week_bounds()
+    from app.tests.helpers.weekly_focus_fixtures import seed_weekly_focus_block
+
+    seed_weekly_focus_block(
         app_with_test_database,
         block_id="blk-1",
-        name="Delayed-tax test block",
-        start_date=date.fromisoformat(BLOCK_START),
+        focus_series_id="fs-mock-1",
+        focus_title=None,
+        week_number=1,
+        start_date=week_start,
+        end_date=week_end,
         status="active",
     )
     rest_rule = next(r for r in RULES if r["id"] == "rule-rest-foot")

@@ -11,7 +11,7 @@ import pytest
 
 from app.services.load_engine import check_violations
 from app.tests.helpers.load_engine_fixtures import ACTIVITIES, ACTIVITY_CLASSES
-from app.tests.test_load_engine import _call_load_risk_summary, _class_bar, _make_rule
+from app.tests.test_load_engine import _call_load_risk_summary, _make_rule
 
 
 def _make_volume_log(
@@ -251,14 +251,16 @@ def test_compute_load_risk_summary_exercise_bar_shows_volume_cap_unit_km() -> No
         rules=rules,
         delayed_tax_hits=[],
     )
-    foot = _class_bar(summary, "cls-foot")
-    walk_row = next(
-        row for row in foot["exercises"] if row["activity_id"] == "act-walk"
+    row = next(
+        item
+        for item in summary["rule_limit_rows"]
+        if item["rule_id"] == "rule-walk-weekly-km"
     )
 
-    assert walk_row["actual"] == pytest.approx(3.0)
-    assert walk_row["limit"] == pytest.approx(10.0)
-    assert walk_row["unit"] == "km"
+    assert row["scope"] == "activity"
+    assert row["actual"] == pytest.approx(3.0)
+    assert row["limit"] == pytest.approx(10.0)
+    assert row["unit"] == "km"
 
 
 def test_compute_load_risk_summary_exercise_bar_hours_from_duration_minutes() -> None:
@@ -293,11 +295,13 @@ def test_compute_load_risk_summary_exercise_bar_hours_from_duration_minutes() ->
         rules=rules,
         delayed_tax_hits=[],
     )
-    foot = _class_bar(summary, "cls-foot")
-    walk_row = next(
-        row for row in foot["exercises"] if row["activity_id"] == "act-walk"
+    row = next(
+        item
+        for item in summary["rule_limit_rows"]
+        if item["rule_id"] == "rule-walk-weekly-hours"
     )
 
-    assert walk_row["actual"] == pytest.approx(1.5)
-    assert walk_row["limit"] == pytest.approx(3.0)
-    assert walk_row["unit"] == "hours"
+    assert row["scope"] == "activity"
+    assert row["actual"] == pytest.approx(1.5)
+    assert row["limit"] == pytest.approx(3.0)
+    assert row["unit"] == "hours"

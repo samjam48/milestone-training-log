@@ -16,9 +16,8 @@ from app.schemas.load_engine import (
     GoalDict,
     IncidentDict,
     LoadPoint,
-    LoadRiskClassBar,
     LoadRiskDay,
-    LoadRiskExerciseBar,
+    LoadRiskRuleLimitRow,
     LoadRiskSummary,
     LogDict,
     RecoveryTargetDict,
@@ -33,6 +32,20 @@ from app.schemas.load_engine import (
 )
 
 DEFAULT_RPE = 5
+
+LOAD_TAX_RECENCY_WEIGHTS: list[float] = [
+    1.0,
+    0.85,
+    0.7,
+    0.55,
+    0.4,
+    0.25,
+    0.15,
+]
+
+_LOAD_TAX_BASE = 1.0
+_LOAD_TAX_REST_BROKEN = 4.0
+_LOAD_TAX_CONSECUTIVE_REACHED = 3.0
 
 
 # ---------------------------------------------------------------------------
@@ -51,6 +64,14 @@ def format_iso_date(value: date) -> str:
 
 def add_days(iso: str, n: int) -> str:
     return format_iso_date(parse_iso_date(iso) + timedelta(days=n))
+
+
+def this_week_bounds(as_of: str) -> tuple[str, str]:
+    """Monday through Sunday of the ISO week containing ``as_of``."""
+    as_of_date = parse_iso_date(as_of)
+    week_start = as_of_date - timedelta(days=as_of_date.weekday())
+    week_end = week_start + timedelta(days=6)
+    return format_iso_date(week_start), format_iso_date(week_end)
 
 
 def diff_days(from_iso: str, to_iso: str) -> int:
@@ -100,6 +121,210 @@ def rolling_load(logs: list[LogDict], as_of: str, window_days: int) -> float:
         if start <= logged_date <= as_of:
             total += log_load(log)
     return total
+
+
+def _rpe_load_tax(rpe: int) -> float:
+    if rpe <= 4:
+        return 0.0
+    if rpe <= 6:
+        return 0.5
+    if rpe <= 8:
+        return 1.0
+    return 2.0
+
+
+def _proximity_load_tax(usage_ratio: float) -> float:
+    if usage_ratio >= 1.0:
+        return 4.0
+    if usage_ratio >= 0.8:
+        return 2.0
+    if usage_ratio >= 0.5:
+        return 1.0
+    return 0.0
+
+
+def _scoped_activity_ids(
+    rule: RuleDict,
+    activity: ActivityDict,
+    activities: list[ActivityDict],
+) -> set[str]:
+    rule_activity_id = rule.get("activity_id")
+    if rule_activity_id:
+        return {str(rule_activity_id)}
+    class_id = activity["activity_class_id"]
+    return set(_activity_ids_for_class(class_id, activities))
+
+
+def _logs_excluding(
+    logs: list[LogDict],
+    exclude_log: LogDict | None,
+) -> list[LogDict]:
+    if exclude_log is None:
+        return logs
+    exclude_id = exclude_log.get("id")
+    exclude_date = exclude_log["logged_date"]
+    exclude_activity_id = exclude_log["activity_id"]
+    return [
+        log
+        for log in logs
+        if not (
+            log["logged_date"] == exclude_date
+            and log["activity_id"] == exclude_activity_id
+            and (exclude_id is None or log.get("id") == exclude_id)
+        )
+    ]
+
+
+def _rule_usage_ratio(
+    rule: RuleDict,
+    activity: ActivityDict,
+    activities: list[ActivityDict],
+    logs: list[LogDict],
+    as_of: str,
+    *,
+    exclude_log: LogDict | None = None,
+) -> float:
+    threshold = float(rule["threshold_value"])
+    if threshold <= 0:
+        return 0.0
+
+    window = int(rule["window_days"])
+    win_start = add_days(as_of, -(window - 1))
+    scope_ids = _scoped_activity_ids(rule, activity, activities)
+    scoped_logs = [
+        log
+        for log in _logs_excluding(logs, exclude_log)
+        if log["activity_id"] in scope_ids
+        and win_start <= log["logged_date"] <= as_of
+    ]
+
+    rule_type = rule["rule_type"]
+    if rule_type == "weekly_load_cap":
+        actual = sum(log_load(log) for log in scoped_logs)
+    elif rule_type == "frequency_limit":
+        actual = float(len(scoped_logs))
+    elif rule_type in _VOLUME_CAP_RULE_TYPES:
+        limit_unit = rule.get("limit_unit")
+        if not limit_unit:
+            return 0.0
+        if rule_type == "daily_volume_cap":
+            scoped_logs = [
+                log for log in scoped_logs if log["logged_date"] == as_of
+            ]
+        actual = _sum_volume_for_cap(scoped_logs, limit_unit)
+    else:
+        return 0.0
+
+    return actual / threshold
+
+
+def _rest_rule_broken(
+    rule: RuleDict,
+    activity: ActivityDict,
+    activities: list[ActivityDict],
+    logs: list[LogDict],
+    as_of: str,
+) -> bool:
+    scope_ids = _scoped_activity_ids(rule, activity, activities)
+    prior_logs = [
+        log
+        for log in logs
+        if log["activity_id"] in scope_ids and log["logged_date"] < as_of
+    ]
+    if not prior_logs:
+        return False
+    prior_logs.sort(key=lambda log: log["logged_date"], reverse=True)
+    days_since = _days_between(prior_logs[0]["logged_date"], as_of)
+    threshold = int(rule["threshold_value"])
+    return days_since <= threshold
+
+
+def _consecutive_limit_reached(
+    rule: RuleDict,
+    activity: ActivityDict,
+    activities: list[ActivityDict],
+    logs: list[LogDict],
+    as_of: str,
+) -> bool:
+    threshold = int(rule["threshold_value"])
+    scope_ids = _scoped_activity_ids(rule, activity, activities)
+    consecutive = 0
+    cursor = as_of
+    while True:
+        has_log = any(
+            log["activity_id"] in scope_ids and log["logged_date"] == cursor
+            for log in logs
+        )
+        if not has_log:
+            break
+        consecutive += 1
+        cursor = add_days(cursor, -1)
+    return consecutive >= threshold
+
+
+def compute_log_load_tax(
+    log: LogDict,
+    activity: ActivityDict,
+    activities: list[ActivityDict],
+    activity_classes: list[ActivityClassDict],
+    logs: list[LogDict],
+    rules: list[RuleDict],
+    *,
+    as_of: str,
+) -> float:
+    del activity_classes
+    if not _is_performance_activity(activity):
+        return 0.0
+
+    rpe_value = log.get("rpe")
+    rpe = DEFAULT_RPE if rpe_value is None else int(rpe_value)
+    tax = _LOAD_TAX_BASE + _rpe_load_tax(rpe)
+
+    class_id = activity["activity_class_id"]
+    logs_up_to = [entry for entry in logs if entry["logged_date"] <= as_of]
+    effective = effective_rules_for_activity(activity["id"], class_id, rules)
+
+    proximity_by_category: dict[str, float] = {}
+    for rule in effective:
+        if not rule.get("enabled", True):
+            continue
+        rule_type = rule["rule_type"]
+        if rule_type == "rest_between_class":
+            if _rest_rule_broken(rule, activity, activities, logs_up_to, as_of):
+                proximity_by_category[rule_type] = max(
+                    proximity_by_category.get(rule_type, 0.0),
+                    _LOAD_TAX_REST_BROKEN,
+                )
+        elif rule_type == "consecutive_day_limit":
+            if _consecutive_limit_reached(
+                rule, activity, activities, logs_up_to, as_of
+            ):
+                proximity_by_category[rule_type] = max(
+                    proximity_by_category.get(rule_type, 0.0),
+                    _LOAD_TAX_CONSECUTIVE_REACHED,
+                )
+        elif rule_type in (
+            "weekly_load_cap",
+            "frequency_limit",
+            "daily_volume_cap",
+            "weekly_volume_cap",
+        ):
+            usage_ratio = _rule_usage_ratio(
+                rule,
+                activity,
+                activities,
+                logs_up_to,
+                as_of,
+                exclude_log=log,
+            )
+            proximity = _proximity_load_tax(usage_ratio)
+            proximity_by_category[rule_type] = max(
+                proximity_by_category.get(rule_type, 0.0),
+                proximity,
+            )
+
+    tax += sum(proximity_by_category.values())
+    return tax
 
 
 # ---------------------------------------------------------------------------
@@ -220,11 +445,8 @@ def _class_effective_rest_rule(
     activities: list[ActivityDict],
     rules: list[RuleDict],
 ) -> RuleDict | None:
-    rest_rules: list[RuleDict] = []
-    for activity_id in _activity_ids_for_class(class_id, activities):
-        for rule in effective_rules_for_activity(activity_id, class_id, rules):
-            if rule["rule_type"] == "rest_between_class":
-                rest_rules.append(rule)
+    del activities
+    rest_rules = _enabled_class_scoped_rules(class_id, rules, "rest_between_class")
     if not rest_rules:
         return None
     return _pick_strictest_rule(rest_rules)
@@ -294,26 +516,13 @@ def _class_load_cap_violation(
     class_logs = _class_logs_up_to(class_id, activities, logs, as_of)
 
     class_caps = _enabled_class_scoped_rules(class_id, rules, "weekly_load_cap")
-    if class_caps:
-        cap_rule = _pick_strictest_rule(class_caps)
-        window = int(cap_rule["window_days"])
-        cur_load = rolling_load(class_logs, as_of, window)
-        if cur_load >= float(cap_rule["threshold_value"]):
-            return cap_rule, cur_load
-
-    for activity_id in _activity_ids_for_class(class_id, activities):
-        exercise_caps = _enabled_exercise_scoped_rules(
-            class_id, activity_id, rules, "weekly_load_cap"
-        )
-        if not exercise_caps:
-            continue
-        cap_rule = _pick_strictest_rule(exercise_caps)
-        activity_logs = _activity_logs_up_to(activity_id, logs, as_of)
-        cur_load = rolling_load(
-            activity_logs, as_of, int(cap_rule["window_days"])
-        )
-        if cur_load >= float(cap_rule["threshold_value"]):
-            return cap_rule, cur_load
+    if not class_caps:
+        return None
+    cap_rule = _pick_strictest_rule(class_caps)
+    window = int(cap_rule["window_days"])
+    cur_load = rolling_load(class_logs, as_of, window)
+    if cur_load >= float(cap_rule["threshold_value"]):
+        return cap_rule, cur_load
     return None
 
 
@@ -324,53 +533,28 @@ def _class_frequency_violation(
     rules: list[RuleDict],
     as_of: str,
 ) -> tuple[ViolationSeverity, RuleDict] | None:
-    worst: tuple[ViolationSeverity, RuleDict] | None = None
     class_activity_ids = set(_activity_ids_for_class(class_id, activities))
 
     class_freq_rules = _enabled_class_scoped_rules(
         class_id, rules, "frequency_limit"
     )
-    if class_freq_rules:
-        freq_rule = _pick_strictest_rule(class_freq_rules)
-        window = int(freq_rule["window_days"])
-        win_start = add_days(as_of, -(window - 1))
-        count = float(
-            sum(
-                1
-                for log in logs
-                if log["activity_id"] in class_activity_ids
-                and win_start <= log["logged_date"] <= as_of
-            )
+    if not class_freq_rules:
+        return None
+    freq_rule = _pick_strictest_rule(class_freq_rules)
+    window = int(freq_rule["window_days"])
+    win_start = add_days(as_of, -(window - 1))
+    count = float(
+        sum(
+            1
+            for log in logs
+            if log["activity_id"] in class_activity_ids
+            and win_start <= log["logged_date"] <= as_of
         )
-        severity = _severity_from_ratio(count, float(freq_rule["threshold_value"]))
-        if severity is not None:
-            worst = (severity, freq_rule)
-
-    for activity_id in class_activity_ids:
-        exercise_freq_rules = _enabled_exercise_scoped_rules(
-            class_id, activity_id, rules, "frequency_limit"
-        )
-        if not exercise_freq_rules:
-            continue
-        freq_rule = _pick_strictest_rule(exercise_freq_rules)
-        window = int(freq_rule["window_days"])
-        win_start = add_days(as_of, -(window - 1))
-        count = float(
-            sum(
-                1
-                for log in logs
-                if log["activity_id"] == activity_id
-                and win_start <= log["logged_date"] <= as_of
-            )
-        )
-        severity = _severity_from_ratio(count, float(freq_rule["threshold_value"]))
-        if severity is None:
-            continue
-        if worst is None or (
-            severity == "danger" and worst[0] != "danger"
-        ):
-            worst = (severity, freq_rule)
-    return worst
+    )
+    severity = _severity_from_ratio(count, float(freq_rule["threshold_value"]))
+    if severity is None:
+        return None
+    return severity, freq_rule
 
 
 def _class_consecutive_violation(
@@ -390,16 +574,6 @@ def _class_consecutive_violation(
         if _violations_consecutive_day_limit(
             rule, class_activity_ids, logs, as_of
         ):
-            return rule
-
-    for activity_id in class_activity_ids:
-        exercise_rules = _enabled_exercise_scoped_rules(
-            class_id, activity_id, rules, "consecutive_day_limit"
-        )
-        if not exercise_rules:
-            continue
-        rule = _pick_strictest_rule(exercise_rules)
-        if _violations_consecutive_day_limit(rule, {activity_id}, logs, as_of):
             return rule
     return None
 
@@ -460,12 +634,9 @@ def _class_volume_cap_violation(
     as_of: str,
 ) -> tuple[ViolationSeverity, RuleDict, str] | None:
     worst: tuple[ViolationSeverity, RuleDict, str] | None = None
-    for activity_id in _activity_ids_for_class(class_id, activities):
-        effective = effective_rules_for_activity(activity_id, class_id, rules)
-        for rule in effective:
-            rule_type = rule["rule_type"]
-            if rule_type not in _VOLUME_CAP_RULE_TYPES:
-                continue
+    class_activity_ids = set(_activity_ids_for_class(class_id, activities))
+    for rule_type in _VOLUME_CAP_RULE_TYPES:
+        for rule in _enabled_class_scoped_rules(class_id, rules, rule_type):
             limit_unit = rule.get("limit_unit")
             if not limit_unit:
                 continue
@@ -474,7 +645,7 @@ def _class_volume_cap_violation(
             activity_logs = [
                 log
                 for log in logs
-                if log["activity_id"] == activity_id
+                if log["activity_id"] in class_activity_ids
                 and win_start <= log["logged_date"] <= as_of
             ]
             if rule_type == "daily_volume_cap":
@@ -497,9 +668,7 @@ def _class_volume_cap_violation(
                     f"of {int(threshold)} cap"
                 ),
             )
-            if worst is None or (
-                severity == "danger" and worst[0] != "danger"
-            ):
+            if worst is None or severity == "danger" and worst[0] != "danger":
                 worst = candidate
     return worst
 
@@ -812,55 +981,72 @@ def _goal_achieved_in_live_period(
     return False
 
 
-def _recovery_target_met_on_day(
-    target: RecoveryTargetDict,
-    logs: list[LogDict],
-    as_of: str,
-) -> bool:
-    activity_id = target["activity_id"]
-    target_frequency = int(target["target_frequency"])
-    if target.get("frequency_unit") == "weekly":
-        week_start = add_days(as_of, -(parse_iso_date(as_of).weekday()))
-        count = sum(
-            1
-            for log in logs
-            if log["activity_id"] == activity_id
-            and week_start <= log["logged_date"] <= as_of
-        )
-        return count >= target_frequency
-
-    count = sum(
-        1
-        for log in logs
-        if log["activity_id"] == activity_id and log["logged_date"] == as_of
-    )
-    return count >= target_frequency
-
-
-def _recovery_daily_target_met(
-    activity_id: str,
-    class_id: str,
-    activity_classes: list[ActivityClassDict],
-    recovery_targets: list[RecoveryTargetDict],
-    logs: list[LogDict],
-    as_of: str,
-) -> bool:
-    class_map = {cls["id"]: cls for cls in activity_classes}
-    cls = class_map.get(class_id)
-    if cls is None or cls.get("type") != "recovery":
-        return False
-    for target in recovery_targets:
-        if target.get("activity_id") != activity_id:
-            continue
-        if _recovery_target_met_on_day(target, logs, as_of):
-            return True
-    return False
-
-
 def _truncate_description(text: str, max_len: int = _DESCRIPTION_MAX_LEN) -> str:
     if len(text) <= max_len:
         return text
     return text[: max_len - 1] + "…"
+
+
+def _weekly_target_remaining_reason(remaining: float, unit: str) -> str:
+    if unit == "sessions":
+        count = int(remaining) if remaining == int(remaining) else remaining
+        label = "session" if count == 1 else "sessions"
+        return f"{count} {label} left this week"
+    display = int(remaining) if remaining == int(remaining) else round(remaining, 1)
+    return f"{display} {unit} left this week"
+
+
+def _incomplete_weekly_target_reasons(
+    weekly_targets: list[WeeklyTargetDict],
+    activity_classes: list[ActivityClassDict],
+    activities: list[ActivityDict],
+    logs: list[LogDict],
+    as_of: str,
+) -> dict[str, str]:
+    if not weekly_targets:
+        return {}
+
+    week_start, _week_end = this_week_bounds(as_of)
+    progress_rows = compute_weekly_progress(
+        weekly_targets,
+        activity_classes,
+        activities,
+        logs,
+        week_start,
+        as_of,
+    )
+    reasons: dict[str, str] = {}
+    activity_scoped_ids: set[str] = set()
+
+    for row in progress_rows:
+        if row["value"] >= row["target"]:
+            continue
+        remaining = row["target"] - row["value"]
+        reason = _weekly_target_remaining_reason(remaining, row["unit"])
+        activity_id = row.get("activity_id")
+        if activity_id is not None:
+            reasons[activity_id] = reason
+            activity_scoped_ids.add(activity_id)
+
+    for row in progress_rows:
+        if row["value"] >= row["target"]:
+            continue
+        if row.get("activity_id") is not None:
+            continue
+        remaining = row["target"] - row["value"]
+        reason = _weekly_target_remaining_reason(remaining, row["unit"])
+        class_id = row["activity_class_id"]
+        for activity in activities:
+            if not activity.get("is_active", True):
+                continue
+            if activity["activity_class_id"] != class_id:
+                continue
+            activity_id = activity["id"]
+            if activity_id in activity_scoped_ids:
+                continue
+            reasons.setdefault(activity_id, reason)
+
+    return reasons
 
 
 def _build_suggestion_row(
@@ -870,20 +1056,22 @@ def _build_suggestion_row(
     status: ActivityClassStatus | None,
     cls: ActivityClassDict | None,
     description: str | None = None,
+    reason: str | None = None,
 ) -> Suggestion:
     class_id = activity["activity_class_id"]
+    default_reason = (
+        status["reason"]
+        if status
+        else (
+            f"Ready — {cls['name'] if cls else 'this class'} "
+            "has no active restrictions."
+        )
+    )
     row: Suggestion = {
         "id": activity["id"],
         "label": activity["name"],
         "state": status["state"] if status else "safe",
-        "reason": (
-            status["reason"]
-            if status
-            else (
-                f"Ready — {cls['name'] if cls else 'this class'} "
-                "has no active restrictions."
-            )
-        ),
+        "reason": reason if reason is not None else default_reason,
         "bucket": bucket,
         "scope": "activity",
         "activity_class_id": class_id,
@@ -922,6 +1110,29 @@ def _build_class_rest_row(
     return row
 
 
+def _worst_violation(
+    violations: list[RuleViolationSnapshot],
+) -> RuleViolationSnapshot | None:
+    if not violations:
+        return None
+    return max(
+        violations,
+        key=lambda violation: _STATE_SAFE_ORDER.get(violation["severity"], 0),
+    )
+
+
+def _status_from_violation(
+    class_id: str,
+    violation: RuleViolationSnapshot,
+) -> ActivityClassStatus:
+    return {
+        "activity_class_id": class_id,
+        "state": violation["severity"],
+        "label": "Rest" if violation["severity"] == "danger" else "Pushing it",
+        "reason": violation["message"],
+    }
+
+
 def compute_suggestion_buckets(
     as_of: str,
     activity_classes: list[ActivityClassDict],
@@ -932,12 +1143,30 @@ def compute_suggestion_buckets(
     goals: list[GoalDict],
     weekly_targets: list[WeeklyTargetDict],
 ) -> list[Suggestion]:
-    del weekly_targets  # context only for callers; bucket logic does not use it
+    del recovery_targets  # legacy storage; weekly targets drive Do suggestions
+
+    weekly_do_reasons = _incomplete_weekly_target_reasons(
+        weekly_targets,
+        activity_classes,
+        activities,
+        logs,
+        as_of,
+    )
 
     class_statuses = compute_class_statuses(
         as_of, activity_classes, activities, logs, rules
     )
     status_map = {status["activity_class_id"]: status for status in class_statuses}
+    class_wide_statuses = compute_class_statuses(
+        as_of,
+        activity_classes,
+        activities,
+        logs,
+        [rule for rule in rules if not rule.get("activity_id")],
+    )
+    class_wide_status_map = {
+        status["activity_class_id"]: status for status in class_wide_statuses
+    }
     class_map = {cls["id"]: cls for cls in activity_classes}
 
     done_rows: list[Suggestion] = []
@@ -951,7 +1180,22 @@ def compute_suggestion_buckets(
 
         activity_id = activity["id"]
         class_id = activity["activity_class_id"]
-        status = status_map.get(class_id)
+        class_wide_status = class_wide_status_map.get(class_id)
+        activity_violations = check_violations(
+            activity_id,
+            volume_value=0,
+            rpe=5,
+            activities=activities,
+            logs=logs,
+            rules=rules,
+            as_of=as_of,
+            duration_minutes=1,
+        )
+        activity_status = None
+        worst_violation = _worst_violation(activity_violations)
+        if worst_violation is not None:
+            activity_status = _status_from_violation(class_id, worst_violation)
+        status = activity_status or class_wide_status or status_map.get(class_id)
         cls = class_map.get(class_id)
 
         logged_today = any(
@@ -973,27 +1217,30 @@ def compute_suggestion_buckets(
         if _goal_achieved_in_live_period(goals, activity_id, as_of):
             continue
 
-        if _recovery_daily_target_met(
-            activity_id,
-            class_id,
-            activity_classes,
-            recovery_targets,
-            logs,
-            as_of,
-        ):
-            continue
+        weekly_reason = weekly_do_reasons.get(activity_id)
 
-        if status is not None and status["state"] in {"caution", "danger"}:
+        rest_status = activity_status
+        if (
+            rest_status is None
+            and class_wide_status is not None
+            and class_wide_status["state"] in {"caution", "danger"}
+        ):
+            rest_status = class_wide_status
+
+        if rest_status is not None and rest_status["state"] in {"caution", "danger"}:
             rest_rows.append(
                 _build_suggestion_row(
                     activity=activity,
                     bucket="rest",
-                    status=status,
+                    status=rest_status,
                     cls=cls,
-                    description=status["reason"],
+                    description=rest_status["reason"],
                 )
             )
             rest_by_class.setdefault(class_id, []).append(activity["name"])
+            continue
+
+        if weekly_reason is None:
             continue
 
         do_rows.append(
@@ -1003,6 +1250,7 @@ def compute_suggestion_buckets(
                 status=status,
                 cls=cls,
                 description=None,
+                reason=weekly_reason,
             )
         )
 
@@ -1051,21 +1299,37 @@ def compute_weekly_progress(
     period_end: str,
 ) -> list[WeeklyProgress]:
     class_map = {cls["id"]: cls for cls in activity_classes}
+    activity_map = {activity["id"]: activity for activity in activities}
+    _, week_label_end = this_week_bounds(period_start)
     progress: list[WeeklyProgress] = []
 
     for target in weekly_targets:
         class_id = target["activity_class_id"]
-        cls_activity_ids = _activity_ids_for_class(class_id, activities)
+        target_activity_id = target.get("activity_id")
+        activity_name = (
+            activity_map.get(target_activity_id, {}).get("name")
+            if target_activity_id is not None
+            else None
+        )
+        if target_activity_id is not None:
+            scope_activity_ids = {target_activity_id}
+        else:
+            scope_activity_ids = set(_activity_ids_for_class(class_id, activities))
+
         period_logs = [
             log
             for log in logs
-            if log["activity_id"] in cls_activity_ids
+            if log["activity_id"] in scope_activity_ids
             and period_start <= log["logged_date"] <= period_end
         ]
 
         target_unit = target["target_unit"]
         if target_unit == "sessions":
             value = float(len(period_logs))
+        elif target_unit == "minutes":
+            value = float(
+                sum(log.get("duration_minutes") or 0 for log in period_logs)
+            )
         else:
             value = sum(
                 log["volume_value"]
@@ -1091,10 +1355,14 @@ def compute_weekly_progress(
                 "weekly_target_id": target["id"],
                 "activity_class_id": class_id,
                 "class_name": class_map.get(class_id, {}).get("name", "Unknown"),
+                "activity_id": target_activity_id,
+                "activity_name": activity_name,
                 "value": rounded,
                 "target": target_value,
                 "unit": target_unit,
                 "state": state,  # type: ignore[typeddict-item]
+                "period_start": period_start,
+                "period_end": week_label_end,
             }
         )
     return progress
@@ -1124,6 +1392,60 @@ def compute_clean_streak(logs: list[LogDict]) -> int:
 # ---------------------------------------------------------------------------
 
 
+def _daily_load_tax_for_class(
+    class_id: str,
+    activities: list[ActivityDict],
+    activity_classes: list[ActivityClassDict],
+    logs: list[LogDict],
+    rules: list[RuleDict],
+    day: str,
+) -> float:
+    ids = set(_activity_ids_for_class(class_id, activities))
+    activity_map = {activity["id"]: activity for activity in activities}
+    total = 0.0
+    for log in logs:
+        if log["logged_date"] != day or log["activity_id"] not in ids:
+            continue
+        activity = activity_map.get(log["activity_id"])
+        if activity is None or not _is_performance_activity(activity):
+            continue
+        total += compute_log_load_tax(
+            log,
+            activity,
+            activities,
+            activity_classes,
+            logs,
+            rules,
+            as_of=day,
+        )
+    return total
+
+
+def _recency_weighted_load_tax(
+    class_id: str,
+    activities: list[ActivityDict],
+    activity_classes: list[ActivityClassDict],
+    logs: list[LogDict],
+    rules: list[RuleDict],
+    as_of: str,
+    window_days: int,
+) -> float:
+    del window_days
+    total = 0.0
+    for offset, weight in enumerate(LOAD_TAX_RECENCY_WEIGHTS):
+        day = add_days(as_of, -offset)
+        daily_tax = _daily_load_tax_for_class(
+            class_id,
+            activities,
+            activity_classes,
+            logs,
+            rules,
+            day,
+        )
+        total += daily_tax * weight
+    return total
+
+
 def compute_load_series(
     class_id: str,
     activities: list[ActivityDict],
@@ -1131,23 +1453,53 @@ def compute_load_series(
     start_date: str,
     end_date: str,
     window_days: int = 7,
+    *,
+    activity_classes: list[ActivityClassDict] | None = None,
+    rules: list[RuleDict] | None = None,
 ) -> list[LoadPoint]:
     ids = set(_activity_ids_for_class(class_id, activities))
-    scoped = [
-        log
-        for log in logs
-        if log["activity_id"] in ids
-        and start_date <= log["logged_date"] <= end_date
+    class_logs = [
+        log for log in logs if log["activity_id"] in ids and log["logged_date"] <= end_date
     ]
+
     series: list[LoadPoint] = []
     for day in each_day(start_date, end_date):
-        series.append(
-            {
-                "date": day,
-                "load": rolling_load(scoped, day, window_days),
-                "daily_load": daily_load(scoped, day),
-            }
-        )
+        if activity_classes is not None:
+            series.append(
+                {
+                    "date": day,
+                    "load": _recency_weighted_load_tax(
+                        class_id,
+                        activities,
+                        activity_classes,
+                        class_logs,
+                        rules or [],
+                        day,
+                        window_days,
+                    ),
+                    "daily_load": _daily_load_tax_for_class(
+                        class_id,
+                        activities,
+                        activity_classes,
+                        class_logs,
+                        rules or [],
+                        day,
+                    ),
+                }
+            )
+        else:
+            scoped = [
+                log
+                for log in class_logs
+                if start_date <= log["logged_date"] <= end_date
+            ]
+            series.append(
+                {
+                    "date": day,
+                    "load": rolling_load(scoped, day, window_days),
+                    "daily_load": daily_load(scoped, day),
+                }
+            )
     return series
 
 
@@ -1396,21 +1748,19 @@ def _violations_loop_rules(
     enabled_rules: list[RuleDict],
 ) -> list[RuleViolationSnapshot]:
     violations: list[RuleViolationSnapshot] = []
-    for rule in enabled_rules:
-        if (
-            rule["rule_type"] == "frequency_limit"
-            and rule["activity_class_id"] == class_id
-        ):
+    del activities
+    for rule in effective_rules_for_activity(activity["id"], class_id, enabled_rules):
+        scoped_activity_ids = (
+            {activity["id"]} if rule.get("activity_id") == activity["id"] else class_activity_ids
+        )
+        if rule["rule_type"] == "frequency_limit":
             violations.extend(
-                _violations_frequency_limit(rule, class_activity_ids, logs, as_of)
+                _violations_frequency_limit(rule, scoped_activity_ids, logs, as_of)
             )
-        elif (
-            rule["rule_type"] == "consecutive_day_limit"
-            and rule["activity_class_id"] == class_id
-        ):
+        elif rule["rule_type"] == "consecutive_day_limit":
             violations.extend(
                 _violations_consecutive_day_limit(
-                    rule, class_activity_ids, logs, as_of
+                    rule, scoped_activity_ids, logs, as_of
                 )
             )
     return violations
@@ -1439,14 +1789,14 @@ def check_violations(
     enabled_rules = [rule for rule in rules if rule.get("enabled", True)]
     violations: list[RuleViolationSnapshot] = []
 
-    rest_rule = _enabled_class_rule(
-        enabled_rules, class_id, "rest_between_class"
-    )
-    if rest_rule is not None:
+    for rule in effective_rules_for_activity(activity_id, class_id, enabled_rules):
+        if rule["rule_type"] != "rest_between_class":
+            continue
+        scoped_activity_ids = (
+            {activity_id} if rule.get("activity_id") == activity_id else class_activity_ids
+        )
         violations.extend(
-            _violations_rest_between_class(
-                rest_rule, class_activity_ids, logs, as_of
-            )
+            _violations_rest_between_class(rule, scoped_activity_ids, logs, as_of)
         )
 
     if volume_value > 0 and rpe > 0:
@@ -1499,17 +1849,22 @@ def check_violations(
 
 
 # ---------------------------------------------------------------------------
-# compute_load_risk_summary (S25.B6)
+# compute_load_risk_summary (S25.B6 / WTL.B6)
 # ---------------------------------------------------------------------------
 
-_LOAD_RISK_CAP_RULE_TYPES = frozenset(
-    {"weekly_load_cap", "daily_volume_cap", "weekly_volume_cap", "frequency_limit"}
+LOAD_RISK_STRIP_CAUTION_AT = 2.5
+LOAD_RISK_STRIP_DANGER_AT = 5.0
+
+_LOAD_RISK_ROW_RULE_TYPES = frozenset(
+    {
+        "frequency_limit",
+        "consecutive_day_limit",
+        "rest_between_class",
+        "weekly_load_cap",
+        "daily_volume_cap",
+        "weekly_volume_cap",
+    }
 )
-_LOAD_RISK_METRIC_PRIORITY: list[tuple[str, frozenset[str]]] = [
-    ("volume", frozenset({"daily_volume_cap", "weekly_volume_cap"})),
-    ("frequency", frozenset({"frequency_limit"})),
-    ("load", frozenset({"weekly_load_cap"})),
-]
 _LOAD_RISK_WEEK_DAYS = 7
 
 
@@ -1520,133 +1875,375 @@ def _rule_has_finite_limit(rule: RuleDict) -> bool:
     return float(threshold) > 0
 
 
-def _enabled_cap_rules_for_class(class_id: str, rules: list[RuleDict]) -> list[RuleDict]:
-    return [
-        rule
-        for rule in rules
-        if rule.get("enabled", True)
-        and rule.get("activity_class_id") == class_id
-        and rule["rule_type"] in _LOAD_RISK_CAP_RULE_TYPES
-        and _rule_has_finite_limit(rule)
-    ]
+def _strip_graph_class_id(
+    classes: list[ActivityClassDict],
+    rules: list[RuleDict],
+) -> str | None:
+    enabled_caps = sorted(
+        (
+            rule
+            for rule in rules
+            if rule.get("enabled", True)
+            and rule["rule_type"] == "weekly_load_cap"
+            and rule.get("activity_class_id")
+            and not rule.get("activity_id")
+        ),
+        key=lambda rule: str(rule.get("activity_class_id")),
+    )
+    if enabled_caps:
+        return str(enabled_caps[0]["activity_class_id"])
 
-
-def _class_has_enabled_cap_rules(class_id: str, rules: list[RuleDict]) -> bool:
-    return bool(_enabled_cap_rules_for_class(class_id, rules))
-
-
-def _primary_cap_rule_for_class(
-    class_id: str, rules: list[RuleDict]
-) -> tuple[str, RuleDict] | None:
-    enabled = _enabled_cap_rules_for_class(class_id, rules)
-    if not enabled:
-        return None
-
-    for metric, rule_types in _LOAD_RISK_METRIC_PRIORITY:
-        matching = [rule for rule in enabled if rule["rule_type"] in rule_types]
-        if not matching:
-            continue
-        class_scoped = [rule for rule in matching if not rule.get("activity_id")]
-        pool = class_scoped or matching
-        return metric, _pick_strictest_rule(pool)
+    performance_class_ids = sorted(
+        cls["id"] for cls in classes if cls.get("type") == "performance"
+    )
+    if performance_class_ids:
+        return str(performance_class_ids[0])
     return None
 
 
-def _effective_cap_rule_for_activity(
-    activity_id: str,
-    class_id: str,
+def _strip_load_tax_for_day(
+    graph_class_id: str,
+    activities: list[ActivityDict],
+    classes: list[ActivityClassDict],
+    logs: list[LogDict],
     rules: list[RuleDict],
-    metric: str,
-    class_rule: RuleDict,
-) -> RuleDict:
-    rule_types = next(
-        types for name, types in _LOAD_RISK_METRIC_PRIORITY if name == metric
-    )
-    exercise_rules = [
-        rule
-        for rule in rules
-        if rule.get("enabled", True)
-        and rule.get("activity_class_id") == class_id
-        and rule.get("activity_id") == activity_id
-        and rule["rule_type"] in rule_types
-        and _rule_has_finite_limit(rule)
+    as_of: str,
+) -> float:
+    """Recency-weighted load tax from prior days only (excludes same-day load)."""
+    total = 0.0
+    for offset, weight in enumerate(LOAD_TAX_RECENCY_WEIGHTS):
+        if offset == 0:
+            continue
+        day = add_days(as_of, -offset)
+        daily_tax = _daily_load_tax_for_class(
+            graph_class_id,
+            activities,
+            classes,
+            logs,
+            rules,
+            day,
+        )
+        total += daily_tax * weight
+    return total
+
+
+def _load_tax_strip_state(load: float) -> SafetyState:
+    if load >= LOAD_RISK_STRIP_DANGER_AT:
+        return "danger"
+    if load >= LOAD_RISK_STRIP_CAUTION_AT:
+        return "caution"
+    return "safe"
+
+
+def _class_name_for_id(
+    class_id: str,
+    classes: list[ActivityClassDict],
+) -> str:
+    for cls in classes:
+        if cls["id"] == class_id:
+            return str(cls["name"])
+    return class_id
+
+
+def _activity_name_for_id(
+    activity_id: str,
+    activities: list[ActivityDict],
+) -> str:
+    for activity in activities:
+        if activity["id"] == activity_id:
+            return str(activity["name"])
+    return activity_id
+
+
+def _scoped_activity_ids_for_rule(
+    rule: RuleDict,
+    activities: list[ActivityDict],
+) -> set[str]:
+    activity_id = rule.get("activity_id")
+    class_id = rule.get("activity_class_id")
+    if activity_id:
+        return {str(activity_id)}
+    if class_id:
+        return set(_activity_ids_for_class(str(class_id), activities))
+    return set()
+
+
+def _days_since_last_session(
+    scope_ids: set[str],
+    logs: list[LogDict],
+    as_of: str,
+) -> int | None:
+    prior_logs = [
+        log
+        for log in logs
+        if log["activity_id"] in scope_ids and log["logged_date"] < as_of
     ]
-    if exercise_rules:
-        return _pick_strictest_rule(exercise_rules)
-    return class_rule
+    if not prior_logs:
+        return None
+    prior_logs.sort(key=lambda log: log["logged_date"], reverse=True)
+    return _days_between(prior_logs[0]["logged_date"], as_of)
 
 
-def _metric_actual_and_limit(
-    metric: str,
+def _consecutive_day_streak(
+    scope_ids: set[str],
+    logs: list[LogDict],
+    as_of: str,
+) -> int:
+    consecutive = 0
+    cursor = as_of
+    while True:
+        has_log = any(
+            log["activity_id"] in scope_ids and log["logged_date"] == cursor
+            for log in logs
+        )
+        if not has_log:
+            break
+        consecutive += 1
+        cursor = add_days(cursor, -1)
+    return consecutive
+
+
+def _rest_rule_limit_state(days_since: int | None, limit: float) -> SafetyState:
+    if days_since is None:
+        return "safe"
+    if days_since > limit:
+        return "safe"
+    if days_since <= 1:
+        return "danger"
+    return "caution"
+
+
+def _rule_limit_row_state(
+    rule_type: str,
+    actual: float,
+    limit: float,
+    *,
+    days_since: int | None = None,
+) -> SafetyState:
+    if rule_type == "rest_between_class":
+        return _rest_rule_limit_state(days_since, limit)
+    severity = _severity_from_ratio(actual, limit)
+    if severity == "danger":
+        return "danger"
+    if severity == "caution":
+        return "caution"
+    return "safe"
+
+
+def _format_rule_limit_number(value: float) -> str:
+    rounded = round(value, 1)
+    if rounded.is_integer():
+        return str(int(rounded))
+    return f"{rounded:.1f}"
+
+
+def _rule_limit_row_label(
+    rule: RuleDict,
+    *,
+    actual: float,
+    limit: float,
+    unit: str,
+    class_name: str,
+    activity_name: str | None,
+    days_since: int | None,
+) -> str:
+    rule_type = rule["rule_type"]
+    if rule_type == "rest_between_class":
+        if days_since is None:
+            return "No prior session — rest spacing clear"
+        day_label = "day" if days_since == 1 else "days"
+        return (
+            f"{days_since} {day_label} since last session "
+            f"({int(limit)}-day minimum)"
+        )
+    if rule_type == "consecutive_day_limit":
+        return (
+            f"{_format_rule_limit_number(actual)} / "
+            f"{_format_rule_limit_number(limit)} consecutive days"
+        )
+    if rule_type == "frequency_limit":
+        target = activity_name or class_name
+        return (
+            f"{_format_rule_limit_number(actual)} / "
+            f"{_format_rule_limit_number(limit)} sessions · {target}"
+        )
+    if rule_type == "weekly_load_cap":
+        return (
+            f"{_format_rule_limit_number(actual)} / "
+            f"{_format_rule_limit_number(limit)} load · {class_name}"
+        )
+    target = activity_name or class_name
+    return (
+        f"{_format_rule_limit_number(actual)} / "
+        f"{_format_rule_limit_number(limit)} {unit} · {target}"
+    )
+
+
+def _rule_limit_row_metrics(
     rule: RuleDict,
     *,
     activities: list[ActivityDict],
     logs: list[LogDict],
+    rules: list[RuleDict],
     as_of: str,
-    class_id: str | None = None,
-    activity_id: str | None = None,
-) -> tuple[float, float, str]:
+) -> tuple[float, float, str, int | None]:
+    rule_type = rule["rule_type"]
     threshold = float(rule["threshold_value"])
     window = int(rule["window_days"])
+    scope_ids = _scoped_activity_ids_for_rule(rule, activities)
+    class_id = str(rule["activity_class_id"])
+    activity_id = rule.get("activity_id")
 
-    if metric == "load":
-        if activity_id is not None:
-            scoped_logs = _activity_logs_up_to(activity_id, logs, as_of)
+    if rule_type == "rest_between_class":
+        days_since = _days_since_last_session(scope_ids, logs, as_of)
+        if days_since is None:
+            return 0.0, threshold, "days", None
+        return float(days_since), threshold, "days", days_since
+
+    if rule_type == "consecutive_day_limit":
+        streak = _consecutive_day_streak(scope_ids, logs, as_of)
+        return float(streak), threshold, "days", None
+
+    if rule_type == "frequency_limit":
+        win_start = add_days(as_of, -(window - 1))
+        scoped_logs = [
+            log
+            for log in logs
+            if log["activity_id"] in scope_ids
+            and win_start <= log["logged_date"] <= as_of
+        ]
+        actual = float(len(scoped_logs))
+        return actual, threshold, "sessions", None
+
+    if rule_type == "weekly_load_cap":
+        if activity_id:
+            scoped_logs = _activity_logs_up_to(str(activity_id), logs, as_of)
         else:
-            assert class_id is not None
             scoped_logs = _class_logs_up_to(class_id, activities, logs, as_of)
         actual = rolling_load(scoped_logs, as_of, window)
-        return actual, threshold, "load"
+        return actual, threshold, "load", None
 
-    if metric == "frequency":
-        win_start = add_days(as_of, -(window - 1))
-        if activity_id is not None:
-            actual = float(
-                sum(
-                    1
-                    for log in logs
-                    if log["activity_id"] == activity_id
-                    and win_start <= log["logged_date"] <= as_of
-                )
-            )
-        else:
-            assert class_id is not None
-            class_activity_ids = set(_activity_ids_for_class(class_id, activities))
-            actual = float(
-                sum(
-                    1
-                    for log in logs
-                    if log["activity_id"] in class_activity_ids
-                    and win_start <= log["logged_date"] <= as_of
-                )
-            )
-        return actual, threshold, "sessions"
-
-    limit_unit = rule.get("limit_unit") or ""
+    limit_unit = str(rule.get("limit_unit") or "")
     win_start = add_days(as_of, -(window - 1))
-    if activity_id is not None:
-        activity_logs = [
+    if activity_id:
+        scoped_logs = [
             log
             for log in logs
             if log["activity_id"] == activity_id
             and win_start <= log["logged_date"] <= as_of
         ]
     else:
-        assert class_id is not None
-        class_activity_ids = set(_activity_ids_for_class(class_id, activities))
-        activity_logs = [
+        scoped_logs = [
             log
             for log in logs
-            if log["activity_id"] in class_activity_ids
+            if log["activity_id"] in scope_ids
             and win_start <= log["logged_date"] <= as_of
         ]
+    if rule_type == "daily_volume_cap":
+        scoped_logs = [log for log in scoped_logs if log["logged_date"] == as_of]
+    actual = _sum_volume_for_cap(scoped_logs, limit_unit)
+    return float(actual), threshold, limit_unit, None
 
-    if rule["rule_type"] == "daily_volume_cap":
-        activity_logs = [
-            log for log in activity_logs if log["logged_date"] == as_of
-        ]
-    actual = _sum_volume_for_cap(activity_logs, limit_unit)
-    return float(actual), threshold, str(limit_unit)
+
+def _build_rule_limit_row(
+    rule: RuleDict,
+    *,
+    classes: list[ActivityClassDict],
+    activities: list[ActivityDict],
+    logs: list[LogDict],
+    rules: list[RuleDict],
+    as_of: str,
+) -> LoadRiskRuleLimitRow:
+    class_id = str(rule["activity_class_id"])
+    activity_id = rule.get("activity_id")
+    class_name = _class_name_for_id(class_id, classes)
+    activity_name = (
+        _activity_name_for_id(str(activity_id), activities)
+        if activity_id
+        else None
+    )
+    actual, limit, unit, days_since = _rule_limit_row_metrics(
+        rule,
+        activities=activities,
+        logs=logs,
+        rules=rules,
+        as_of=as_of,
+    )
+    state = _rule_limit_row_state(
+        rule["rule_type"],
+        actual,
+        limit,
+        days_since=days_since,
+    )
+    row: LoadRiskRuleLimitRow = {
+        "id": str(rule["id"]),
+        "scope": "activity" if activity_id else "class",
+        "rule_id": str(rule["id"]),
+        "rule_type": rule["rule_type"],
+        "activity_class_id": class_id,
+        "class_name": class_name,
+        "actual": actual,
+        "limit": limit,
+        "unit": unit,
+        "state": state,
+        "label": _rule_limit_row_label(
+            rule,
+            actual=actual,
+            limit=limit,
+            unit=unit,
+            class_name=class_name,
+            activity_name=activity_name,
+            days_since=days_since,
+        ),
+    }
+    if activity_id:
+        row["activity_id"] = str(activity_id)
+        row["activity_name"] = activity_name
+    else:
+        row["activity_id"] = None
+    if rule["rule_type"] == "rest_between_class":
+        row["display_mode"] = "status"
+    return row
+
+
+def _enabled_rule_limit_rows(
+    classes: list[ActivityClassDict],
+    activities: list[ActivityDict],
+    logs: list[LogDict],
+    rules: list[RuleDict],
+    as_of: str,
+) -> list[LoadRiskRuleLimitRow]:
+    class_names = {cls["id"]: cls["name"] for cls in classes}
+    rows: list[LoadRiskRuleLimitRow] = []
+    for rule in rules:
+        if not rule.get("enabled", True):
+            continue
+        if rule["rule_type"] not in _LOAD_RISK_ROW_RULE_TYPES:
+            continue
+        if not _rule_has_finite_limit(rule):
+            continue
+        class_id = rule.get("activity_class_id")
+        if not class_id or class_id not in class_names:
+            continue
+        rows.append(
+            _build_rule_limit_row(
+                rule,
+                classes=classes,
+                activities=activities,
+                logs=logs,
+                rules=rules,
+                as_of=as_of,
+            )
+        )
+    rows.sort(
+        key=lambda row: (
+            row["class_name"],
+            0 if row["scope"] == "class" else 1,
+            row["rule_type"],
+            row["rule_id"],
+        )
+    )
+    return rows
 
 
 def _day_cap_breached(
@@ -1660,8 +2257,6 @@ def _day_cap_breached(
         if cls.get("type") != "performance":
             continue
         class_id = cls["id"]
-        if not _class_has_enabled_cap_rules(class_id, rules):
-            continue
 
         if _class_load_cap_violation(class_id, activities, logs, rules, day) is not None:
             return True
@@ -1690,52 +2285,6 @@ def _delayed_tax_elevated_dates(
     }
 
 
-def _exercise_bars_for_class(
-    class_id: str,
-    metric: str,
-    class_rule: RuleDict,
-    activities: list[ActivityDict],
-    logs: list[LogDict],
-    rules: list[RuleDict],
-    as_of: str,
-) -> list[LoadRiskExerciseBar]:
-    win_start = add_days(as_of, -(_LOAD_RISK_WEEK_DAYS - 1))
-    class_activity_ids = set(_activity_ids_for_class(class_id, activities))
-    activity_ids_with_logs = {
-        log["activity_id"]
-        for log in logs
-        if log["activity_id"] in class_activity_ids
-        and win_start <= log["logged_date"] <= as_of
-    }
-
-    exercises: list[LoadRiskExerciseBar] = []
-    for activity in activities:
-        activity_id = activity["id"]
-        if activity_id not in activity_ids_with_logs:
-            continue
-        rule = _effective_cap_rule_for_activity(
-            activity_id, class_id, rules, metric, class_rule
-        )
-        actual, limit, unit = _metric_actual_and_limit(
-            metric,
-            rule,
-            activities=activities,
-            logs=logs,
-            as_of=as_of,
-            activity_id=activity_id,
-        )
-        exercises.append(
-            {
-                "activity_id": activity_id,
-                "activity_name": activity["name"],
-                "actual": actual,
-                "limit": limit,
-                "unit": unit,
-            }
-        )
-    return exercises
-
-
 def compute_load_risk_summary(
     as_of: str,
     classes: list[ActivityClassDict],
@@ -1746,55 +2295,40 @@ def compute_load_risk_summary(
 ) -> LoadRiskSummary:
     week_start = add_days(as_of, -(_LOAD_RISK_WEEK_DAYS - 1))
     elevated_dates = _delayed_tax_elevated_dates(delayed_tax_hits)
+    graph_class_id = _strip_graph_class_id(classes, rules)
 
     week_days: list[LoadRiskDay] = []
     for day in each_day(week_start, as_of):
+        load_tax = (
+            _strip_load_tax_for_day(
+                graph_class_id,
+                activities,
+                classes,
+                logs,
+                rules,
+                day,
+            )
+            if graph_class_id is not None
+            else 0.0
+        )
         week_days.append(
             {
                 "date": day,
                 "flagged": _day_cap_breached(day, classes, activities, logs, rules)
                 or day in elevated_dates,
+                "state": _load_tax_strip_state(load_tax),
             }
         )
 
-    class_bars: list[LoadRiskClassBar] = []
-    for cls in classes:
-        if cls.get("type") != "performance":
-            continue
-        class_id = cls["id"]
-        primary = _primary_cap_rule_for_class(class_id, rules)
-        if primary is None:
-            continue
+    rule_limit_rows = _enabled_rule_limit_rows(
+        classes,
+        activities,
+        logs,
+        rules,
+        as_of,
+    )
 
-        metric, class_rule = primary
-        actual, limit, unit = _metric_actual_and_limit(
-            metric,
-            class_rule,
-            activities=activities,
-            logs=logs,
-            as_of=as_of,
-            class_id=class_id,
-        )
-        class_bars.append(
-            {
-                "activity_class_id": class_id,
-                "class_name": cls["name"],
-                "actual": actual,
-                "limit": limit,
-                "unit": unit,
-                "exercises": _exercise_bars_for_class(
-                    class_id,
-                    metric,
-                    class_rule,
-                    activities,
-                    logs,
-                    rules,
-                    as_of,
-                ),
-            }
-        )
-
-    return {"week_days": week_days, "class_bars": class_bars}
+    return {"week_days": week_days, "rule_limit_rows": rule_limit_rows}
 
 
 # ---------------------------------------------------------------------------

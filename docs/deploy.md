@@ -32,7 +32,7 @@ Open the [Netlify app URL](https://milestone-activity.netlify.app) and complete 
 1. **Sign in** with the shared app password.
 2. **Activity classes** — Settings → **+ New class** (name, type, optional description).
 3. **+ New Activity** — Log tab (or Settings → Activities) to add an activity.
-4. **Training block** — Settings → **+ New Training Block**.
+4. **Weekly rules** — Settings → **Weekly rules** (current calendar week is auto-created; use **Edit rules**).
 5. **+ Log Activity** on the Log tab; **Morning check-in** on the Dashboard tab.
 
 Stage 2 polish context: [`plans/PRD.md` §10](../plans/PRD.md#10-stage-2--use-driven-polish).

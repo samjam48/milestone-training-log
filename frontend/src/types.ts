@@ -150,6 +150,11 @@ export interface TrainingBlock extends Timestamped {
   notes?: string;
   /** True once weekly volume hit + 2 consecutive safe days. */
   isReviewMilestoneHit: boolean;
+  /** Weekly focus lifecycle; omitted on legacy month-style blocks. */
+  periodKind?: 'weekly_focus' | 'legacy';
+  focusSeriesId?: ID;
+  focusTitle?: string;
+  weekNumber?: number;
 }
 
 export type RuleType =
@@ -190,6 +195,8 @@ export interface WeeklyTarget extends Timestamped {
   id: ID;
   trainingBlockId: ID;
   activityClassId: ID;
+  /** Activity-scoped weekly target (WTL.B1/B2); legacy rows may omit. */
+  activityId?: ID;
   targetValue: number;
   targetUnit: VolumeUnit;
 }
@@ -266,6 +273,43 @@ export interface ActivityClassStatus {
   lastDoneDate?: ISODate;
   nextSafeDate?: ISODate;
   reason?: string;                    // "Last done 2 days ago, rest 3"
+}
+
+/** Scope of a load-risk rule-limit row (WTL.B6 / WTL.F5). */
+export type LoadRiskRuleLimitScope = 'class' | 'activity';
+
+/** How a rule-limit row is rendered on the dashboard load-risk panel. */
+export type LoadRiskRuleLimitDisplayMode = 'bar' | 'status';
+
+/** Rolling seven-day strip cell from load_risk_summary.week_days. */
+export interface LoadRiskDayCell {
+  date: ISODate;
+  flagged: boolean;
+  state: SafetyState;
+}
+
+/** One enabled rule limit surfaced on the dashboard load-risk panel. */
+export interface LoadRiskRuleLimitRow {
+  id: ID;
+  scope: LoadRiskRuleLimitScope;
+  ruleId: ID;
+  ruleType: string;
+  activityClassId: ID;
+  className: string;
+  actual: number;
+  limit: number;
+  unit: string;
+  state: SafetyState;
+  label: string;
+  activityId?: ID | null;
+  activityName?: string | null;
+  displayMode: LoadRiskRuleLimitDisplayMode;
+}
+
+/** Dashboard load_risk_summary after API mapping (WTL.B6 / WTL.F5). */
+export interface LoadRiskSummary {
+  weekDays: LoadRiskDayCell[];
+  ruleLimitRows: LoadRiskRuleLimitRow[];
 }
 
 export type { LoadPoint } from './lib/load';

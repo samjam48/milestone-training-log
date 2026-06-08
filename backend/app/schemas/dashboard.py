@@ -57,28 +57,29 @@ class GoalDashboardRowRead(BaseModel):
 class LoadRiskDayRead(BaseModel):
     date: date
     flagged: bool
+    state: Literal["safe", "caution", "danger"]
 
 
-class LoadRiskExerciseBarRead(BaseModel):
-    activity_id: str
-    activity_name: str
-    actual: float
-    limit: float
-    unit: str
-
-
-class LoadRiskClassBarRead(BaseModel):
+class LoadRiskRuleLimitRowRead(BaseModel):
+    id: str
+    scope: Literal["class", "activity"]
+    rule_id: str
+    rule_type: str
     activity_class_id: str
     class_name: str
     actual: float
     limit: float
     unit: str
-    exercises: list[LoadRiskExerciseBarRead]
+    state: Literal["safe", "caution", "danger"]
+    label: str
+    activity_id: str | None = None
+    activity_name: str | None = None
+    display_mode: str | None = None
 
 
 class LoadRiskSummaryRead(BaseModel):
     week_days: list[LoadRiskDayRead]
-    class_bars: list[LoadRiskClassBarRead]
+    rule_limit_rows: list[LoadRiskRuleLimitRowRead]
 
 
 class DashboardRead(BaseModel):
@@ -100,7 +101,7 @@ class DashboardRead(BaseModel):
     load_series: list[LoadPointRead]
     graph_class_id: str | None
     flare_up_dates: list[str]
-    week_load_threshold: int
+    week_load_threshold: int | None = None
     clean_streak: int
     recovery_streaks: list[RecoveryStreakRead]
     goals: list[GoalRead]  # all local goals (Goals tab: active, achieved, paused, missed)
@@ -132,27 +133,27 @@ def load_risk_summary_from_dict(summary: LoadRiskSummary) -> LoadRiskSummaryRead
             LoadRiskDayRead(
                 date=date.fromisoformat(day["date"]),
                 flagged=bool(day["flagged"]),
+                state=day["state"],
             )
             for day in summary["week_days"]
         ],
-        class_bars=[
-            LoadRiskClassBarRead(
-                activity_class_id=bar["activity_class_id"],
-                class_name=bar["class_name"],
-                actual=float(bar["actual"]),
-                limit=float(bar["limit"]),
-                unit=bar["unit"],
-                exercises=[
-                    LoadRiskExerciseBarRead(
-                        activity_id=exercise["activity_id"],
-                        activity_name=exercise["activity_name"],
-                        actual=float(exercise["actual"]),
-                        limit=float(exercise["limit"]),
-                        unit=exercise["unit"],
-                    )
-                    for exercise in bar["exercises"]
-                ],
+        rule_limit_rows=[
+            LoadRiskRuleLimitRowRead(
+                id=row["id"],
+                scope=row["scope"],
+                rule_id=row["rule_id"],
+                rule_type=row["rule_type"],
+                activity_class_id=row["activity_class_id"],
+                class_name=row["class_name"],
+                actual=float(row["actual"]),
+                limit=float(row["limit"]),
+                unit=row["unit"],
+                state=row["state"],
+                label=row["label"],
+                activity_id=row.get("activity_id"),
+                activity_name=row.get("activity_name"),
+                display_mode=row.get("display_mode"),
             )
-            for bar in summary["class_bars"]
+            for row in summary["rule_limit_rows"]
         ],
     )

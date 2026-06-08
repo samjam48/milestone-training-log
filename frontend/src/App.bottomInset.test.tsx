@@ -97,7 +97,7 @@ describe('App — S2.1 bottom inset layout', () => {
     expect(within(actionBar).getByRole('button', { name: '+ Log Incident' })).toBeInTheDocument();
   });
 
-  it('Goals tab + New Goal uses AppShell inset, not duplicate footer padding', async () => {
+  it('Goals tab + Big goal uses AppShell inset, not duplicate footer padding', async () => {
     const user = userEvent.setup();
     renderWithProviders(<App />);
 
@@ -105,7 +105,8 @@ describe('App — S2.1 bottom inset layout', () => {
 
     const actionBar = screen.getByTestId(BOTTOM_ACTION_BAR_TEST_ID);
     expectTabBarInsetAboveTabScreenFooter(actionBar);
-    expect(within(actionBar).getByRole('button', { name: /\+ new goal/i })).toBeInTheDocument();
+    expect(within(actionBar).getByRole('button', { name: /big goal/i })).toBeInTheDocument();
+    expect(within(actionBar).getByRole('button', { name: /weekly target/i })).toBeInTheDocument();
   });
 
   it('log-activity overlay uses safe-bottom only on AppShell (no tabbar padding)', async () => {

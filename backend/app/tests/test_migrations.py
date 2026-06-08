@@ -55,6 +55,7 @@ EXPECTED_FOREIGN_KEYS = {
     "weekly_targets": {
         ("training_block_id", "training_blocks", "id"),
         ("activity_class_id", "activity_classes", "id"),
+        ("activity_id", "activities", "id"),
     },
     "recovery_targets": {
         ("training_block_id", "training_blocks", "id"),
@@ -74,9 +75,14 @@ STAGE_2_5_RULES_COLUMNS = {
 
 EXPECTED_UNIQUE_COLUMN_SETS = {
     "daily_check_ins": {frozenset({"user_id", "check_in_date"})},
-    "weekly_targets": {frozenset({"training_block_id", "activity_class_id"})},
+    "weekly_targets": {
+        frozenset({"training_block_id", "activity_class_id"}),
+        frozenset({"training_block_id", "activity_id"}),
+    },
     "recovery_targets": {frozenset({"training_block_id", "activity_id"})},
 }
+
+STAGE_2_5_HEAD_REVISION = "20260606_0002"
 
 
 def _read_required_text(path: Path) -> str:
@@ -145,10 +151,15 @@ def _foreign_key_triples(engine: Engine, table_name: str) -> set[tuple[str, str,
 
 def _unique_column_sets(engine: Engine, table_name: str) -> set[frozenset[str]]:
     inspector = inspect(engine)
-    return {
+    unique_sets = {
         frozenset(constraint["column_names"])
         for constraint in inspector.get_unique_constraints(table_name)
     }
+    for index in inspector.get_indexes(table_name):
+        if index.get("unique"):
+            column_names = [name for name in index["column_names"] if name is not None]
+            unique_sets.add(frozenset(column_names))
+    return unique_sets
 
 
 def test_alembic_project_files_are_initialized() -> None:
@@ -194,6 +205,19 @@ def test_single_initial_migration_revision_exists() -> None:
         assert table_name in initial_revision_text
 
 
+def _revision_file_for_id(revision_id: str) -> Path:
+    revision_marker = f'revision: str = "{revision_id}"'
+    matches = [
+        path
+        for path in _migration_revision_files()
+        if revision_marker in path.read_text(encoding="utf-8")
+    ]
+    assert len(matches) == 1, (
+        f"Expected exactly one Alembic revision file for {revision_id}, found {len(matches)}."
+    )
+    return matches[0]
+
+
 def test_stage_2_5_migration_revision_adds_goals_and_rules_schema_extensions() -> None:
     revisions = _migration_revision_files()
 
@@ -201,7 +225,9 @@ def test_stage_2_5_migration_revision_adds_goals_and_rules_schema_extensions() -
         "S25.B1 requires a second Alembic revision for goals and rules schema extensions."
     )
 
-    stage_2_5_revision_text = revisions[-1].read_text(encoding="utf-8")
+    stage_2_5_revision_text = _revision_file_for_id(STAGE_2_5_HEAD_REVISION).read_text(
+        encoding="utf-8"
+    )
     assert "def upgrade()" in stage_2_5_revision_text
     assert "def downgrade()" in stage_2_5_revision_text
     assert "goals" in stage_2_5_revision_text
@@ -300,7 +326,7 @@ def test_stage_2_5_migration_disables_existing_weekly_activity_count_rules(
             )
         )
 
-    command.upgrade(config, "head")
+    command.upgrade(config, STAGE_2_5_HEAD_REVISION)
 
     with engine.connect() as connection:
         enabled = connection.execute(

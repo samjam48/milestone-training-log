@@ -182,3 +182,4 @@ def test_create_training_block_active_creates_zero_rules_when_no_previous_active
 
     assert created.status == "active"
     assert created_rules == []
+

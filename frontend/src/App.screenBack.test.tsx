@@ -36,7 +36,6 @@ const STACK_OR_OVERLAY_SCREENS = new Set([
   'GoalEditorScreen.tsx',
   'EditBlockRulesScreen.tsx',
   'BlockReviewScreen.tsx',
-  'NewTrainingBlockScreen.tsx',
   'ActivityManagerScreen.tsx',
 ]);
 
@@ -175,7 +174,7 @@ describe('S2.4 — App stack flows use shared back header wired to navigateBack'
     renderWithProviders(<App />);
 
     await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Goals' }));
-    await user.click(screen.getByRole('button', { name: /\+ new goal/i }));
+    await user.click(screen.getByRole('button', { name: /big goal/i }));
     expectSharedBackHeaderVisible();
     await user.click(within(screen.getByTestId(SCREEN_BACK_HEADER_TEST_ID)).getByRole('button'));
 
@@ -202,19 +201,6 @@ describe('S2.4 — App stack flows use shared back header wired to navigateBack'
 
     await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Settings' }));
     await user.click(screen.getByRole('button', { name: 'Review' }));
-    expectSharedBackHeaderVisible();
-    await user.click(within(screen.getByTestId(SCREEN_BACK_HEADER_TEST_ID)).getByRole('button'));
-
-    expect(screen.queryByTestId('stack-screen-overlay')).not.toBeInTheDocument();
-    expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
-  });
-
-  it('new-training-block stack shows shared back header and pops on back', async () => {
-    const user = userEvent.setup();
-    renderWithProviders(<App />);
-
-    await user.click(within(getPrimaryNav()).getByRole('button', { name: 'Settings' }));
-    await user.click(screen.getByRole('button', { name: /\+ new training block/i }));
     expectSharedBackHeaderVisible();
     await user.click(within(screen.getByTestId(SCREEN_BACK_HEADER_TEST_ID)).getByRole('button'));
 

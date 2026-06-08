@@ -5,44 +5,26 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, screen, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders';
 import { LoadRiskSection } from './LoadRiskSection';
 import type { LoadRiskSummary } from '../../lib/engine';
 
+const EMPTY_WEEK: LoadRiskSummary['weekDays'] = [
+  { date: '2026-05-22', flagged: false, state: 'safe' },
+  { date: '2026-05-23', flagged: false, state: 'safe' },
+  { date: '2026-05-24', flagged: false, state: 'safe' },
+  { date: '2026-05-25', flagged: false, state: 'safe' },
+  { date: '2026-05-26', flagged: false, state: 'safe' },
+  { date: '2026-05-27', flagged: false, state: 'safe' },
+  { date: '2026-05-28', flagged: false, state: 'safe' },
+];
+
 function buildSummary(
-  exerciseUnit: string,
-  actual: number,
-  limit: number,
+  rows: LoadRiskSummary['ruleLimitRows'],
 ): LoadRiskSummary {
   return {
-    weekDays: [
-      { date: '2026-05-22', flagged: false },
-      { date: '2026-05-23', flagged: false },
-      { date: '2026-05-24', flagged: false },
-      { date: '2026-05-25', flagged: false },
-      { date: '2026-05-26', flagged: false },
-      { date: '2026-05-27', flagged: false },
-      { date: '2026-05-28', flagged: false },
-    ],
-    classBars: [
-      {
-        activityClassId: 'cls-foot',
-        className: 'Foot load',
-        actual,
-        limit,
-        unit: exerciseUnit,
-        exercises: [
-          {
-            activityId: 'act-walk',
-            activityName: 'Walking',
-            actual,
-            limit,
-            unit: exerciseUnit,
-          },
-        ],
-      },
-    ],
+    weekDays: EMPTY_WEEK,
+    ruleLimitRows: rows,
   };
 }
 
@@ -51,35 +33,85 @@ afterEach(() => {
 });
 
 describe('LoadRiskSection — P25.7 volume-cap units', () => {
-  it('renders exercise bar actual/limit with hours unit', async () => {
-    const user = userEvent.setup();
+  it('renders exercise bar actual/limit with hours unit', () => {
     renderWithProviders(
-      <LoadRiskSection loadRiskSummary={buildSummary('hours', 1.5, 3)} />,
+      <LoadRiskSection
+        loadRiskSummary={buildSummary([
+          {
+            id: 'row-walk-cap',
+            scope: 'activity',
+            ruleId: 'rule-walk-cap',
+            ruleType: 'weekly_volume_cap',
+            activityClassId: 'cls-foot',
+            className: 'Foot load',
+            activityId: 'act-walk',
+            activityName: 'Walking',
+            actual: 1.5,
+            limit: 3,
+            unit: 'hours',
+            state: 'safe',
+            label: 'Walking weekly volume',
+            displayMode: 'bar',
+          },
+        ])}
+      />,
     );
 
-    await user.click(screen.getByTestId('load-risk-class-row-cls-foot'));
-
-    const panel = screen.getByTestId('load-risk-exercise-bars');
-    expect(within(panel).getByText('1.5 / 3 hours')).toBeInTheDocument();
+    const row = screen.getByTestId('load-risk-rule-row-row-walk-cap');
+    expect(within(row).getByText('1.5 / 3 hours')).toBeInTheDocument();
   });
 
-  it('renders exercise bar actual/limit with minutes unit', async () => {
-    const user = userEvent.setup();
+  it('renders exercise bar actual/limit with minutes unit', () => {
     renderWithProviders(
-      <LoadRiskSection loadRiskSummary={buildSummary('minutes', 45, 60)} />,
+      <LoadRiskSection
+        loadRiskSummary={buildSummary([
+          {
+            id: 'row-walk-cap',
+            scope: 'activity',
+            ruleId: 'rule-walk-cap',
+            ruleType: 'weekly_volume_cap',
+            activityClassId: 'cls-foot',
+            className: 'Foot load',
+            activityId: 'act-walk',
+            activityName: 'Walking',
+            actual: 45,
+            limit: 60,
+            unit: 'minutes',
+            state: 'safe',
+            label: 'Walking weekly volume',
+            displayMode: 'bar',
+          },
+        ])}
+      />,
     );
 
-    await user.click(screen.getByTestId('load-risk-class-row-cls-foot'));
-
-    const panel = screen.getByTestId('load-risk-exercise-bars');
-    expect(within(panel).getByText('45 / 60 minutes')).toBeInTheDocument();
+    const row = screen.getByTestId('load-risk-rule-row-row-walk-cap');
+    expect(within(row).getByText('45 / 60 minutes')).toBeInTheDocument();
   });
 
   it('renders class bar actual/limit with km unit from volume-cap summary', () => {
     renderWithProviders(
-      <LoadRiskSection loadRiskSummary={buildSummary('km', 8, 12)} />,
+      <LoadRiskSection
+        loadRiskSummary={buildSummary([
+          {
+            id: 'row-foot-cap',
+            scope: 'class',
+            ruleId: 'rule-foot-cap',
+            ruleType: 'weekly_volume_cap',
+            activityClassId: 'cls-foot',
+            className: 'Foot load',
+            actual: 8,
+            limit: 12,
+            unit: 'km',
+            state: 'safe',
+            label: 'Foot load weekly volume',
+            displayMode: 'bar',
+          },
+        ])}
+      />,
     );
 
-    expect(screen.getByText('8 / 12 km')).toBeInTheDocument();
+    const row = screen.getByTestId('load-risk-rule-row-row-foot-cap');
+    expect(within(row).getByText('8 / 12 km')).toBeInTheDocument();
   });
 });

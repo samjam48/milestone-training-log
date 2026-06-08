@@ -1,12 +1,15 @@
 /**
  * B10.4 — trainingBlocks API client: /scores removed, /review is canonical.
- *
- * Failing until getTrainingBlockScores is removed and callers use getTrainingBlockReview.
+ * WRU.F2 — removed create/setup/reset/focus-title patch helpers.
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import * as trainingBlocks from './trainingBlocks';
 import { getTrainingBlockReview } from './trainingBlocks';
+import {
+  WTL_F7_ACTIVE_WEEKLY_FOCUS,
+  weeklyFocusBlockSnake,
+} from '../../test/wtlF7WeeklyFocusFixtures';
 
 const originalFetch = globalThis.fetch;
 
@@ -96,6 +99,28 @@ describe('getTrainingBlockReview', () => {
     expect(result.cleanDays).toBe(1);
   });
 
+  it('maps focus_title and week_number on review block payload', async () => {
+    const snakeResponse = {
+      block: weeklyFocusBlockSnake(WTL_F7_ACTIVE_WEEKLY_FOCUS),
+      daily_scores: [],
+      load_series: [],
+      flare_up_dates: [],
+      total_sessions: 0,
+      clean_days: 0,
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse(snakeResponse));
+
+    const result = await getTrainingBlockReview(WTL_F7_ACTIVE_WEEKLY_FOCUS.id);
+
+    expect(result.block).toMatchObject({
+      id: WTL_F7_ACTIVE_WEEKLY_FOCUS.id,
+      focusTitle: WTL_F7_ACTIVE_WEEKLY_FOCUS.focusTitle,
+      weekNumber: WTL_F7_ACTIVE_WEEKLY_FOCUS.weekNumber,
+      periodKind: 'weekly_focus',
+    });
+  });
+
   it('returns empty dailyScores when review payload has no scored days', async () => {
     const snakeResponse = {
       block: {
@@ -120,5 +145,17 @@ describe('getTrainingBlockReview', () => {
     const result = await getTrainingBlockReview('blk-empty');
 
     expect(result.dailyScores).toEqual([]);
+  });
+});
+
+describe('WRU.F2 — removed training block create and focus helpers', () => {
+  const removedExports = [
+    'createTrainingBlock',
+    'setupWeeklyFocus',
+    'resetWeeklyFocus',
+  ] as const;
+
+  it.each(removedExports)('does not export %s', (exportName) => {
+    expect(exportName in trainingBlocks).toBe(false);
   });
 });

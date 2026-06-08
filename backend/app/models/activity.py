@@ -57,3 +57,4 @@ class Activity(SQLModel, table=True):
     logs: list["ActivityLog"] = Relationship(back_populates="activity")
     goals: list["Goal"] = Relationship(back_populates="activity")
     rules: list["Rule"] = Relationship(back_populates="activity")
+    weekly_targets: list["WeeklyTarget"] = Relationship(back_populates="activity")

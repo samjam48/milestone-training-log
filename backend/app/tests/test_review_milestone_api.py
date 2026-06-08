@@ -99,7 +99,7 @@ async def test_post_activity_log_keeps_review_milestone_false_when_prior_day_had
     assert active.json()["is_review_milestone_hit"] is False
 
 
-async def test_post_activity_log_does_not_latch_review_milestone_without_active_block(
+async def test_post_activity_log_does_not_latch_review_milestone_without_eligible_block(
     app_with_test_database: FastAPI,
     client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -128,7 +128,8 @@ async def test_post_activity_log_does_not_latch_review_milestone_without_active_
     assert response.status_code == 201
 
     active = await client.get("/api/training-blocks/active")
-    assert active.status_code == 404
+    assert active.status_code == 200
+    assert active.json()["is_review_milestone_hit"] is False
 
 
 def test_maybe_update_review_milestone_after_log_is_no_op_without_active_block(

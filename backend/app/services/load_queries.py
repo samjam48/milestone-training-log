@@ -72,7 +72,7 @@ def get_load_summary(session: Session, *, as_of: date | None = None) -> LoadSumm
     block_start: str | None = None
 
     try:
-        active_block = get_active_training_block(session)
+        active_block = get_active_training_block(session, as_of=resolved)
         block_start = format_iso_date(active_block.start_date)
         rules = list_rules(session, active_block.id)
         weekly_targets = list_weekly_targets(session, active_block.id)
@@ -129,7 +129,7 @@ def check_load_violations(
     as_of_str = format_iso_date(resolved)
 
     try:
-        active_block = get_active_training_block(session)
+        active_block = get_active_training_block(session, as_of=resolved)
         rules = list_rules(session, active_block.id)
     except TrainingBlockNotFoundError:
         return CheckViolationsResponse(violations=[])
@@ -187,7 +187,7 @@ def get_delayed_tax(
 
     rules: list[Rule] = []
     try:
-        active_block = get_active_training_block(session)
+        active_block = get_active_training_block(session, as_of=resolved)
         rules = list_rules(session, active_block.id)
     except TrainingBlockNotFoundError:
         pass
@@ -251,7 +251,7 @@ def log_dict(log: ActivityLog) -> LogDict:
 
 
 def rule_dict(rule: Rule) -> RuleDict:
-    return {
+    payload: RuleDict = {
         "id": rule.id,
         "training_block_id": rule.training_block_id,
         "activity_class_id": rule.activity_class_id,
@@ -260,16 +260,24 @@ def rule_dict(rule: Rule) -> RuleDict:
         "window_days": rule.window_days,
         "enabled": rule.enabled,
     }
+    if rule.activity_id is not None:
+        payload["activity_id"] = rule.activity_id
+    if rule.limit_unit is not None:
+        payload["limit_unit"] = rule.limit_unit
+    return payload
 
 
 def weekly_target_dict(target: WeeklyTarget) -> WeeklyTargetDict:
-    return {
+    payload: WeeklyTargetDict = {
         "id": target.id,
         "training_block_id": target.training_block_id,
         "activity_class_id": target.activity_class_id,
         "target_value": target.target_value,
         "target_unit": target.target_unit,
     }
+    if target.activity_id is not None:
+        payload["activity_id"] = target.activity_id
+    return payload
 
 
 def check_in_dict(check_in: DailyCheckIn) -> CheckInDict:

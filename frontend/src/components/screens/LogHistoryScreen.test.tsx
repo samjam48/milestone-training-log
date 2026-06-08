@@ -22,6 +22,7 @@ interface LogHistoryScreenS27Props {
   onOpenLogIncident: () => void;
   onOpenNewActivity?: () => void;
   onEditLog?: (logId: string) => void;
+  onDeleteLog?: (logId: string) => void;
 }
 
 const LogHistoryScreenS27 = LogHistoryScreen as unknown as (
@@ -396,5 +397,27 @@ describe('LogHistoryScreen — S25.F4 edit log', () => {
     );
 
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+  });
+
+  it('confirms and calls onDeleteLog with the row log id when Delete is clicked', async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const onDeleteLog = vi.fn();
+    const engine = createLogHistoryEngine(1);
+
+    renderWithProviders(
+      <LogHistoryScreenS27
+        engine={engine}
+        onOpenLogActivity={vi.fn()}
+        onOpenLogIncident={vi.fn()}
+        onDeleteLog={onDeleteLog}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Delete' }));
+
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    expect(onDeleteLog).toHaveBeenCalledTimes(1);
+    expect(onDeleteLog).toHaveBeenCalledWith(engine.logs[0]!.id);
   });
 });

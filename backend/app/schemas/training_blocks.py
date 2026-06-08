@@ -26,7 +26,6 @@ class TrainingBlockPatch(BaseModel):
     status: TrainingBlockStatus | None = None
     related_goal_id: str | None = None
     notes: str | None = None
-
     @field_validator("name", "start_date", "status", mode="before")
     @classmethod
     def reject_explicit_null_for_required_fields(cls, value: object) -> object:
@@ -43,6 +42,10 @@ class TrainingBlockRead(BaseModel):
     start_date: date
     end_date: date | None
     status: str
+    period_kind: str = "weekly_focus"
+    focus_series_id: str | None = None
+    focus_title: str | None = None
+    week_number: int | None = None
     related_goal_id: str | None
     notes: str | None
     is_review_milestone_hit: bool

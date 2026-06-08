@@ -75,9 +75,17 @@ def evaluate_review_milestone(
     return True
 
 
-def maybe_update_review_milestone_after_log(session: Session) -> None:
+def maybe_update_review_milestone_after_log(
+    session: Session,
+    *,
+    as_of: date | None = None,
+) -> None:
     from app.services.activity_logs import list_activity_logs
-    from app.services.load_engine import compute_weekly_progress, format_iso_date
+    from app.services.load_engine import (
+        compute_weekly_progress,
+        format_iso_date,
+        this_week_bounds,
+    )
     from app.services.load_queries import (
         activity_class_dict,
         activity_dict,
@@ -87,25 +95,29 @@ def maybe_update_review_milestone_after_log(session: Session) -> None:
         weekly_target_dict,
     )
 
+    resolved_as_of = as_of if as_of is not None else _server_local_today()
+    as_of_str = format_iso_date(resolved_as_of)
+
     try:
-        active_block = get_active_training_block(session)
+        active_block = get_active_training_block(
+            session,
+            as_of=resolved_as_of,
+            create_if_missing=False,
+        )
     except TrainingBlockNotFoundError:
         return
 
     if active_block.is_review_milestone_hit:
         return
 
-    as_of = _server_local_today()
-    as_of_str = format_iso_date(as_of)
-
     activity_classes = list_activity_classes(session)
     activities = list_activities(session)
-    logs = list_activity_logs(session, end_date=as_of)
-    check_ins = list_daily_check_ins(session, end_date=as_of)
+    logs = list_activity_logs(session, end_date=resolved_as_of)
+    check_ins = list_daily_check_ins(session, end_date=resolved_as_of)
     incidents = [
         incident
         for incident in list_flare_up_incidents(session)
-        if incident.incident_date <= as_of
+        if incident.incident_date <= resolved_as_of
     ]
     weekly_targets = list_weekly_targets(session, active_block.id)
 
@@ -115,19 +127,19 @@ def maybe_update_review_milestone_after_log(session: Session) -> None:
     check_in_dicts = [check_in_dict(check_in) for check_in in check_ins]
     incident_dicts = [incident_dict(incident) for incident in incidents]
     target_dicts = [weekly_target_dict(target) for target in weekly_targets]
-    block_start = format_iso_date(active_block.start_date)
+    period_start, _period_end = this_week_bounds(as_of_str)
 
     weekly_progress = compute_weekly_progress(
         target_dicts,
         class_dicts,
         activity_dicts,
         log_dicts,
-        block_start,
+        period_start,
         as_of_str,
     )
 
     if not evaluate_review_milestone(
-        as_of=as_of,
+        as_of=resolved_as_of,
         weekly_progress=weekly_progress,
         daily_check_ins=check_in_dicts,
         flare_up_incidents=incident_dicts,

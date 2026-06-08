@@ -72,7 +72,9 @@ function createBaseline(): MilestoneEngineResult {
     clearRuleMutationError: () => undefined,
     createWeeklyTarget: () => undefined,
     patchWeeklyTarget: () => undefined,
-    createTrainingBlock: () => undefined,
+    deleteWeeklyTarget: () => undefined,
+    weeklyTargetMutationError: null,
+    clearWeeklyTargetMutationError: () => undefined,
     // H10.2 — app shell query status
     isInitialLoading: false,
     isFatalError: false,
@@ -81,6 +83,7 @@ function createBaseline(): MilestoneEngineResult {
     // F1.3 mutations
     submitLog: async () => undefined,
     updateLog: async () => undefined,
+    deleteLog: async () => undefined,
     submitCheckIn: () => undefined,
     submitIncident: () => undefined,
     checkViolations: () => [],

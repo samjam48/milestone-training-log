@@ -8,7 +8,7 @@
 import * as React from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '../../lib/cn';
-import { Card, CardHeader, CardTitle, CardMeta } from '../ui/Card';
+import { Card, CardHeader, CardTitle } from '../ui/Card';
 import { CenteredModal } from '../ui/CenteredModal';
 import { ReviewMilestoneBadge } from '../ui/ReviewMilestoneBadge';
 import { apiFetch, ApiError } from '../../lib/api/client';
@@ -39,7 +39,6 @@ export interface SettingsScreenProps {
   engine: MilestoneEngineResult;
   onEditRules?: () => void;
   onReview?: () => void;
-  onNewBlock?: () => void;
   onViewBlock?: (blockId: ID) => void;
   onEditActivity?: (activity: Activity) => void;
   onOpenNewActivity?: () => void;
@@ -58,29 +57,36 @@ function formatShortDate(iso: string): string {
   });
 }
 
+function formatCalendarWeekRange(startDate: string, endDate: string): string {
+  return `${formatShortDate(startDate)} – ${formatShortDate(endDate)}`;
+}
+
 // ---------------------------------------------------------------------------
-// BlockSummaryCard
+// WeeklyRulesSummaryCard
 // ---------------------------------------------------------------------------
 
-interface BlockSummaryCardProps {
+interface WeeklyRulesSummaryCardProps {
   block: TrainingBlock;
   rules: Rule[];
   activityClasses: ActivityClass[];
+  activities: Activity[];
   /** Whether the Edit rules CTA should be rendered. */
   showEditRules: boolean;
   onEditRules: () => void;
   onReview?: () => void;
 }
 
-function BlockSummaryCard({
+function WeeklyRulesSummaryCard({
   block,
   rules,
   activityClasses,
+  activities,
   showEditRules,
   onEditRules,
   onReview,
-}: BlockSummaryCardProps): React.ReactElement {
+}: WeeklyRulesSummaryCardProps): React.ReactElement {
   const classMap = new Map(activityClasses.map((c) => [c.id, c]));
+  const activityMap = new Map(activities.map((activity) => [activity.id, activity]));
   const activeRules = rules.filter((r) => r.enabled);
   const visibleRecoveryRules = activeRules
     .map((rule) => ({
@@ -93,11 +99,12 @@ function BlockSummaryCard({
     <Card pad="md">
       <CardHeader>
         <div className="min-w-0 flex-1">
-          <CardTitle>{block.name}</CardTitle>
-          <CardMeta>
-            Started {formatShortDate(block.startDate)}
-            {block.endDate ? ` · Ends ${formatShortDate(block.endDate)}` : ''}
-          </CardMeta>
+          <CardTitle>
+            {formatCalendarWeekRange(
+              block.startDate,
+              block.endDate ?? block.startDate,
+            )}
+          </CardTitle>
           {block.isReviewMilestoneHit ? (
             <ReviewMilestoneBadge className="mt-2" />
           ) : null}
@@ -118,13 +125,14 @@ function BlockSummaryCard({
           <ul className="flex flex-col divide-y divide-border-subtle">
             {visibleRecoveryRules.map(({ rule, summary }) => {
               const cls = rule.activityClassId ? classMap.get(rule.activityClassId) : null;
+              const activity = rule.activityId ? activityMap.get(rule.activityId) : null;
               return (
                 <li
                   key={rule.id}
                   className="flex items-center justify-between gap-3 py-2 text-body"
                 >
                   <span className="text-ink-muted truncate">
-                    {cls ? cls.name : 'All classes'}
+                    {activity ? activity.name : cls ? cls.name : 'All classes'}
                   </span>
                   <span className="text-ink shrink-0">{summary}</span>
                 </li>
@@ -156,6 +164,76 @@ function BlockSummaryCard({
         </div>
       )}
     </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// PreviousWeeksModal
+// ---------------------------------------------------------------------------
+
+interface PreviousWeeksModalProps {
+  open: boolean;
+  previousBlocks: TrainingBlock[];
+  onClose: () => void;
+  onViewBlock: (blockId: ID) => void;
+}
+
+function PreviousWeeksModal({
+  open,
+  previousBlocks,
+  onClose,
+  onViewBlock,
+}: PreviousWeeksModalProps): React.ReactElement | null {
+  if (!open) return null;
+
+  const hasEarlierWeeks = previousBlocks.length > 1;
+
+  return (
+    <CenteredModal open onClose={onClose} ariaLabel="Previous weeks">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-title font-bold text-ink">Previous weeks</h2>
+        <button
+          type="button"
+          onClick={onClose}
+          className="h-8 w-8 flex items-center justify-center rounded-full text-ink-muted hover:text-ink hover:bg-bg-overlay transition-colors duration-snap"
+          aria-label="Close"
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path
+              d="M4 4l8 8M12 4l-8 8"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+            />
+          </svg>
+        </button>
+      </div>
+
+      {hasEarlierWeeks ? (
+        <div className="flex flex-col divide-y divide-border-subtle -mx-1">
+          {previousBlocks.map((pb) => (
+            <button
+              key={pb.id}
+              type="button"
+              onClick={() => onViewBlock(pb.id)}
+              className="flex items-center justify-between gap-3 px-1 py-3 text-left transition-colors duration-snap hover:bg-bg-overlay rounded-md"
+            >
+              <span className="min-w-0 flex-1 text-body font-medium text-ink">
+                {formatCalendarWeekRange(
+                  pb.startDate,
+                  pb.endDate ?? pb.startDate,
+                )}
+              </span>
+              {pb.isReviewMilestoneHit ? <ReviewMilestoneBadge compact /> : null}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <p className="py-6 text-center text-body text-ink-muted">
+          No earlier weeks to show.
+        </p>
+      )}
+    </CenteredModal>
   );
 }
 
@@ -955,7 +1033,6 @@ export function SettingsScreen({
   engine,
   onEditRules,
   onReview,
-  onNewBlock,
   onViewBlock,
   onOpenNewActivity,
   onUnauthenticated,
@@ -986,6 +1063,10 @@ export function SettingsScreen({
   const [deleteError, setDeleteError] = React.useState<string | null>(null);
   const [deleteSubmitting, setDeleteSubmitting] = React.useState(false);
   const [editingActivity, setEditingActivity] = React.useState<Activity | null>(null);
+  const [showPreviousWeeksModal, setShowPreviousWeeksModal] = React.useState(false);
+
+  const mostRecentPreviousWeek =
+    previousBlocks.length > 0 ? previousBlocks[0] : undefined;
 
   function handleResetMockData(): void {
     if (resetState === 'idle') {
@@ -1119,71 +1200,57 @@ export function SettingsScreen({
 
       <div className="flex flex-col gap-6 px-4 pb-10">
 
-        {/* ── Training Block ── */}
+        {/* ── Weekly rules ── */}
         <section>
           <p className="text-label uppercase font-medium text-ink-muted mb-3">
-            Training Block
+            Weekly rules
           </p>
           {hasBlock ? (
-            <BlockSummaryCard
+            <WeeklyRulesSummaryCard
               block={block}
               rules={rules}
               activityClasses={activityClasses}
+              activities={activities}
               showEditRules={showEditRules}
               onEditRules={() => onEditRules?.()}
               onReview={onReview}
             />
           ) : (
             <Card pad="md">
-              <p className="text-body text-ink-muted">No active training block</p>
+              <p className="text-body text-ink-muted">No active weekly rules</p>
             </Card>
           )}
         </section>
 
-        {/* ── Previous Blocks ── */}
-        {previousBlocks.length > 0 && (
+        {/* ── Previous weeks ── */}
+        {mostRecentPreviousWeek != null && (
           <section>
-            <p className="text-label uppercase font-medium text-ink-muted mb-3">
-              Previous Blocks
-            </p>
+            <button
+              type="button"
+              onClick={() => setShowPreviousWeeksModal(true)}
+              className="text-label uppercase font-medium text-ink-muted mb-3 hover:text-ink transition-colors duration-snap"
+            >
+              Previous weeks
+            </button>
             <Card pad="none">
-              <div className="divide-y divide-border-subtle">
-                {previousBlocks.map((pb) => (
-                  <div
-                    key={pb.id}
-                    className="flex items-center justify-between gap-3 px-4 py-3"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="text-body font-medium text-ink">{pb.name}</p>
-                      <p className="text-caption text-ink-muted">
-                        {formatShortDate(pb.startDate)}
-                        {' – '}
-                        {pb.endDate ? formatShortDate(pb.endDate) : 'ongoing'}
-                      </p>
-                    </div>
-                    {pb.isReviewMilestoneHit ? <ReviewMilestoneBadge compact /> : null}
-                    <button
-                      type="button"
-                      onClick={() => onViewBlock?.(pb.id)}
-                      className="shrink-0 h-8 px-2.5 rounded-md text-caption font-medium text-ink-muted bg-bg-sunken hover:bg-bg-overlay transition-colors duration-snap"
-                    >
-                      View
-                    </button>
-                  </div>
-                ))}
-              </div>
+              <button
+                type="button"
+                onClick={() => onViewBlock?.(mostRecentPreviousWeek.id)}
+                className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors duration-snap hover:bg-bg-overlay"
+              >
+                <span className="min-w-0 flex-1 text-body font-medium text-ink">
+                  {formatCalendarWeekRange(
+                    mostRecentPreviousWeek.startDate,
+                    mostRecentPreviousWeek.endDate ?? mostRecentPreviousWeek.startDate,
+                  )}
+                </span>
+                {mostRecentPreviousWeek.isReviewMilestoneHit ? (
+                  <ReviewMilestoneBadge compact />
+                ) : null}
+              </button>
             </Card>
           </section>
         )}
-
-        {/* ── + New Training Block ── */}
-        <button
-          type="button"
-          onClick={() => onNewBlock?.()}
-          className="w-full h-11 rounded-md bg-bg-raised border border-border text-body font-medium text-ink-muted transition-colors duration-snap hover:bg-bg-overlay"
-        >
-          + New Training Block
-        </button>
 
         {/* ── Activity classes ── */}
         <section>
@@ -1448,6 +1515,16 @@ export function SettingsScreen({
         activityClasses={activityClasses}
         onClose={() => setEditingActivity(null)}
         onSubmit={updateActivity}
+      />
+
+      <PreviousWeeksModal
+        open={showPreviousWeeksModal}
+        previousBlocks={previousBlocks}
+        onClose={() => setShowPreviousWeeksModal(false)}
+        onViewBlock={(blockId) => {
+          setShowPreviousWeeksModal(false);
+          onViewBlock?.(blockId);
+        }}
       />
     </div>
   );

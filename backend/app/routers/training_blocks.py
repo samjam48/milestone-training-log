@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -6,16 +7,14 @@ from sqlmodel import Session
 from app.database import get_session
 from app.schemas.block_review import BlockReviewRead
 from app.schemas.training_blocks import (
-    TrainingBlockCreate,
     TrainingBlockPatch,
     TrainingBlockRead,
 )
 from app.services.block_review import get_block_review
+from app.services.load_queries import resolve_as_of
 from app.services.training_blocks import (
     GoalNotFoundError,
-    TrainingBlockAlreadyExistsError,
     TrainingBlockNotFoundError,
-    create_training_block,
     get_active_training_block,
     list_training_blocks,
     update_training_block,
@@ -35,9 +34,16 @@ async def get_training_blocks(session: SessionDep) -> list[TrainingBlockRead]:
 
 
 @router.get("/active", response_model=TrainingBlockRead)
-async def get_active_block(session: SessionDep) -> TrainingBlockRead:
+async def get_active_block(
+    session: SessionDep,
+    as_of: date | None = None,
+) -> TrainingBlockRead:
+    resolved_as_of = resolve_as_of(as_of)
     try:
-        training_block = get_active_training_block(session)
+        training_block = get_active_training_block(
+            session,
+            as_of=resolved_as_of,
+        )
     except TrainingBlockNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -58,26 +64,6 @@ async def get_block_review_route(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Training block not found",
         ) from exc
-
-
-@router.post("", response_model=TrainingBlockRead, status_code=status.HTTP_201_CREATED)
-async def post_training_block(
-    payload: TrainingBlockCreate,
-    session: SessionDep,
-) -> TrainingBlockRead:
-    try:
-        training_block = create_training_block(session, payload)
-    except TrainingBlockAlreadyExistsError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Training block already exists",
-        ) from exc
-    except GoalNotFoundError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Goal not found",
-        ) from exc
-    return TrainingBlockRead.model_validate(training_block)
 
 
 @router.patch("/{block_id}", response_model=TrainingBlockRead)

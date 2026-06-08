@@ -16,6 +16,8 @@ from sqlmodel import Session
 
 from app.database import get_session
 from app.main import create_app
+from app.services.training_blocks import calendar_week_bounds
+from app.tests.conftest import _reload_app_modules
 from app.tests.helpers.load_api_seed import seed_dashboard_mock_graph
 from app.tests.helpers.load_api_test_utils import FROZEN_TODAY, foot_status, freeze_server_today
 from app.tests.helpers.load_engine_fixtures import AS_OF, WEEKLY_TARGETS
@@ -26,7 +28,8 @@ from app.tests.helpers.seed import (
     seed_recovery_target,
     seed_training_block,
 )
-from app.tests.test_seed_data import PROTOTYPE_TODAY, _make_migrated_engine, _run_seed
+from app.tests.helpers.weekly_focus_fixtures import seed_weekly_focus_block
+from app.tests.test_seed_data import _make_migrated_engine, _run_seed
 
 DASHBOARD_URL = "/api/dashboard"
 SUMMARY_URL = "/api/load/summary"
@@ -126,10 +129,12 @@ async def test_get_dashboard_recovery_streaks_from_active_block_targets(
     assert stretch["current_streak_days"] == 5
 
 
-async def test_get_dashboard_without_active_block_returns_neutral_empty_payload(
+async def test_get_dashboard_auto_creates_weekly_block_when_none_exists(
     app_with_test_database: FastAPI,
     client: AsyncClient,
 ) -> None:
+    from app.services.training_blocks import calendar_week_bounds
+
     seed_activity_class(
         app_with_test_database,
         class_id="cls-foot",
@@ -146,23 +151,31 @@ async def test_get_dashboard_without_active_block_returns_neutral_empty_payload(
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["block"] is None
+    as_of_date = date.fromisoformat(AS_OF)
+    week_start, week_end = calendar_week_bounds(as_of_date)
+    assert payload["block"] is not None
+    assert payload["block"]["period_kind"] == "weekly_focus"
+    assert payload["block"]["start_date"] == week_start.isoformat()
+    assert payload["block"]["end_date"] == week_end.isoformat()
     assert payload["previous_blocks"] == []
     assert payload["weekly_progress"] == []
-    assert payload["load_series"] == []
     assert payload["recovery_streaks"] == []
-    assert payload["graph_class_id"] is None
 
 
 async def test_get_dashboard_previous_blocks_serializes_summary_array(
     app_with_test_database: FastAPI,
     client: AsyncClient,
 ) -> None:
-    seed_training_block(
+    as_of_date = date.fromisoformat(AS_OF)
+    current_week_start, current_week_end = calendar_week_bounds(as_of_date)
+    seed_weekly_focus_block(
         app_with_test_database,
         block_id="blk-current",
-        name="Current block",
-        start_date=date(2026, 5, 20),
+        focus_series_id="fs-api-prev-blocks",
+        focus_title=None,
+        week_number=1,
+        start_date=current_week_start,
+        end_date=current_week_end,
         status="active",
     )
     seed_training_block(
@@ -246,7 +259,12 @@ async def test_get_dashboard_empty_database_returns_neutral_payload(
     assert response.status_code == 200
     payload = response.json()
     assert payload["as_of"] == AS_OF
-    assert payload["block"] is None
+    as_of_date = date.fromisoformat(AS_OF)
+    week_start, week_end = calendar_week_bounds(as_of_date)
+    assert payload["block"] is not None
+    assert payload["block"]["period_kind"] == "weekly_focus"
+    assert payload["block"]["start_date"] == week_start.isoformat()
+    assert payload["block"]["end_date"] == week_end.isoformat()
     assert payload["class_statuses"] == []
     assert payload["weekly_progress"] == []
     assert payload["load_series"] == []
@@ -368,7 +386,7 @@ async def test_get_dashboard_goals_present_when_no_active_block(
     app_with_test_database: FastAPI,
     client: AsyncClient,
 ) -> None:
-    """goals is returned even when there is no active training block."""
+    """goals is returned even when the weekly block is auto-created."""
     seed_goal(
         app_with_test_database,
         goal_id="api-goal-no-block",
@@ -382,7 +400,8 @@ async def test_get_dashboard_goals_present_when_no_active_block(
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["block"] is None
+    assert payload["block"] is not None
+    assert payload["block"]["period_kind"] == "weekly_focus"
     assert len(payload["goals"]) == 1
     assert payload["goals"][0]["id"] == "api-goal-no-block"
 
@@ -403,8 +422,14 @@ async def test_get_dashboard_seeded_response_completes_under_500ms(
 
 
 @pytest.fixture
-def app_with_prototype_seed(tmp_path: Path) -> Iterator[FastAPI]:
+def app_with_prototype_seed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> Iterator[FastAPI]:
     """Migrated SQLite DB populated via backend/scripts/seed.py (includes violations)."""
+    monkeypatch.setenv("AUTH_PASSWORD", "")
+    monkeypatch.setenv("APP_DEV_MODE", "true")
+    _reload_app_modules()
     database_path = tmp_path / "dashboard-prototype-seed.db"
     database_url = f"sqlite:///{database_path}"
     _make_migrated_engine(database_path)
@@ -437,9 +462,11 @@ async def prototype_seed_client(
 async def test_get_dashboard_returns_200_after_prototype_seed_with_violations(
     prototype_seed_client: AsyncClient,
 ) -> None:
+    # Weekly rules daily_scores cover the active calendar week only; use a date
+    # within the seeded violation window (May 19–25 week).
     response = await prototype_seed_client.get(
         DASHBOARD_URL,
-        params={"as_of": PROTOTYPE_TODAY.isoformat()},
+        params={"as_of": "2026-05-24"},
     )
 
     assert response.status_code == 200, response.text
@@ -447,8 +474,8 @@ async def test_get_dashboard_returns_200_after_prototype_seed_with_violations(
 
     violation_rule_ids = [
         violation["rule_id"]
-        for score in payload["daily_scores"]
-        for violation in score["violations"]
+        for log in payload["logs"]
+        for violation in log.get("rule_violations_at_log") or []
     ]
     assert violation_rule_ids
     assert all(rule_id == "rule-rest-foot" for rule_id in violation_rule_ids)
@@ -463,11 +490,10 @@ def _bucket_ids(rows: list[dict[str, Any]], bucket: str) -> set[str]:
     return {str(row["id"]) for row in rows if row.get("bucket") == bucket}
 
 
-def _foot_class_bar(payload: dict[str, Any]) -> dict[str, Any]:
+def _foot_rule_limit_row(payload: dict[str, Any], rule_id: str = "rule-cap-foot") -> dict[str, Any]:
     summary = payload["load_risk_summary"]
     assert summary is not None
-    class_bars = summary["class_bars"]
-    return next(bar for bar in class_bars if bar["activity_class_id"] == "cls-foot")
+    return next(row for row in summary["rule_limit_rows"] if row["rule_id"] == rule_id)
 
 
 def _foot_weekly_progress(payload: dict[str, Any]) -> dict[str, Any]:
@@ -513,11 +539,11 @@ async def test_get_dashboard_suggestion_buckets_rows_include_bucket_scope_descri
         assert "description" in row
 
 
-async def test_get_dashboard_load_risk_summary_week_days_and_class_bars(
+async def test_get_dashboard_load_risk_summary_week_days_and_rule_limit_rows(
     app_with_test_database: FastAPI,
     client: AsyncClient,
 ) -> None:
-    """load_risk_summary returns seven week_days and capped performance class bars."""
+    """load_risk_summary returns seven week_days and per-rule limit rows."""
     seed_dashboard_mock_graph(app_with_test_database)
 
     response = await client.get(DASHBOARD_URL, params={"as_of": AS_OF})
@@ -528,17 +554,22 @@ async def test_get_dashboard_load_risk_summary_week_days_and_class_bars(
     assert len(summary["week_days"]) == 7
     assert summary["week_days"][-1]["date"] == AS_OF
     assert all("flagged" in day for day in summary["week_days"])
+    assert all(day["state"] in {"safe", "caution", "danger"} for day in summary["week_days"])
 
-    class_ids = {bar["activity_class_id"] for bar in summary["class_bars"]}
-    assert "cls-foot" in class_ids
-    assert "cls-recovery" not in class_ids
+    foot_rows = [
+        row
+        for row in summary["rule_limit_rows"]
+        if row["activity_class_id"] == "cls-foot"
+    ]
+    assert foot_rows
+    assert not any(row["activity_class_id"] == "cls-recovery" for row in summary["rule_limit_rows"])
 
 
-async def test_get_dashboard_load_risk_summary_null_without_active_block(
+async def test_get_dashboard_load_risk_summary_empty_when_no_rules_on_auto_created_block(
     app_with_test_database: FastAPI,
     client: AsyncClient,
 ) -> None:
-    """No active block → load_risk_summary is null; goal_rows still an array."""
+    """Auto-created weekly block with no rules → empty load-risk derivations."""
     seed_activity_class(
         app_with_test_database,
         class_id="cls-foot",
@@ -555,7 +586,9 @@ async def test_get_dashboard_load_risk_summary_null_without_active_block(
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["load_risk_summary"] is None
+    assert payload["block"] is not None
+    assert payload["load_risk_summary"] is not None
+    assert payload["load_risk_summary"]["rule_limit_rows"] == []
     assert payload["goal_rows"] == []
     assert payload["suggestion_buckets"] == []
 
@@ -666,7 +699,7 @@ async def test_backdated_activity_log_updates_suggestion_buckets_and_load_risk_s
     baseline_buckets = baseline_payload["suggestion_buckets"]
     baseline_summary = baseline_payload["load_risk_summary"]
     assert baseline_summary is not None
-    baseline_foot_actual = _foot_class_bar(baseline_payload)["actual"]
+    baseline_foot_actual = _foot_rule_limit_row(baseline_payload)["actual"]
     assert "act-walk" not in _bucket_ids(baseline_buckets, "done")
 
     backdated_date = (FROZEN_TODAY - timedelta(days=1)).isoformat()
@@ -692,7 +725,7 @@ async def test_backdated_activity_log_updates_suggestion_buckets_and_load_risk_s
 
     assert followup_payload["suggestion_buckets"] != baseline_buckets
     assert followup_payload["load_risk_summary"] != baseline_summary
-    assert _foot_class_bar(followup_payload)["actual"] > baseline_foot_actual
+    assert _foot_rule_limit_row(followup_payload)["actual"] > baseline_foot_actual
 
 
 # ---------------------------------------------------------------------------
@@ -715,7 +748,7 @@ async def test_patch_logged_date_across_week_boundary_updates_dashboard_derivati
     baseline_foot_progress = _foot_weekly_progress(baseline_payload)
     baseline_summary = baseline_payload["load_risk_summary"]
     assert baseline_summary is not None
-    baseline_foot_actual = _foot_class_bar(baseline_payload)["actual"]
+    baseline_foot_actual = _foot_rule_limit_row(baseline_payload)["actual"]
 
     # log-25 is 2026-05-22 (inside risk week 2026-05-19..25); move to prior week.
     patch_response = await client.patch(
@@ -729,9 +762,294 @@ async def test_patch_logged_date_across_week_boundary_updates_dashboard_derivati
     assert followup.status_code == 200
     followup_payload = followup.json()
 
-    followup_foot_actual = _foot_class_bar(followup_payload)["actual"]
+    followup_foot_actual = _foot_rule_limit_row(followup_payload)["actual"]
 
     # weekly_progress spans block start→as_of; load_risk uses 7-day window.
     assert _foot_weekly_progress(followup_payload)["value"] == baseline_foot_progress["value"]
     assert followup_foot_actual < baseline_foot_actual
     assert followup_payload["load_risk_summary"] != baseline_summary
+
+
+# ---------------------------------------------------------------------------
+# WTL.B3 — dashboard weekly_progress as This Week
+# ---------------------------------------------------------------------------
+
+
+def _weekly_progress_api_row(payload: dict[str, Any], weekly_target_id: str) -> dict[str, Any]:
+    return next(
+        row for row in payload["weekly_progress"] if row["weekly_target_id"] == weekly_target_id
+    )
+
+
+async def test_get_dashboard_weekly_progress_sunday_as_of_uses_this_week_window(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    from app.tests.helpers.wtl_b3_fixtures import (
+        CURRENT_WEEK_END,
+        CURRENT_WEEK_MONDAY,
+        SUNDAY_AS_OF,
+        seed_wtl_b3_dashboard_graph,
+    )
+
+    seed_wtl_b3_dashboard_graph(app_with_test_database)
+
+    response = await client.get(DASHBOARD_URL, params={"as_of": SUNDAY_AS_OF})
+    assert response.status_code == 200
+    payload = response.json()
+
+    class_row = _weekly_progress_api_row(payload, "wt-wtl-class")
+    walk_row = _weekly_progress_api_row(payload, "wt-wtl-walk")
+
+    assert class_row["value"] == pytest.approx(3)
+    assert walk_row["value"] == pytest.approx(4.5)
+    assert class_row["period_start"] == CURRENT_WEEK_MONDAY
+    assert class_row["period_end"] == CURRENT_WEEK_END
+
+
+async def test_get_dashboard_weekly_progress_monday_as_of_starts_new_week(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    from app.tests.helpers.wtl_b3_fixtures import (
+        MONDAY_AS_OF,
+        NEXT_WEEK_END,
+        NEXT_WEEK_MONDAY,
+        WTL_B3_WALK_ID,
+        seed_wtl_b3_dashboard_graph,
+    )
+
+    seed_wtl_b3_dashboard_graph(app_with_test_database)
+
+    response = await client.get(DASHBOARD_URL, params={"as_of": MONDAY_AS_OF})
+    assert response.status_code == 200
+    payload = response.json()
+
+    walk_row = next(
+        row for row in payload["weekly_progress"] if row["activity_id"] == WTL_B3_WALK_ID
+    )
+
+    assert walk_row["value"] == pytest.approx(4.0)
+    assert walk_row["period_start"] == NEXT_WEEK_MONDAY
+    assert walk_row["period_end"] == NEXT_WEEK_END
+
+
+async def test_get_dashboard_weekly_progress_includes_period_metadata_on_each_row(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    from app.tests.helpers.wtl_b3_fixtures import SUNDAY_AS_OF, seed_wtl_b3_dashboard_graph
+
+    seed_wtl_b3_dashboard_graph(app_with_test_database)
+
+    response = await client.get(DASHBOARD_URL, params={"as_of": SUNDAY_AS_OF})
+    assert response.status_code == 200
+
+    for row in response.json()["weekly_progress"]:
+        assert "period_start" in row
+        assert "period_end" in row
+
+
+async def test_get_dashboard_weekly_progress_includes_activity_fields_when_scoped(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    from app.tests.helpers.wtl_b3_fixtures import (
+        SUNDAY_AS_OF,
+        WTL_B3_WALK_ID,
+        seed_wtl_b3_dashboard_graph,
+    )
+
+    seed_wtl_b3_dashboard_graph(app_with_test_database)
+
+    response = await client.get(DASHBOARD_URL, params={"as_of": SUNDAY_AS_OF})
+    assert response.status_code == 200
+
+    walk_row = _weekly_progress_api_row(response.json(), "wt-wtl-walk")
+    class_row = _weekly_progress_api_row(response.json(), "wt-wtl-class")
+
+    assert walk_row["activity_id"] == WTL_B3_WALK_ID
+    assert walk_row["activity_name"] == "Morning Walk"
+    assert class_row["activity_id"] is None
+    assert class_row["activity_name"] is None
+
+
+# ---------------------------------------------------------------------------
+# WTL.B5 — load-tax load_series contract on GET /api/dashboard
+# ---------------------------------------------------------------------------
+
+
+WTL_B5_GRAPH_WINDOW_DAYS = 30
+
+
+def _wtl_b5_graph_start(as_of: date) -> date:
+    return as_of - timedelta(days=WTL_B5_GRAPH_WINDOW_DAYS - 1)
+
+
+async def test_get_dashboard_load_series_spans_last_thirty_days(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    from app.tests.helpers.wtl_b5_fixtures import WTL_B5_AS_OF, seed_wtl_b5_dashboard_graph
+
+    seed_wtl_b5_dashboard_graph(app_with_test_database)
+    as_of = date.fromisoformat(WTL_B5_AS_OF)
+    expected_start = _wtl_b5_graph_start(as_of)
+
+    response = await client.get(DASHBOARD_URL, params={"as_of": WTL_B5_AS_OF})
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert len(payload["load_series"]) == WTL_B5_GRAPH_WINDOW_DAYS
+    assert payload["load_series"][0]["date"] == expected_start.isoformat()
+    assert payload["load_series"][-1]["date"] == WTL_B5_AS_OF
+
+
+async def test_get_dashboard_load_series_point_includes_load_tax_fields(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    from app.tests.helpers.wtl_b5_fixtures import WTL_B5_AS_OF, seed_wtl_b5_dashboard_graph
+
+    seed_wtl_b5_dashboard_graph(app_with_test_database)
+
+    response = await client.get(DASHBOARD_URL, params={"as_of": WTL_B5_AS_OF})
+    assert response.status_code == 200
+    point = next(
+        row for row in response.json()["load_series"] if row["date"] == WTL_B5_AS_OF
+    )
+
+    assert set(point.keys()) == {"date", "load", "daily_load"}
+    assert point["daily_load"] == pytest.approx(1.5)
+    assert point["load"] == pytest.approx(1.5)
+
+
+async def test_get_dashboard_week_load_threshold_null_avoids_zero_cap_display(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    from app.tests.helpers.wtl_b5_fixtures import WTL_B5_AS_OF, seed_wtl_b5_dashboard_graph
+
+    seed_wtl_b5_dashboard_graph(
+        app_with_test_database,
+        include_weekly_load_cap=True,
+        weekly_load_cap_threshold=120.0,
+    )
+
+    response = await client.get(DASHBOARD_URL, params={"as_of": WTL_B5_AS_OF})
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["week_load_threshold"] is None
+
+
+# ---------------------------------------------------------------------------
+# WTL.B6 — load_risk_summary rule-limit rows contract
+# ---------------------------------------------------------------------------
+
+
+def _wtl_b6_rule_limit_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    summary = payload["load_risk_summary"]
+    assert summary is not None
+    assert "rule_limit_rows" in summary, "WTL.B6 requires rule_limit_rows on load_risk_summary"
+    rows: list[dict[str, Any]] = summary["rule_limit_rows"]
+    return rows
+
+
+def _wtl_b6_row_by_rule_id(payload: dict[str, Any], rule_id: str) -> dict[str, Any]:
+    rows = _wtl_b6_rule_limit_rows(payload)
+    matches = [row for row in rows if row.get("rule_id") == rule_id]
+    assert len(matches) == 1
+    return matches[0]
+
+
+async def test_get_dashboard_load_risk_summary_rule_limit_rows_contract(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    from app.tests.helpers.wtl_b6_fixtures import seed_wtl_b6_dashboard_graph
+
+    seed_wtl_b6_dashboard_graph(app_with_test_database)
+
+    response = await client.get(DASHBOARD_URL, params={"as_of": AS_OF})
+    assert response.status_code == 200
+    summary = response.json()["load_risk_summary"]
+
+    assert summary is not None
+    assert len(summary["week_days"]) == 7
+    assert summary["week_days"][-1]["date"] == AS_OF
+    for day in summary["week_days"]:
+        assert day["state"] in {"safe", "caution", "danger"}
+
+    rows = summary["rule_limit_rows"]
+    assert rows
+    for row in rows:
+        assert row["scope"] in {"class", "activity"}
+        assert row["state"] in {"safe", "caution", "danger"}
+        assert "rule_id" in row
+        assert "label" in row
+
+
+async def test_get_dashboard_load_risk_summary_foot_load_regression_no_class_km_row(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    """Exercise weekly km cap must not surface as a class-wide 0 / 8 style row."""
+    from app.tests.helpers.wtl_b6_fixtures import seed_wtl_b6_dashboard_graph
+
+    seed_wtl_b6_dashboard_graph(app_with_test_database)
+
+    response = await client.get(DASHBOARD_URL, params={"as_of": AS_OF})
+    assert response.status_code == 200
+    payload = response.json()
+
+    walk_row = _wtl_b6_row_by_rule_id(payload, "rule-vol-walk-weekly")
+    assert walk_row["scope"] == "activity"
+    assert walk_row["activity_id"] == "act-walk"
+    assert walk_row["unit"] == "km"
+
+    misleading = [
+        row
+        for row in _wtl_b6_rule_limit_rows(payload)
+        if row["scope"] == "class"
+        and row["rule_type"] in {"weekly_volume_cap", "daily_volume_cap"}
+    ]
+    assert misleading == []
+
+
+async def test_get_dashboard_load_risk_summary_empty_rows_without_enabled_limits(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    """Active block with no enabled limits still returns week_days and empty rows."""
+    from datetime import date
+
+    from app.tests.helpers.wtl_b6_fixtures import WTL_B6_BLOCK_ID
+
+    seed_activity_class(
+        app_with_test_database,
+        class_id="cls-foot",
+        name="Foot Load",
+        class_type="performance",
+    )
+    seed_activity(
+        app_with_test_database,
+        activity_id="act-walk",
+        activity_class_id="cls-foot",
+        name="Walk",
+    )
+    seed_training_block(
+        app_with_test_database,
+        block_id=WTL_B6_BLOCK_ID,
+        name="WTL B6 Empty Rules",
+        start_date=date(2026, 4, 7),
+        status="active",
+    )
+
+    response = await client.get(DASHBOARD_URL, params={"as_of": AS_OF})
+    assert response.status_code == 200
+    summary = response.json()["load_risk_summary"]
+
+    assert summary is not None
+    assert len(summary["week_days"]) == 7
+    assert summary["rule_limit_rows"] == []

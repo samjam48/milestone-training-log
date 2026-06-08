@@ -37,3 +37,9 @@ export async function patchWeeklyTarget(
   });
   return mapWeeklyTargetFromApi(raw);
 }
+
+export async function deleteWeeklyTarget(targetId: string): Promise<void> {
+  await apiFetch<void>(`/weekly-targets/${targetId}`, {
+    method: 'DELETE',
+  });
+}

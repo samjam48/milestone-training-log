@@ -38,7 +38,7 @@ def list_rules(session: Session, block_id: str) -> list[Rule]:
     statement = (
         select(Rule)
         .where(Rule.training_block_id == block_id)
-        .order_by(col(Rule.rule_type), Rule.id)
+        .order_by(col(Rule.enabled).desc(), col(Rule.rule_type), Rule.id)
     )
     return list(session.exec(statement).all())
 

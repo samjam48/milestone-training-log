@@ -17,13 +17,15 @@ from app.models.activity import Activity, ActivityClass
 from app.models.block import Rule, TrainingBlock, WeeklyTarget
 from app.models.checkin import DailyCheckIn, FlareUpIncident
 from app.models.log import ActivityLog
+from app.services.seed_data import SEED_WEEK_END, SEED_WEEK_START
+from app.services.training_blocks import calendar_week_label
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 ALEMBIC_INI = BACKEND_ROOT / "alembic.ini"
 ALEMBIC_ROOT = BACKEND_ROOT / "alembic"
 SEED_SCRIPT = BACKEND_ROOT / "scripts" / "seed.py"
 
-PROTOTYPE_TODAY = date(2026, 5, 25)
+PROTOTYPE_TODAY = date(2026, 6, 7)
 EXPECTED_COUNTS = {
     "activity_classes": 3,
     "activities": 5,
@@ -154,10 +156,15 @@ def test_seed_mirrors_sam_chen_training_scenario_semantics(tmp_path: Path) -> No
         block = session.get(TrainingBlock, "blk-1")
         assert block is not None
         assert block.user_id == "local"
-        assert block.name == "Return to Walking — Phase 2"
+        assert block.name == calendar_week_label(SEED_WEEK_START, SEED_WEEK_END)
         assert block.status == "active"
-        assert block.start_date == date(2026, 4, 7)
-        assert block.end_date == date(2026, 5, 31)
+        assert block.period_kind == "weekly_focus"
+        assert block.start_date == SEED_WEEK_START
+        assert block.end_date == SEED_WEEK_END
+        assert block.start_date.weekday() == 0
+        assert block.end_date is not None
+        assert block.end_date.weekday() == 6
+        assert (block.end_date - block.start_date).days == 6
         assert block.is_review_milestone_hit is False
 
         classes = session.exec(select(ActivityClass)).all()

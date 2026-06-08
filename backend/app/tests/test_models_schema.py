@@ -134,11 +134,15 @@ def _sqlite_column_defaults(engine: Engine, table_name: str) -> dict[str, str | 
 
 def _unique_column_sets(table_name: str) -> set[frozenset[str]]:
     table = SQLModel.metadata.tables[table_name]
-    return {
+    unique_sets = {
         frozenset(column.name for column in constraint.columns)
         for constraint in table.constraints
         if isinstance(constraint, UniqueConstraint)
     }
+    for index in table.indexes:
+        if index.unique:
+            unique_sets.add(frozenset(column.name for column in index.columns))
+    return unique_sets
 
 
 def _relationship_target_tables(model_class: type[SQLModel]) -> set[str]:
@@ -271,6 +275,10 @@ def test_phase_one_metadata_contains_exact_tables_and_columns() -> None:
             "start_date",
             "end_date",
             "status",
+            "period_kind",
+            "focus_series_id",
+            "focus_title",
+            "week_number",
             "related_goal_id",
             "notes",
             "is_review_milestone_hit",
@@ -300,8 +308,10 @@ def test_phase_one_metadata_contains_exact_tables_and_columns() -> None:
             "id",
             "training_block_id",
             "activity_class_id",
+            "activity_id",
             "target_value",
             "target_unit",
+            "target_kind",
             "created_at",
             "updated_at",
         },
@@ -377,6 +387,7 @@ def test_id_user_ownership_and_foreign_key_columns_match_phase_one_contract() ->
     _assert_foreign_key("goals", "activity_id", "activities.id", nullable=True)
     _assert_foreign_key("weekly_targets", "training_block_id", "training_blocks.id")
     _assert_foreign_key("weekly_targets", "activity_class_id", "activity_classes.id")
+    _assert_foreign_key("weekly_targets", "activity_id", "activities.id", nullable=True)
     _assert_foreign_key("recovery_targets", "training_block_id", "training_blocks.id")
     _assert_foreign_key("recovery_targets", "activity_id", "activities.id")
 
@@ -425,9 +436,15 @@ def test_column_nullability_defaults_json_and_uniqueness_constraints_are_declare
     assert _get_column(rules, "limit_unit").nullable
     assert isinstance(_get_column(rules, "limit_unit").type, String)
 
-    assert frozenset({"training_block_id", "activity_class_id"}) in _unique_column_sets(
-        "weekly_targets"
-    )
+    weekly_targets = SQLModel.metadata.tables["weekly_targets"]
+    assert _get_column(weekly_targets, "activity_id").nullable
+    target_kind_column = _get_column(weekly_targets, "target_kind")
+    assert not target_kind_column.nullable
+    assert _normalized_server_default(target_kind_column) == "minimum"
+
+    weekly_target_unique_sets = _unique_column_sets("weekly_targets")
+    assert frozenset({"training_block_id", "activity_class_id"}) in weekly_target_unique_sets
+    assert frozenset({"training_block_id", "activity_id"}) in weekly_target_unique_sets
     assert frozenset({"training_block_id", "activity_id"}) in _unique_column_sets(
         "recovery_targets"
     )

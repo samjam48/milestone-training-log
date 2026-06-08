@@ -9,7 +9,7 @@ import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
 
-from app.services.load_engine import compute_weekly_progress
+from app.services.load_engine import compute_weekly_progress, this_week_bounds
 from app.tests.helpers.load_api_seed import (
     seed_delayed_tax_acute_scenario,
     seed_delayed_tax_elevated_load_without_active_block,
@@ -22,7 +22,6 @@ from app.tests.helpers.load_engine_fixtures import (
     ACTIVITIES,
     ACTIVITY_CLASSES,
     AS_OF,
-    BLOCK_START,
     LOGS,
     WEEKLY_TARGETS,
 )
@@ -42,12 +41,13 @@ def _hits_of_type(payload: dict[str, Any], hit_type: str) -> list[dict[str, Any]
 
 
 def _expected_weekly_progress() -> list[Any]:
+    week_start, _week_end = this_week_bounds(AS_OF)
     return compute_weekly_progress(
         WEEKLY_TARGETS,
         ACTIVITY_CLASSES,
         ACTIVITIES,
         LOGS,
-        BLOCK_START,
+        week_start,
         AS_OF,
     )
 
@@ -431,7 +431,8 @@ async def test_get_delayed_tax_elevated_load_without_active_block(
     seed_delayed_tax_elevated_load_without_active_block(app_with_test_database)
 
     active_block = await client.get("/api/training-blocks/active")
-    assert active_block.status_code == 404
+    assert active_block.status_code == 200
+    assert active_block.json()["period_kind"] == "weekly_focus"
 
     response = await client.get(DELAYED_TAX_URL, params={"as_of": AS_OF})
 

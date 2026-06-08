@@ -239,6 +239,8 @@ def seed_weekly_target(
     activity_class_id: str,
     target_value: float,
     target_unit: str,
+    activity_id: str | None = None,
+    target_kind: str = "minimum",
     created_at: datetime | None = None,
 ) -> None:
     for session in with_session(app_with_test_database):
@@ -248,8 +250,10 @@ def seed_weekly_target(
                 id=target_id,
                 training_block_id=training_block_id,
                 activity_class_id=activity_class_id,
+                activity_id=activity_id,
                 target_value=target_value,
                 target_unit=target_unit,
+                target_kind=target_kind,
                 created_at=now,
                 updated_at=now,
             )
