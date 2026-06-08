@@ -125,7 +125,7 @@ Recorded after S25 batch review; not in polish ticket scope unless noted.
 
 **Tickets:** `plans/tickets-weekly-targets-load-risk-2026-06-07.md` (WTL.B1–B7, F1–F7, D1–D2 implemented; **OWTL.1** owner smoke pending)
 
-Delivered themes: activity-scoped weekly targets with migration from weekly `recovery_targets`; dashboard **This week** progress (Monday–Sunday); Goals weekly-target flow; load-tax graph (30-day series); load-risk `rule_limit_rows`; recovery streaks UI retired; **weekly focus** lifecycle replaces month-style training block UX (`period_kind`, `focus_series_id`, Monday rollover, Settings focus UI).
+Delivered themes: activity-scoped weekly targets with migration from weekly `recovery_targets`; dashboard **This week** progress (Monday–Sunday); Goals weekly-target flow; load-tax graph (30-day series); load-risk `rule_limit_rows`; recovery streaks UI retired.
 
 | Item | Ticket | Status |
 | --- | --- | --- |
@@ -137,10 +137,10 @@ Delivered themes: activity-scoped weekly targets with migration from weekly `rec
 | Load-tax formula + graph series | WTL.B5, WTL.F4 | Done |
 | Load risk rule-limit rows | WTL.B6, WTL.F5 | Done |
 | Recovery streaks UI removed | WTL.F6 | Done |
-| Weekly focus lifecycle design | WTL.D1 | Done — `plans/technical-design-weekly-focus-2026-06-07.md` |
-| Weekly focus backend lifecycle | WTL.B7 | Done |
-| Settings weekly focus UI | WTL.F7 | Done |
-| Living docs sync | WTL.D2 | Done |
+| Weekly focus lifecycle design | WTL.D1 | Done — **superseded by WRU** (see below) |
+| Weekly focus backend lifecycle | WTL.B7 | Done — **lazy cutover path superseded by WRU.B1** |
+| Settings weekly focus UI | WTL.F7 | Done — **focus-title / setup / reset UX superseded by WRU.F1** |
+| Living docs sync | WTL.D2 | Done — refreshed again in **WRU.D1** |
 
 ### WTL legacy / future (not weekly focus)
 
@@ -148,6 +148,21 @@ Delivered themes: activity-scoped weekly targets with migration from weekly `rec
 | --- | --- | --- |
 | Daily recovery streaks product path | — | **Legacy** — daily `recovery_targets` rows and `recovery_streaks` API field remain; no dashboard section. Owner decision still open: retire storage, or replan true streaks from weekly target history. |
 | Recovery streak feature (true streaks) | — | **Future** — derive consecutive-week completion from recovery-style **weekly target** history, not the retired F10.1 dashboard section or legacy `recovery_streaks` API field. Clean streak remains separate. |
+
+## Weekly rules unification (WRU batch)
+
+**Tickets:** `plans/tickets-weekly-rules-unification-2026-06-08.md` (WRU.B1–F2, D1 implemented on `fix/stage-2-5-lingering-issues`; **OWRU.1** owner smoke pending)
+
+Supersedes WTL.B7 lazy cutover, WTL.F7 focus-title/setup/reset UX, and month-style **Training Block** create flows. One **weekly rules** path only.
+
+| Item | Ticket | Status |
+| --- | --- | --- |
+| Big-bang migration + seed weekly periods | WRU.B1 | Done |
+| Always-weekly resolution + auto-create | WRU.B2 | Done |
+| Settings weekly rules UI + previous-weeks modal | WRU.F1 | Done |
+| Remove new-block screen + dead APIs | WRU.F2 | Done |
+| Living docs + backlog sync | WRU.D1 | Done |
+| Owner smoke before merge | OWRU.1 | Pending |
 
 ## Product gaps still open (not in the list above)
 

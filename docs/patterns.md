@@ -64,7 +64,7 @@ If scaffolding lands with different names, update this doc in the same change.
 - **Pattern:** Keep state in the smallest owner that can coordinate the interaction cleanly.
 - **Use when:** Choosing between local component state, screen-level state, or shared app state.
 - **Avoid when:** Promoting state to a store just for convenience or scattering one interaction across unrelated components.
-- **Canonical example:** Local state in `DashboardExperience.tsx` for date filters or modal state; shared state only if a concept such as active training block must coordinate across several screens.
+- **Canonical example:** Local state in `DashboardExperience.tsx` for date filters or modal state; shared state only if a concept such as active weekly rules must coordinate across several screens.
 - **Common mistake:** Copying server-derived state into local stores and component state at the same time.
 
 ## Backend route and service split

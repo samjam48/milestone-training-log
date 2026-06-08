@@ -2,6 +2,14 @@
 
 *Date: 2026-06-07 · Ticket: WTL.D1 · Blocks: WTL.B7, WTL.F7*
 
+> **Superseded (2026-06-08, WRU):** Owner decisions in
+> [`plans/tickets-weekly-rules-unification-2026-06-08.md`](tickets-weekly-rules-unification-2026-06-08.md)
+> replace this design’s **lazy legacy cutover**, **focus-title / reset / setup UX**, and **dual
+> legacy + weekly_focus** paths. Production behaviour is **weekly rules only**: big-bang Alembic
+> migration (delete old blocks, copy rules to current week), system-managed auto-create, calendar
+> week labels in Settings, removed `POST /api/training-blocks` and setup/reset routes. Living
+> contracts: `docs/api-map.md`, `docs/database-schema.md`.
+
 ---
 
 ## Decision: reuse `training_blocks`
