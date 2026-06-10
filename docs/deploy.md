@@ -14,7 +14,7 @@ Owner checklists **O11.0**–**O11.2** are in [`plans/tickets-phase-11-productio
 | **Git deploy branch** | `main` (Render + Netlify) |
 | **Database** | Supabase project `milestone` — **Session pooler** `DATABASE_URL` on Render (not direct `db.*` host; required for Render IPv4) |
 | **Auth** | Shared password + session cookie; `APP_DEV_MODE=false`, `VITE_DEV_MODE=false` in prod |
-| **Data** | Schema via `alembic upgrade head` on deploy; **no seed** in production |
+| **Data** | Schema via explicit `alembic upgrade head` operator step when migrations are present; **no seed** in production |
 
 **Operator notes from first deploy:**
 
@@ -52,7 +52,7 @@ Local development uses SQLite; production uses Supabase Postgres. Do not point a
 | `SESSION_MAX_AGE_DAYS` | optional | default `30` |
 | `CORS_ORIGINS` | unset for same-origin dev | unset when API is only reached via Netlify proxy |
 
-**Never run seed in production.** Use `scripts/seed.py` only against a local SQLite database during development. Production starts with an empty database after `alembic upgrade head`; do not run `scripts.seed` or any seed command in prod.
+**Never run seed in production.** Use `scripts/seed.py` only against a local SQLite database during development. Production starts with an empty database after the explicit schema migration step; do not run `scripts.seed` or any seed command in prod.
 
 ## Security: Render URL and app auth
 
@@ -62,7 +62,7 @@ Protection is **app auth** (session cookies after `POST /api/auth/login` with `A
 
 ## Render cold start
 
-Render free-tier Web Services **sleep** after idle traffic. The first request after sleep incurs a **cold start** (container boot, migrations, then uvicorn). Expect several seconds of delay on the first `/api/health` or login after idle; subsequent requests are warm until the service sleeps again. This is acceptable for personal daily use; use the Netlify URL for routine phone access.
+Render free-tier Web Services **sleep** after idle traffic. The first request after sleep incurs a **cold start** (container boot, then uvicorn). Expect several seconds of delay on the first `/api/health` or login after idle; subsequent requests are warm until the service sleeps again. This is acceptable for personal daily use; use the Netlify URL for routine phone access.
 
 ## Recovery: migration-backed deploy timeout
 
@@ -111,13 +111,19 @@ Store dump files offline (encrypted disk or password manager attachment policy).
 - **Root directory:** `backend/` (build context is the backend folder).
 - **Dockerfile path:** `backend/Dockerfile` (or set Render’s root directory to `backend` and use `Dockerfile`).
 
-The production image runs migrations on container start, then serves the API:
+The production image serves the API directly:
 
 ```text
-alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8084}
+uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8084}
 ```
 
 Render injects `PORT`; the default `8084` applies only when `PORT` is unset (e.g. local image runs).
+
+When a deployment includes new files under `backend/alembic/versions/`, run the schema migration as an explicit operator step before or during the production deploy, not as the web container start command. The canonical migration command remains:
+
+```text
+alembic upgrade head
+```
 
 ### Health check
 
