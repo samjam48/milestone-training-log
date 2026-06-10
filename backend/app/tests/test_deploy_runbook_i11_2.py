@@ -411,6 +411,62 @@ def test_docs_warn_incompatible_rollback_is_database_aware_recovery(
     )
 
 
+def test_docs_define_canonical_pre_merge_postgres_migration_check(
+    runbook_text: str,
+) -> None:
+    lowered = runbook_text.lower()
+
+    assert re.search(r"pre[- ]merge", lowered), (
+        "PDH.CI1 requires docs to name the canonical pre-merge migration check."
+    )
+    assert "make test-postgres" in runbook_text, (
+        "PDH.CI1 requires docs to identify `make test-postgres` as the canonical "
+        "local pre-merge migration check."
+    )
+    assert re.search(
+        r"temporary\s+postgres|ephemeral\s+postgres",
+        lowered,
+    ), (
+        "PDH.CI1 requires the canonical check to run against temporary/ephemeral "
+        "Postgres."
+    )
+    assert re.search(
+        r"not\s+production\s+supabase|not\s+supabase|no\s+production\s+secrets",
+        lowered,
+    ), (
+        "PDH.CI1 requires docs to state the pre-merge migration check does not "
+        "use production Supabase or production secrets."
+    )
+
+
+def test_docs_identify_owner_setup_if_github_actions_is_disabled(
+    runbook_text: str,
+) -> None:
+    lowered = runbook_text.lower()
+
+    assert "github actions" in lowered, (
+        "PDH.CI1 requires deploy docs to mention the GitHub Actions migration "
+        "safety gate."
+    )
+    assert re.search(
+        r"github actions.{0,160}(?:disabled|not enabled)|"
+        r"(?:disabled|not enabled).{0,160}github actions",
+        lowered,
+        flags=re.DOTALL,
+    ), (
+        "PDH.CI1 requires docs to say what to do if GitHub Actions is not enabled."
+    )
+    assert re.search(
+        r"owner.{0,120}(?:enable|confirm|setup|set up).{0,120}github actions|"
+        r"github actions.{0,120}owner.{0,120}(?:enable|confirm|setup|set up)",
+        lowered,
+        flags=re.DOTALL,
+    ), (
+        "PDH.CI1 requires docs to identify the owner setup/confirmation step "
+        "when GitHub Actions is disabled."
+    )
+
+
 def _migration_policy_corpus(runbook_text: str) -> str:
     policy_section = _section_matching(
         runbook_text,

@@ -108,6 +108,24 @@ Store dump files offline (encrypted disk or password manager attachment policy).
 
 Production schema migration is an explicit operator step, separate from web startup. The Render web container should start Uvicorn only; do not run Alembic as the web container start command.
 
+### Pre-merge migration safety check
+
+Before merging a PR with backend migration changes, run the canonical pre-merge
+migration check:
+
+```bash
+make test-postgres
+```
+
+This check runs Alembic against temporary Postgres / ephemeral Postgres and is
+the production-relevant schema gate. It must use test-only database credentials,
+not production Supabase, and no production secrets.
+
+GitHub Actions also runs this as the migration safety gate on pull requests with
+a temporary Postgres service. If GitHub Actions is disabled or not enabled for
+the repository, the owner must enable or confirm GitHub Actions setup before
+depending on the PR check.
+
 Run this step when:
 
 - A PR adds a new `backend/alembic/versions/*.py` revision.

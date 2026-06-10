@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
@@ -79,6 +80,42 @@ def test_makefile_or_ci_exposes_postgres_migration_gate() -> None:
     assert has_make_target or ci_runs_postgres_migrations, (
         "B11.2 requires `make test-postgres` and/or a GitHub Actions workflow that "
         "runs Alembic migrations against ephemeral Postgres."
+    )
+
+
+def test_pull_request_workflow_defines_migration_safety_gate_without_prod_secrets() -> None:
+    workflow_files = sorted(WORKFLOWS_DIR.glob("*.yml")) + sorted(
+        WORKFLOWS_DIR.glob("*.yaml")
+    )
+    workflow_text = "\n\n".join(
+        workflow_path.read_text(encoding="utf-8") for workflow_path in workflow_files
+    )
+    lowered = workflow_text.lower()
+
+    assert "pull_request" in lowered, (
+        "PDH.CI1 requires the Postgres migration safety gate to run on PR checks."
+    )
+    assert "migration safety" in lowered, (
+        "PDH.CI1 requires the PR check to be clearly labeled as a migration "
+        "safety gate."
+    )
+    assert re.search(r"services:\s*\n\s+postgres:", workflow_text), (
+        "PDH.CI1 requires the workflow to use a temporary Postgres service."
+    )
+    assert "postgres:16" in lowered, (
+        "PDH.CI1 requires the workflow to use a temporary Postgres image, "
+        "not production Supabase."
+    )
+    assert "postgres_test_url" in lowered, (
+        "PDH.CI1 requires the workflow to provide a test-only Postgres URL."
+    )
+    assert "secrets." not in lowered, (
+        "PDH.CI1 requires the migration safety workflow to avoid production "
+        "GitHub secrets."
+    )
+    assert "supabase" not in lowered, (
+        "PDH.CI1 requires the migration safety workflow to use temporary "
+        "Postgres, not production Supabase."
     )
 
 
