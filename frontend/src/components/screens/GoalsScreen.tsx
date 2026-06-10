@@ -218,6 +218,7 @@ interface WeeklyTargetEditorProps {
   mode: WeeklyTargetEditorMode;
   initial: WeeklyTargetEditorState;
   mutationError: string | null;
+  mutationPending: boolean;
   onClearMutationError: () => void;
   onCancel: () => void;
   onSave: (draft: { activityId: string; targetValue: number; targetUnit: VolumeUnit }) => void;
@@ -229,6 +230,7 @@ function WeeklyTargetEditor({
   mode,
   initial,
   mutationError,
+  mutationPending,
   onClearMutationError,
   onCancel,
   onSave,
@@ -237,9 +239,13 @@ function WeeklyTargetEditor({
   const [activityId, setActivityId] = React.useState(initial.activityId);
   const [targetValue, setTargetValue] = React.useState(initial.targetValue);
   const [targetUnit, setTargetUnit] = React.useState<VolumeUnit>(initial.targetUnit);
+  const [submitLocked, setSubmitLocked] = React.useState(false);
+  const submitLockedRef = React.useRef(false);
+  const observedPendingRef = React.useRef(false);
 
   const selectedActivity = activities.find((a) => a.id === activityId);
   const unitOptions = unitOptionsForActivity(selectedActivity);
+  const saveDisabled = mutationPending || submitLocked;
 
   React.useEffect(() => {
     if (!unitOptions.includes(targetUnit)) {
@@ -247,11 +253,28 @@ function WeeklyTargetEditor({
     }
   }, [activityId, selectedActivity, targetUnit, unitOptions]);
 
+  React.useEffect(() => {
+    if (mutationPending) {
+      observedPendingRef.current = true;
+      return;
+    }
+
+    if (mutationError != null || observedPendingRef.current) {
+      submitLockedRef.current = false;
+      observedPendingRef.current = false;
+      setSubmitLocked(false);
+    }
+  }, [mutationError, mutationPending]);
+
   function handleSubmit(event: React.FormEvent): void {
     event.preventDefault();
+    if (mutationPending || submitLockedRef.current) return;
     onClearMutationError();
     const parsedValue = Number(targetValue);
     if (!Number.isFinite(parsedValue) || activityId === '') return;
+
+    submitLockedRef.current = true;
+    setSubmitLocked(true);
 
     if (mode.kind === 'create') {
       onSave({ activityId, targetValue: parsedValue, targetUnit });
@@ -338,6 +361,7 @@ function WeeklyTargetEditor({
           </button>
           <button
             type="submit"
+            disabled={saveDisabled}
             className="h-10 px-4 rounded-md text-body font-medium text-ink-inverse bg-ink hover:opacity-90 transition-opacity duration-snap"
           >
             Save
@@ -443,6 +467,7 @@ export function GoalsScreen({ engine, onNewGoal, onEditGoal }: GoalsScreenProps)
     createWeeklyTarget,
     patchWeeklyTarget,
     deleteWeeklyTarget,
+    weeklyTargetMutationPending,
     weeklyTargetMutationError,
     clearWeeklyTargetMutationError,
   } = engine;
@@ -617,6 +642,7 @@ export function GoalsScreen({ engine, onNewGoal, onEditGoal }: GoalsScreenProps)
               mode={editorMode}
               initial={editorInitial}
               mutationError={weeklyTargetMutationError}
+              mutationPending={weeklyTargetMutationPending}
               onClearMutationError={clearWeeklyTargetMutationError}
               onCancel={closeEditor}
               onSave={handleCreateSave}

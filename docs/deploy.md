@@ -14,7 +14,7 @@ Owner checklists **O11.0**–**O11.2** are in [`plans/tickets-phase-11-productio
 | **Git deploy branch** | `main` (Render + Netlify) |
 | **Database** | Supabase project `milestone` — **Session pooler** `DATABASE_URL` on Render (not direct `db.*` host; required for Render IPv4) |
 | **Auth** | Shared password + session cookie; `APP_DEV_MODE=false`, `VITE_DEV_MODE=false` in prod |
-| **Data** | Schema via `alembic upgrade head` on deploy; **no seed** in production |
+| **Data** | Schema via explicit `alembic upgrade head` operator step when migrations are present; **no seed** in production |
 
 **Operator notes from first deploy:**
 
@@ -52,7 +52,7 @@ Local development uses SQLite; production uses Supabase Postgres. Do not point a
 | `SESSION_MAX_AGE_DAYS` | optional | default `30` |
 | `CORS_ORIGINS` | unset for same-origin dev | unset when API is only reached via Netlify proxy |
 
-**Never run seed in production.** Use `scripts/seed.py` only against a local SQLite database during development. Production starts with an empty database after `alembic upgrade head`; do not run `scripts.seed` or any seed command in prod.
+**Never run seed in production.** Use `scripts/seed.py` only against a local SQLite database during development. Production starts with an empty database after the explicit schema migration step; do not run `scripts.seed` or any seed command in prod.
 
 ## Security: Render URL and app auth
 
@@ -62,7 +62,33 @@ Protection is **app auth** (session cookies after `POST /api/auth/login` with `A
 
 ## Render cold start
 
-Render free-tier Web Services **sleep** after idle traffic. The first request after sleep incurs a **cold start** (container boot, migrations, then uvicorn). Expect several seconds of delay on the first `/api/health` or login after idle; subsequent requests are warm until the service sleeps again. This is acceptable for personal daily use; use the Netlify URL for routine phone access.
+Render free-tier Web Services **sleep** after idle traffic. The first request after sleep incurs a **cold start** (container boot, then uvicorn). Expect several seconds of delay on the first `/api/health` or login after idle; subsequent requests are warm until the service sleeps again. This is acceptable for personal daily use; use the Netlify URL for routine phone access.
+
+## Recovery: migration-backed deploy timeout
+
+Use this SOP for the 2026-06-08 style failure where a deploy runs database migrations, Render does not promote the new web service cleanly, and the next booting image cannot see the database revision that is already recorded in Supabase.
+
+### Symptoms
+
+- Render deploy logs show a timeout or port scan failure after a deploy that appeared to start.
+- Supabase `alembic_version` is ahead of the migration files available to the image that is currently booting.
+- Render logs include `Can't locate revision identified by '<revision>'`.
+- Netlify `/api/health` returns 5xx or times out while old and new backend processes are mixed, restarting, or unavailable.
+
+### Owner recovery steps
+
+1. In Render, open the backend web service and confirm it deploys from `main`.
+2. Choose **Manual Deploy** from `main`. Prefer **Clear build cache & deploy** when the image/cache state is suspect, the deployed commit is unclear, or logs suggest an older image is booting.
+3. Watch Render logs until the deploy says `Your service is live`. Keep watching briefly and confirm there are no later timeout or port scan messages.
+4. Verify direct Render health: [https://milestone-training-log.onrender.com/api/health](https://milestone-training-log.onrender.com/api/health).
+5. Verify Netlify proxy health: [https://milestone-activity.netlify.app/api/health](https://milestone-activity.netlify.app/api/health).
+6. Do **not** manually edit Supabase `alembic_version` unless there is a separately planned database repair. If the database is already stamped to the expected head, the usual recovery is to get the matching backend image live.
+
+### Triage notes
+
+- **Direct Render health works, Netlify health fails:** backend is up; investigate Netlify redirects/proxy config, deploy status, or Netlify edge errors.
+- **Both health checks work, app login fails:** health is no longer the issue; investigate auth/session settings and backend auth logs (`AUTH_PASSWORD`, `SESSION_SECRET`, cookies).
+- **Slow first request only:** a Render free-tier cold start can take several seconds after idle. Treat it as normal if one refresh later returns 200 and logs show a clean Uvicorn start. Treat repeated 5xx, timeouts, restart loops, or port scan failures as an incident.
 
 ## Supabase backup
 
@@ -78,6 +104,96 @@ pg_dump "$DATABASE_URL" -Fc -f milestone-prod-$(date +%Y%m%d).dump
 
 Store dump files offline (encrypted disk or password manager attachment policy). Test restore on a throwaway database before you depend on a backup.
 
+## Production schema migration
+
+Production schema migration is an explicit operator step, separate from web startup. The Render web container should start Uvicorn only; do not run Alembic as the web container start command.
+
+### Pre-merge migration safety check
+
+Before merging a PR with backend migration changes, run the canonical pre-merge
+migration check:
+
+```bash
+make test-postgres
+```
+
+This check runs Alembic against temporary Postgres / ephemeral Postgres and is
+the production-relevant schema gate. It must use test-only database credentials,
+not production Supabase, and no production secrets.
+
+GitHub Actions also runs this as the migration safety gate on pull requests with
+a temporary Postgres service. If GitHub Actions is disabled or not enabled for
+the repository, the owner must enable or confirm GitHub Actions setup before
+depending on the PR check.
+
+Run this step when:
+
+- A PR adds a new `backend/alembic/versions/*.py` revision.
+- A PR changes a SQLModel model or schema in a way that expects a deployed schema change.
+
+If no migration files changed, skip the migration step and deploy the web/frontend normally.
+
+### Migration pre-flight
+
+Before running a production migration:
+
+1. Confirm the target Git commit/branch that is being deployed.
+2. Confirm a Supabase backup exists, or that skipping the backup is intentional for low-risk dev-only data.
+3. Confirm the local Alembic graph sees the intended head, for example with `alembic heads` or `alembic current` from `backend/`.
+4. Confirm the Render service deploys from `main`.
+5. Confirm Netlify deploys from `main`.
+
+### Run the migration
+
+The canonical production migration command is:
+
+```text
+alembic upgrade head
+```
+
+Preferred execution location: run it from the Render one-off job/shell environment for the backend service, so the command uses the same deployed environment and production database configuration.
+
+Fallback execution location: use a controlled local shell only when `DATABASE_URL` is deliberately pointed at Supabase. Keep `DATABASE_URL` not committed, and keep `DATABASE_URL` not echoed into terminal logs, CI logs, screenshots, or shared notes.
+
+If the command fails before changing schema, stop and do not deploy the frontend until the failure is understood. If it partially succeeds, stop; do not blindly redeploy older code over a database revision that newer migration code already touched.
+
+### Migration post-flight
+
+After running a production migration:
+
+1. Inspect Supabase `alembic_version` and confirm it matches the intended revision.
+2. Check direct Render health: [https://milestone-training-log.onrender.com/api/health](https://milestone-training-log.onrender.com/api/health).
+3. Check Netlify proxy health: [https://milestone-activity.netlify.app/api/health](https://milestone-activity.netlify.app/api/health).
+4. Run a login smoke test in the Netlify app.
+5. Smoke-test the changed workflow that required the migration.
+
+## Backward-compatible migration policy
+
+Default production migration style is expand, deploy compatible code, backfill,
+then contract:
+
+1. **Expand:** add nullable columns, tables, or indexes that the current and next
+   backend code can both tolerate.
+2. **Deploy compatible code:** make the app handle the old and new schema shape
+   where needed.
+3. **Backfill:** run data migration separately when existing rows need new
+   derived or copied values.
+4. **Contract:** remove old columns, routes, or tables only in a later deployment
+   after the new code is live and verified.
+
+Destructive or high-risk migrations require explicit owner approval before
+merge. This includes Alembic operations such as `drop_table` and `drop_column`,
+broad `DELETE FROM` data changes, enum/value semantic changes that older code
+cannot parse, and data migrations that rewrite or wipe production history.
+
+Deploy-review question for every production migration: "Can the previous backend
+version start and serve health against the migrated DB revision?"
+
+If the answer is "no", rollback must be treated as database-aware recovery, not
+just "redeploy previous image" or "redeploy previous version". Confirm the
+database state, matching migration files, and compatible backend image before
+trying to recover.
+
 ## Render Web Service
 
 ### Repository layout
@@ -85,13 +201,19 @@ Store dump files offline (encrypted disk or password manager attachment policy).
 - **Root directory:** `backend/` (build context is the backend folder).
 - **Dockerfile path:** `backend/Dockerfile` (or set Render’s root directory to `backend` and use `Dockerfile`).
 
-The production image runs migrations on container start, then serves the API:
+The production image serves the API directly:
 
 ```text
-alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8084}
+uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8084}
 ```
 
 Render injects `PORT`; the default `8084` applies only when `PORT` is unset (e.g. local image runs).
+
+When a deployment includes new files under `backend/alembic/versions/`, run the schema migration as an explicit operator step before or during the production deploy, not as the web container start command. The canonical migration command remains:
+
+```text
+alembic upgrade head
+```
 
 ### Health check
 

@@ -1,4 +1,4 @@
-name: Postgres migrations
+name: Migration safety
 
 on:
   push:
@@ -6,7 +6,8 @@ on:
   pull_request:
 
 jobs:
-  alembic-postgres:
+  migration-safety:
+    name: Migration safety gate
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -30,6 +31,6 @@ jobs:
           python-version: "3.12"
       - name: Install backend (dev)
         run: python -m pip install -e './backend[dev]'
-      - name: Run Postgres migration tests
+      - name: Run migration safety check
         working-directory: backend
         run: python -m pytest app/tests/test_postgres_migrations.py -v --no-cov -m postgres

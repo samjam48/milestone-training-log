@@ -79,15 +79,16 @@ def dockerfile_cmd(dockerfile_text: str) -> str:
     return _dockerfile_cmd_section(dockerfile_text)
 
 
-def test_backend_dockerfile_production_cmd_runs_migrations_then_uvicorn(
+def test_backend_dockerfile_production_cmd_starts_uvicorn_without_migrations(
     dockerfile_cmd: str,
 ) -> None:
     lowered = dockerfile_cmd.lower()
-    assert "alembic upgrade head" in lowered, (
-        "Production CMD must run `alembic upgrade head` before uvicorn (B11.3)."
-    )
     assert "uvicorn app.main:app" in lowered, (
         "Production CMD must start uvicorn with app.main:app (B11.3)."
+    )
+    assert "alembic upgrade" not in lowered, (
+        "Production CMD must not run Alembic migrations; production schema changes "
+        "are an explicit operator step (PDH.B1)."
     )
 
 
@@ -104,23 +105,28 @@ def test_backend_dockerfile_production_cmd_has_no_reload(dockerfile_cmd: str) ->
     )
 
 
-def test_backend_dockerfile_cmd_chains_migrations_with_and_so_boot_fails_on_migration_error(
+def test_backend_dockerfile_cmd_does_not_chain_migrations_before_web_start(
     dockerfile_cmd: str,
 ) -> None:
-    assert re.search(r"alembic\s+upgrade\s+head\s*&&", dockerfile_cmd, flags=re.IGNORECASE), (
-        "Production CMD must chain alembic and uvicorn with && so a migration failure "
-        "exits non-zero and fails the container on Render."
+    assert not re.search(
+        r"alembic\s+upgrade\s+head\s*&&",
+        dockerfile_cmd,
+        flags=re.IGNORECASE,
+    ), (
+        "Production CMD must not chain `alembic upgrade head && uvicorn`; a failed "
+        "web deploy must not mutate the production DB before Render promotes the image."
     )
 
 
-def test_backend_dockerfile_includes_alembic_assets_for_startup_migrations(
+def test_backend_dockerfile_includes_alembic_assets_for_explicit_migration_command(
     dockerfile_text: str,
 ) -> None:
     assert "alembic.ini" in dockerfile_text, (
-        "backend/Dockerfile must COPY alembic.ini for `alembic upgrade head` on container start."
+        "backend/Dockerfile must COPY alembic.ini so an explicit migration command "
+        "can run from the backend image."
     )
     assert re.search(r"COPY\s+alembic", dockerfile_text), (
-        "backend/Dockerfile must COPY the alembic/ directory for production migrations."
+        "backend/Dockerfile must COPY the alembic/ directory for explicit production migrations."
     )
 
 
@@ -182,7 +188,7 @@ def test_docker_compose_dev_backend_command_still_uses_reload(
         "docker-compose.yml backend command must still include --reload for local dev."
     )
     assert "alembic" not in command_text, (
-        "docker-compose dev command must not run migrations; production image CMD owns that."
+        "docker-compose dev command must not run migrations implicitly."
     )
 
 

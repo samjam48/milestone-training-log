@@ -73,6 +73,7 @@ function createBaseline(): MilestoneEngineResult {
     createWeeklyTarget: () => undefined,
     patchWeeklyTarget: () => undefined,
     deleteWeeklyTarget: () => undefined,
+    weeklyTargetMutationPending: false,
     weeklyTargetMutationError: null,
     clearWeeklyTargetMutationError: () => undefined,
     // H10.2 — app shell query status
