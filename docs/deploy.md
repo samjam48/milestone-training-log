@@ -104,6 +104,51 @@ pg_dump "$DATABASE_URL" -Fc -f milestone-prod-$(date +%Y%m%d).dump
 
 Store dump files offline (encrypted disk or password manager attachment policy). Test restore on a throwaway database before you depend on a backup.
 
+## Production schema migration
+
+Production schema migration is an explicit operator step, separate from web startup. The Render web container should start Uvicorn only; do not run Alembic as the web container start command.
+
+Run this step when:
+
+- A PR adds a new `backend/alembic/versions/*.py` revision.
+- A PR changes a SQLModel model or schema in a way that expects a deployed schema change.
+
+If no migration files changed, skip the migration step and deploy the web/frontend normally.
+
+### Migration pre-flight
+
+Before running a production migration:
+
+1. Confirm the target Git commit/branch that is being deployed.
+2. Confirm a Supabase backup exists, or that skipping the backup is intentional for low-risk dev-only data.
+3. Confirm the local Alembic graph sees the intended head, for example with `alembic heads` or `alembic current` from `backend/`.
+4. Confirm the Render service deploys from `main`.
+5. Confirm Netlify deploys from `main`.
+
+### Run the migration
+
+The canonical production migration command is:
+
+```text
+alembic upgrade head
+```
+
+Preferred execution location: run it from the Render one-off job/shell environment for the backend service, so the command uses the same deployed environment and production database configuration.
+
+Fallback execution location: use a controlled local shell only when `DATABASE_URL` is deliberately pointed at Supabase. Keep `DATABASE_URL` not committed, and keep `DATABASE_URL` not echoed into terminal logs, CI logs, screenshots, or shared notes.
+
+If the command fails before changing schema, stop and do not deploy the frontend until the failure is understood. If it partially succeeds, stop; do not blindly redeploy older code over a database revision that newer migration code already touched.
+
+### Migration post-flight
+
+After running a production migration:
+
+1. Inspect Supabase `alembic_version` and confirm it matches the intended revision.
+2. Check direct Render health: [https://milestone-training-log.onrender.com/api/health](https://milestone-training-log.onrender.com/api/health).
+3. Check Netlify proxy health: [https://milestone-activity.netlify.app/api/health](https://milestone-activity.netlify.app/api/health).
+4. Run a login smoke test in the Netlify app.
+5. Smoke-test the changed workflow that required the migration.
+
 ## Render Web Service
 
 ### Repository layout
