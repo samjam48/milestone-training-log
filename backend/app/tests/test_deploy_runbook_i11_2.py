@@ -299,6 +299,127 @@ def test_runbook_documents_production_migration_postflight_checks(
     )
 
 
+def test_docs_define_expand_deploy_backfill_contract_migration_policy(
+    runbook_text: str,
+) -> None:
+    migration_policy = _migration_policy_corpus(runbook_text)
+    lowered = migration_policy.lower()
+
+    assert re.search(r"\bexpand\b", lowered), (
+        "PDH.D3 requires docs to define the Expand step for production migrations."
+    )
+    assert re.search(
+        r"(?:add|adding).{0,100}(?:nullable\s+)?(?:columns?|tables?|indexes?)",
+        lowered,
+        flags=re.DOTALL,
+    ), (
+        "PDH.D3 Expand policy must describe adding nullable columns, tables, or indexes "
+        "that current and next code can tolerate."
+    )
+    assert re.search(
+        r"deploy\s+compatible\s+code|compatible\s+code",
+        lowered,
+    ), (
+        "PDH.D3 requires docs to define the Deploy compatible code step."
+    )
+    assert re.search(
+        r"(?:old\s+and\s+new|current\s+and\s+next).{0,80}(?:shape|schema)",
+        lowered,
+        flags=re.DOTALL,
+    ), (
+        "PDH.D3 Deploy policy must say code handles old and new schema shape where needed."
+    )
+    assert re.search(r"\bbackfill\b", lowered), (
+        "PDH.D3 requires docs to define a separate Backfill step."
+    )
+    assert re.search(r"\bcontract\b", lowered), (
+        "PDH.D3 requires docs to define a later Contract step."
+    )
+    assert re.search(
+        r"remove.{0,120}(?:columns?|routes?|tables?).{0,120}(?:later|after)",
+        lowered,
+        flags=re.DOTALL,
+    ), (
+        "PDH.D3 Contract policy must say removal happens in a later deployment "
+        "after new code is live and verified."
+    )
+
+
+def test_docs_list_destructive_migration_operations_requiring_owner_approval(
+    runbook_text: str,
+) -> None:
+    migration_policy = _migration_policy_corpus(runbook_text)
+    lowered = migration_policy.lower()
+
+    assert "owner approval" in lowered or "owner-approved" in lowered, (
+        "PDH.D3 requires destructive/high-risk migrations to require explicit owner approval."
+    )
+    for operation in ("drop_table", "drop_column"):
+        assert operation in migration_policy, (
+            f"PDH.D3 requires docs to name `{operation}` as a high-risk operation."
+        )
+    assert "delete from" in lowered, (
+        "PDH.D3 requires docs to name broad DELETE FROM operations as high-risk."
+    )
+    assert re.search(r"enum|value\s+semantics", lowered), (
+        "PDH.D3 requires docs to flag enum/value semantic changes older code cannot parse."
+    )
+    assert re.search(
+        r"rewrite\s+or\s+wipe\s+production\s+history|wipe\s+or\s+rewrite\s+production\s+history",
+        lowered,
+    ), (
+        "PDH.D3 requires docs to flag data migrations that rewrite or wipe production history."
+    )
+
+
+def test_docs_include_previous_backend_health_review_question(
+    runbook_text: str,
+) -> None:
+    migration_policy = _migration_policy_corpus(runbook_text)
+
+    assert re.search(
+        r"Can\s+the\s+previous\s+backend\s+version\s+start\s+and\s+serve\s+health\s+"
+        r"against\s+the\s+migrated\s+DB\s+revision\?",
+        migration_policy,
+    ), (
+        "PDH.D3 requires the deploy-review question: 'Can the previous backend "
+        "version start and serve health against the migrated DB revision?'"
+    )
+
+
+def test_docs_warn_incompatible_rollback_is_database_aware_recovery(
+    runbook_text: str,
+) -> None:
+    migration_policy = _migration_policy_corpus(runbook_text)
+    lowered = migration_policy.lower()
+
+    assert re.search(r"if\s+the\s+answer\s+is\s+['\"]?no", lowered), (
+        "PDH.D3 requires docs to explain what happens when the previous backend "
+        "is not compatible with the migrated DB revision."
+    )
+    assert "database-aware recovery" in lowered, (
+        "PDH.D3 requires rollback to be treated as database-aware recovery when "
+        "the previous backend is incompatible."
+    )
+    assert re.search(
+        r"not\s+just\s+['\"]?redeploy\s+(?:the\s+)?previous\s+image|"
+        r"not\s+just\s+['\"]?redeploy\s+(?:the\s+)?previous\s+version",
+        lowered,
+    ), (
+        "PDH.D3 requires docs to say incompatible rollback is not just redeploying "
+        "the previous image/version."
+    )
+
+
+def _migration_policy_corpus(runbook_text: str) -> str:
+    policy_section = _section_matching(
+        runbook_text,
+        r"(?ms)^#{1,3}\s+.*\b(?:backward[- ]compatible|migration\s+policy|"
+        r"production\s+migration\s+style)\b.*?(?=^#{1,3}\s+\S|\Z)",
+    )
+    return policy_section or runbook_text
+
+
 def _section_matching(text: str, pattern: str) -> str | None:
     match = re.search(pattern, text)
     return match.group(0) if match else None

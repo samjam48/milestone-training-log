@@ -149,6 +149,33 @@ After running a production migration:
 4. Run a login smoke test in the Netlify app.
 5. Smoke-test the changed workflow that required the migration.
 
+## Backward-compatible migration policy
+
+Default production migration style is expand, deploy compatible code, backfill,
+then contract:
+
+1. **Expand:** add nullable columns, tables, or indexes that the current and next
+   backend code can both tolerate.
+2. **Deploy compatible code:** make the app handle the old and new schema shape
+   where needed.
+3. **Backfill:** run data migration separately when existing rows need new
+   derived or copied values.
+4. **Contract:** remove old columns, routes, or tables only in a later deployment
+   after the new code is live and verified.
+
+Destructive or high-risk migrations require explicit owner approval before
+merge. This includes Alembic operations such as `drop_table` and `drop_column`,
+broad `DELETE FROM` data changes, enum/value semantic changes that older code
+cannot parse, and data migrations that rewrite or wipe production history.
+
+Deploy-review question for every production migration: "Can the previous backend
+version start and serve health against the migrated DB revision?"
+
+If the answer is "no", rollback must be treated as database-aware recovery, not
+just "redeploy previous image" or "redeploy previous version". Confirm the
+database state, matching migration files, and compatible backend image before
+trying to recover.
+
 ## Render Web Service
 
 ### Repository layout
