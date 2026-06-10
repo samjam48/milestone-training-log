@@ -64,6 +64,32 @@ Protection is **app auth** (session cookies after `POST /api/auth/login` with `A
 
 Render free-tier Web Services **sleep** after idle traffic. The first request after sleep incurs a **cold start** (container boot, migrations, then uvicorn). Expect several seconds of delay on the first `/api/health` or login after idle; subsequent requests are warm until the service sleeps again. This is acceptable for personal daily use; use the Netlify URL for routine phone access.
 
+## Recovery: migration-backed deploy timeout
+
+Use this SOP for the 2026-06-08 style failure where a deploy runs database migrations, Render does not promote the new web service cleanly, and the next booting image cannot see the database revision that is already recorded in Supabase.
+
+### Symptoms
+
+- Render deploy logs show a timeout or port scan failure after a deploy that appeared to start.
+- Supabase `alembic_version` is ahead of the migration files available to the image that is currently booting.
+- Render logs include `Can't locate revision identified by '<revision>'`.
+- Netlify `/api/health` returns 5xx or times out while old and new backend processes are mixed, restarting, or unavailable.
+
+### Owner recovery steps
+
+1. In Render, open the backend web service and confirm it deploys from `main`.
+2. Choose **Manual Deploy** from `main`. Prefer **Clear build cache & deploy** when the image/cache state is suspect, the deployed commit is unclear, or logs suggest an older image is booting.
+3. Watch Render logs until the deploy says `Your service is live`. Keep watching briefly and confirm there are no later timeout or port scan messages.
+4. Verify direct Render health: [https://milestone-training-log.onrender.com/api/health](https://milestone-training-log.onrender.com/api/health).
+5. Verify Netlify proxy health: [https://milestone-activity.netlify.app/api/health](https://milestone-activity.netlify.app/api/health).
+6. Do **not** manually edit Supabase `alembic_version` unless there is a separately planned database repair. If the database is already stamped to the expected head, the usual recovery is to get the matching backend image live.
+
+### Triage notes
+
+- **Direct Render health works, Netlify health fails:** backend is up; investigate Netlify redirects/proxy config, deploy status, or Netlify edge errors.
+- **Both health checks work, app login fails:** health is no longer the issue; investigate auth/session settings and backend auth logs (`AUTH_PASSWORD`, `SESSION_SECRET`, cookies).
+- **Slow first request only:** a Render free-tier cold start can take several seconds after idle. Treat it as normal if one refresh later returns 200 and logs show a clean Uvicorn start. Treat repeated 5xx, timeouts, restart loops, or port scan failures as an incident.
+
 ## Supabase backup
 
 Production data lives in Supabase Postgres. Back up before risky changes (schema deploys, manual SQL).
