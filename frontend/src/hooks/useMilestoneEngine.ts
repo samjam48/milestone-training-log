@@ -247,6 +247,8 @@ export interface MilestoneEngineResult {
   createWeeklyTarget: (draft: WeeklyTargetDraft) => void;
   patchWeeklyTarget: (targetId: ID, patch: WeeklyTargetPatch) => void;
   deleteWeeklyTarget: (targetId: ID) => void;
+  /** True while a weekly target create/update mutation is in flight. */
+  weeklyTargetMutationPending: boolean;
   /** Inline error from the latest weekly target mutation failure; null when none. */
   weeklyTargetMutationError: string | null;
   clearWeeklyTargetMutationError: () => void;
@@ -743,6 +745,9 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     deleteWeeklyTargetMutation.mutate(targetId);
   }, [deleteWeeklyTargetMutation]);
 
+  const weeklyTargetMutationPending =
+    createWeeklyTargetMutation.isPending || patchWeeklyTargetMutation.isPending;
+
   const isInitialLoading = dashboardQuery.isPending;
   const isUnauthorized =
     dashboardQuery.isError && isUnauthorizedError(dashboardQuery.error);
@@ -802,6 +807,7 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     createWeeklyTarget,
     patchWeeklyTarget,
     deleteWeeklyTarget,
+    weeklyTargetMutationPending,
     weeklyTargetMutationError,
     clearWeeklyTargetMutationError,
     // H10.2 — app shell query status

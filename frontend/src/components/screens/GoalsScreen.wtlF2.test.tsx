@@ -32,6 +32,7 @@ import { GoalsScreen } from './GoalsScreen';
 /** WTL.F2 engine extensions not yet on MilestoneEngineResult. */
 type WtlF2Engine = MilestoneEngineResult & {
   deleteWeeklyTarget: (targetId: string) => void;
+  weeklyTargetMutationPending: boolean;
   weeklyTargetMutationError: string | null;
   clearWeeklyTargetMutationError: () => void;
 };
@@ -49,6 +50,7 @@ function makeWtlF2Engine(
     createWeeklyTarget: vi.fn(),
     patchWeeklyTarget: vi.fn(),
     deleteWeeklyTarget: vi.fn(),
+    weeklyTargetMutationPending: false,
     weeklyTargetMutationError: null,
     clearWeeklyTargetMutationError: vi.fn(),
     ...overrides,
@@ -187,6 +189,70 @@ describe('GoalsScreen — WTL.F2 weekly target editor', () => {
       'km',
     );
     await user.click(within(editor).getByRole('button', { name: /^save$/i }));
+
+    expect(createWeeklyTarget).toHaveBeenCalledTimes(1);
+    expect(createWeeklyTarget).toHaveBeenCalledWith({
+      activityId: WTL_F2_ACTIVITY_WALK.id,
+      targetValue: 10,
+      targetUnit: 'km',
+    });
+  });
+
+  it('PDH.F1 disables Save while a weekly target create mutation is pending', async () => {
+    const user = userEvent.setup();
+    const createWeeklyTarget = vi.fn();
+
+    renderWithProviders(
+      <GoalsScreen
+        engine={makeWtlF2Engine({
+          createWeeklyTarget,
+          weeklyTargetMutationPending: true,
+        })}
+        onNewGoal={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /weekly target/i }));
+
+    const editor = getWeeklyTargetEditor();
+    const saveButton = within(editor).getByRole('button', { name: /^save$/i });
+
+    expect(saveButton).toBeDisabled();
+
+    await user.click(saveButton);
+
+    expect(createWeeklyTarget).not.toHaveBeenCalled();
+  });
+
+  it('PDH.F1 rapid repeated Save submits at most one new weekly target create request', async () => {
+    const user = userEvent.setup();
+    const createWeeklyTarget = vi.fn();
+
+    renderWithProviders(
+      <GoalsScreen
+        engine={makeWtlF2Engine({ createWeeklyTarget })}
+        onNewGoal={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /weekly target/i }));
+
+    const editor = getWeeklyTargetEditor();
+    await user.selectOptions(
+      within(editor).getByRole('combobox', { name: /activity/i }),
+      WTL_F2_ACTIVITY_WALK.id,
+    );
+    await user.clear(within(editor).getByRole('spinbutton', { name: /target value/i }));
+    await user.type(
+      within(editor).getByRole('spinbutton', { name: /target value/i }),
+      '10',
+    );
+    await user.selectOptions(
+      within(editor).getByRole('combobox', { name: /unit/i }),
+      'km',
+    );
+
+    await user.dblClick(within(editor).getByRole('button', { name: /^save$/i }));
 
     expect(createWeeklyTarget).toHaveBeenCalledTimes(1);
     expect(createWeeklyTarget).toHaveBeenCalledWith({
