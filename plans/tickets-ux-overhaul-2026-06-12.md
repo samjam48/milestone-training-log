@@ -2,8 +2,10 @@
 
 **Date:** 2026-06-12
 **Branch:** `feat/ux-overhaul-2026-06`
-**Status:** Planning
+**Status:** Planner review complete
 **Sources:** `plans/ux-assessment-2026-06-12.md` (AI), `plans/user-ux-assessment-12-06-2026.md` (owner)
+
+Tickets below follow the planner ticket shape: each has a **Type**, a **Reuse/Extend** inventory, flat **Acceptance criteria**, and **Edge cases**. Implementation detail is given as contracts and reuse pointers, not finished code — the Implementer writes the code. Code sketches appear only where they remove ambiguity (a type field, a function signature, a label string).
 
 ---
 
@@ -13,760 +15,530 @@
 |---|----------|
 | 1 | Dashboard gets 3 sub-tabs: **Today / Metrics / Safety** |
 | 2 | No FAB — Log tab remains the primary log entry point |
-| 3 | Clean streak UI **removed** from Dashboard; streaks feature tracked in backlog |
+| 3 | Clean streak UI **removed** from Dashboard; streaks feature tracked in backlog (engine field stays) |
 | 4 | Incidents surfaced in **Log History** with distinct visual; post-incident screen cleaned up |
-| 5 | "All Classes" rule: **investigate before fixing** (may be data bug or display bug) |
-| 6 | Delete pattern: **bin icon everywhere** (logs, goals, activity classes, exercises, rules) — no text "Delete" |
+| 5 | "All Classes" rule: root cause confirmed — stale FK orphan (see UX-B3) |
+| 6 | Delete pattern: **bin icon** replaces text "Delete" on **row triggers only** (not confirmation buttons) |
 | 7 | Single feature branch; tickets commit sequentially — quick wins first, then structural |
+
+---
+
+## ⚠️ Owner Sign-Off Required Before Implementation
+
+Per `docs/architecture.md` ("Migration creation requires explicit approval", "add or materially change database schema"), the following are **blocked until the owner approves**. Everything else in this plan is frontend-only and needs no schema/API sign-off.
+
+| Item | Ticket | What needs sign-off |
+|------|--------|---------------------|
+| Production data deletion | UX-B3 Part 1 | Manual `DELETE` of orphan rule rows from live Supabase |
+| FK constraint migration | UX-B3 Part 3 | New Alembic migration adding `ON DELETE` behaviour to `rules.activity_class_id` |
+
+**No other ticket changes schema, API contracts, or shared state.** UX-A2 and UX-B4 were re-scoped during this review to be frontend-only (see those tickets).
 
 ---
 
 ## Group A — Quick Wins
 
-These are pure UI / copy / display tweaks. No architecture changes. Each is a standalone commit.
+Pure frontend display/copy tweaks. Each is a standalone commit. None touch the engine, API, or schema.
 
 ---
 
 ### UX-A1: Check-in completion badge
 
-**Problem:** `{!hasCheckedInToday && <CheckInCTA />}` — CTA disappears after check-in, leaving no evidence it happened.
+**Type:** Frontend
 
-**Fix:** Replace the conditional render with a `CheckInStatus` component that switches between CTA and a completion badge.
+**Problem:** `{!hasCheckedInToday && <CheckInCTA />}` (`DashboardScreen.tsx:162`) — the CTA disappears after check-in, leaving no evidence it happened, prompting duplicate check-ins.
 
-```tsx
-// DashboardScreen.tsx — replace line 162 conditional
-const CheckInStatus: React.FC<{ hasCheckedIn: boolean; onPress: () => void }> = ({
-  hasCheckedIn, onPress,
-}) => {
-  if (hasCheckedIn) {
-    return (
-      <Card intent="success" pad="md">
-        <div className="flex items-center gap-3">
-          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-safe/20">
-            {/* checkmark svg */}
-          </span>
-          <div>
-            <p className="text-body font-semibold text-safe-fg">Check-in complete</p>
-            <p className="text-caption text-ink-muted">Logged today</p>
-          </div>
-        </div>
-      </Card>
-    );
-  }
-  return <CheckInCTA onPress={onPress} />;
-};
-```
-
-**File:** `frontend/src/components/screens/DashboardScreen.tsx:162`
+**Reuse/Extend:**
+- Reuse `Card` with `intent="success"` (already used elsewhere in this screen).
+- Reuse the existing `CheckInCTA` component unchanged for the not-yet state.
+- `hasCheckedInToday` already destructured from `engine`.
 
 **Acceptance criteria:**
-- When `hasCheckedInToday = true`, a green success card is visible (not nothing)
-- When `hasCheckedInToday = false`, the existing CTA renders unchanged
-- No duplicate check-in attempt is needed to confirm state
+- When `hasCheckedInToday` is true, a success-intent card is shown reading "Check-in complete".
+- When `hasCheckedInToday` is false, the existing `CheckInCTA` renders exactly as today.
+- The two states occupy the same slot in the layout (no shift in surrounding sections).
+
+**Edge cases:**
+- Engine still loading / `hasCheckedInToday` undefined → treat as not-checked-in (show CTA), never a flash of the success badge.
+- No exact check-in timestamp is available in the engine result today — do **not** invent a "Logged at 7:15 AM" string; use "Logged today" or omit the time. (The AI assessment's mocked timestamp is not backed by data.)
 
 ---
 
-### UX-A2: Load risk — timeframe prefix in labels
+### UX-A2: Load risk — daily/weekly prefix on rule rows
 
-**Problem:** Load risk rows show `"0 / 3 km"` — unclear if daily or weekly.
+**Type:** Frontend (no backend — corrected during review)
 
-**Fix:** Update `formatActualLimit` in `LoadRiskSection.tsx` to accept a `period` label and prefix it.
+**Problem:** Load-risk rule rows render `"0 / 3 km"` with no indication of the period.
 
-`LoadRiskRuleLimitRow` already has a `period` or equivalent field — check; if not, add `period: 'daily' | 'weekly'` to the interface and populate from engine.
-
-```tsx
-// Before: "0 / 3 km"
-// After:  "Daily: 0 / 3 km"  or  "Weekly: 5 / 20 km"
-function formatActualLimit(actual: number, limit: number, unit: string, period?: string): string {
-  const prefix = period ? `${period.charAt(0).toUpperCase() + period.slice(1)}: ` : '';
-  // ...
-  return `${prefix}${roundedActual} / ${roundedLimit} ${unit}`;
-}
-```
-
-**File:** `frontend/src/components/composites/LoadRiskSection.tsx`
+**Reuse/Extend:**
+- `LoadRiskRuleLimitRow` (`types.ts:292`) has **no `period` field** but does have `ruleType: string`. Derive the period from `ruleType` — do **not** add a field or change the API.
+- Period mapping by rule type: `daily_volume_cap` → "Daily"; `weekly_volume_cap`, `weekly_load_cap`, `frequency_limit` → "Weekly"; `rest_between_class`, `consecutive_day_limit` → no period prefix (they are not volume/count-over-window caps). Confirm the exact set against `lib/ruleTaxonomy.ts` during implementation.
+- Apply the prefix inside `LoadRiskSection.tsx` (`formatActualLimit` / `ruleRowLabel`), not in the engine.
 
 **Acceptance criteria:**
-- Daily rules show `"Daily: X / Y unit"`
-- Weekly rules show `"Weekly: X / Y unit"`
-- Existing progress bar layout unchanged
+- Daily-cap rows display a "Daily:" prefix before the value (e.g. "Daily: 0 / 3 km").
+- Weekly-cap rows display a "Weekly:" prefix (e.g. "Weekly: 5 / 20 km").
+- Rule types with no meaningful period show no prefix.
+- Progress bar geometry and `data-testid` hooks are unchanged.
+
+**Edge cases:**
+- Unknown/future `ruleType` not in the mapping → render with no prefix rather than crashing or showing "undefined".
+- `displayMode: 'status'` rows (non-bar) — apply the same period logic only if it reads naturally; otherwise leave status rows unprefixed.
 
 ---
 
-### UX-A3: Activity status — fix "Done Today" redundant meta
+### UX-A3: Activity status — fix redundant "done today" meta
 
-**Problem:** Items under the "Done today" section show `"Last done 0 days ago"` — redundant.
+**Type:** Frontend
 
-**Fix:** In the Activity Status render loop in `DashboardScreen.tsx`, detect when `cs.reason` contains "0 days" (or when the last-done date == today) and substitute a more useful string: either the weekly unit count or suppress the meta entirely.
+**Problem:** Items the user has done today show meta text like "Last done 0 days ago" — redundant inside a today-context section.
 
-Rule: if the class was done today, show `"X sessions this week"` (derive from `weeklyProgress`) or omit the meta text.
-
-**File:** `frontend/src/components/screens/DashboardScreen.tsx:231–244`
+**Reuse/Extend:**
+- `classStatuses` (`ActivityClassStatus[]`) already carries `reason`, `lastDoneDate`, `nextSafeDate`. `lastDoneDate === todayDate` identifies a done-today row.
+- `weeklyProgress` is available on the engine if a "N sessions this week" substitute is wanted.
 
 **Acceptance criteria:**
-- No `"Last done 0 days ago"` text visible in Activity Status
-- Done-today items show a useful secondary label or no secondary label
+- No Activity Status row shows a "0 days ago" / "Last done 0 days ago" style string.
+- For a row done today, the secondary line either shows a useful alternative (e.g. this-week unit/session count) or is omitted entirely.
+- Rows not done today keep their existing reason text.
+
+**Edge cases:**
+- A class done today **and** already in violation (caution/danger) → keep the violation reason; suppress only the redundant recency phrase.
+- A class with no logs at all → unaffected (no "0 days" text applies).
+- Decide one consistent rule (substitute vs omit) and apply it uniformly; do not mix per-row.
 
 ---
 
-### UX-A4: Remove Clean Streak from Dashboard + backlog entry
+### UX-A4: Remove Clean Streak section from Dashboard
 
-**Problem:** Clean streak logic may not be tracking rule violations correctly; section doesn't add clear value in its current form.
+**Type:** Frontend + docs
 
-**Fix:**
-1. Remove the `/* Clean streak */` section from `DashboardScreen.tsx` (lines 246–252)
-2. Remove `cleanStreak` from the destructured engine fields in `DashboardScreen.tsx:145`
-3. Add a backlog item in `BACKLOG.md` under a new "Future UX" section: "True streak counter — derive consecutive-week (or session) streaks from weekly target history; replace the retired `cleanStreak` UI with a well-designed streaks section once the product model is clear."
+**Problem:** Clean-streak logic does not reliably flag rule violations and adds little value in its current form (owner decision: remove, revisit later).
 
-**Files:** `frontend/src/components/screens/DashboardScreen.tsx`, `plans/BACKLOG.md`
+**Reuse/Extend:**
+- Remove the Clean Streak section markup and the `StreakRow` sub-component from `DashboardScreen.tsx` (lines ~118–130, ~246–252).
+- Remove `cleanStreak` from the destructured engine fields in `DashboardScreen.tsx` only.
+- **Do not** remove `cleanStreak` from `useMilestoneEngine.ts` (line 220 / 782) or the backend — the field stays; it is simply not rendered.
 
 **Acceptance criteria:**
-- Dashboard renders without the Clean Streak card
-- `cleanStreak` field is still returned by the engine (no backend change needed) — it's just not rendered
-- Backlog entry is written
+- Dashboard renders with no Clean Streak card.
+- `cleanStreak` is still returned by the engine (unused import/field warnings resolved cleanly).
+- A backlog entry exists for a future, properly-designed streak feature.
+
+**Edge cases:**
+- Any existing Dashboard test asserting on the streak section must be updated/removed in the same ticket (search `DashboardScreen*.test.tsx` for "streak" / "clean").
+- Ensure no other screen imports `StreakRow` before deleting it.
 
 ---
 
-### UX-A5: Delete → bin icon pattern everywhere
+### UX-A5: Shared `DeleteButton` (bin icon) for row triggers
 
-**Problem:** Text buttons saying "Delete" are inconsistent and take up too much space. Owner wants a faded red bin icon at the right of every list row that has a delete action.
+**Type:** Frontend (new shared UI primitive — justified: recurring across ≥3 screens)
 
-**Shared component:** Add a `DeleteButton` (or `TrashIconButton`) in `frontend/src/components/ui/`:
+**Problem:** Row-level delete actions use inconsistent text "Delete" buttons that take space and read heavily.
 
-```tsx
-// frontend/src/components/ui/DeleteButton.tsx
-export const DeleteButton: React.FC<{ onClick: () => void; label?: string }> = ({
-  onClick, label = 'Delete',
-}) => (
-  <button
-    type="button"
-    onClick={onClick}
-    aria-label={label}
-    className="flex h-8 w-8 items-center justify-center rounded text-danger-fg/50 hover:text-danger-fg hover:bg-danger/10 transition-colors duration-snap"
-  >
-    {/* trash SVG — 16×16 */}
-    <svg width={16} height={16} viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path d="M2 4h12M5 4V2h6v2M6 7v5M10 7v5M3 4l1 9h8l1-9" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  </button>
-);
-```
-
-**Apply to:**
-- `LogHistoryScreen.tsx` — `LogRow` delete button (currently text "Delete" at line ~76)
-- `GoalsScreen.tsx` — goal row delete action (if present)
-- `ActivityManagerScreen.tsx` — exercise/activity row delete
-- `EditBlockRulesScreen.tsx` — rule row delete
-- Any other list row with a text "Delete" action (audit all)
-
-**Files:** New `frontend/src/components/ui/DeleteButton.tsx`, all screen files listed above
+**Reuse/Extend:**
+- **New** `frontend/src/components/ui/DeleteButton.tsx` — a faded-red icon button (`text-danger-fg/50`, full colour on hover), `aria-label` required. This is a shared primitive per `docs/patterns.md` "Shared UI primitive vs feature component" (recurs across screens).
+- Replace the **row-trigger** text "Delete" at:
+  - `LogHistoryScreen.tsx:78` (log row)
+  - `SettingsScreen.tsx:1299` (activity class row — keep its existing `aria-label`)
+  - `EditBlockRulesScreen.tsx:205` (rule row — note: also restyled in UX-B6)
+  - `GoalsScreen.tsx` row-level delete **trigger** (the control that sets `confirmingDelete`, not the confirm button)
 
 **Acceptance criteria:**
-- No screen has a text-only "Delete" button in a list row
-- All delete actions show the bin icon (faded red, full-colour on hover)
-- All actions still trigger confirmation where they currently do
+- A single `DeleteButton` primitive exists and is used by every row-level delete trigger listed above.
+- Each instance has a descriptive `aria-label` (e.g. "Delete activity log", "Delete Gentle walk").
+- Existing confirmation flows (window.confirm, inline confirm, modal) still fire unchanged.
+- The icon is right-aligned in its row.
+
+**Edge cases:**
+- **Do not** convert confirmation-dialog buttons to icons: `SettingsScreen.tsx:773` ("Delete class"), `:807` ("Delete anyway"), and `GoalsScreen.tsx:444` (the inline "Delete" **confirm** button) stay as text. Only the row trigger becomes an icon.
+- `GoalsScreen` uses an inline confirm pattern — verify which control is the trigger vs the confirm before swapping.
+- Icon button must remain ≥44px touch target (pad the hit area even if the glyph is 16px).
 
 ---
 
-### UX-A6: Log Activity — skip volume field when unit is "minutes"
+### UX-A6: Log Activity — hide volume field when unit is minutes
 
-**Problem:** Activities with `defaultVolumeUnit = 'min'` (or `'minutes'`) show both a Duration field (minutes) and a Volume field (also minutes), which is redundant and confusing.
+**Type:** Frontend
 
-**Fix:** In `LogActivityScreen.tsx:322`, add a guard:
+**Problem:** Activities whose `defaultVolumeUnit` is minutes show a Volume field that duplicates Duration.
 
-```tsx
-// Before:
-{selAct?.defaultVolumeUnit && (
-  <div>
-    <p>Volume</p>
-    <NumberField value={volume} onChange={setVolume} unit={selAct.defaultVolumeUnit} />
-  </div>
-)}
-
-// After:
-{selAct?.defaultVolumeUnit && selAct.defaultVolumeUnit !== 'min' && selAct.defaultVolumeUnit !== 'minutes' && (
-  <div>
-    <p>Volume</p>
-    <NumberField value={volume} onChange={setVolume} unit={selAct.defaultVolumeUnit} />
-  </div>
-)}
-```
-
-Also ensure `volumeValue` is not included in the log draft when the guard suppresses the field (set to 0 / undefined).
-
-**File:** `frontend/src/components/screens/LogActivityScreen.tsx:322`
+**Reuse/Extend:**
+- Guard the existing volume block in `LogActivityScreen.tsx:322`. Confirm the exact stored unit token for minutes against `VOLUME_CAP_UNITS` / activity seed data (`'min'` vs `'minutes'`) before hardcoding the comparison.
 
 **Acceptance criteria:**
-- Activities with minute-based volume units show no Volume input in the log form
-- Submitted log for such activities has `volumeValue = 0` or is omitted
-- Activities with other units (km, sessions, hours) are unaffected
+- Activities with a minute-based volume unit show no Volume input in create and edit modes.
+- A log submitted for such an activity has `volumeValue` of 0 / omitted (not a stale copy of duration).
+- Activities with non-minute units (km, sessions, hours, reps) are unaffected.
+- Live rule-violation checking still works for the affected activities (duration-based rules still evaluate).
+
+**Edge cases:**
+- **Edit mode:** opening an existing minute-unit log that already has a non-zero `volumeValue` must not resurface the field; ensure the persisted value is normalised to 0 / omitted on save, or left untouched if that risks a rule recompute — decide and state which in the ticket commit.
+- The `checkViolations` call passes `volume`; ensure hiding the field doesn't pass `undefined` where a number is expected.
 
 ---
 
-### UX-A7: Improved empty state cards
+### UX-A7: Actionable empty-state cards
 
-**Problem:** "No weekly targets configured." is a dead-end message. Users don't know what to do.
+**Type:** Frontend (may add navigation callback props)
 
-**Fix:** Replace empty-state strings with actionable cards that include context + a CTA link to the relevant screen.
+**Problem:** Empty states are dead-ends ("No weekly targets configured.").
 
-**Locations:**
-1. `DashboardScreen.tsx:189` — weekly targets empty → card: "No weekly targets set yet. Head to Goals to create your first target." + "→ Go to Goals" button (calls `onOpenLogActivity` or a new `onViewGoals` prop)
-2. `LogHistoryScreen.tsx` — the existing empty state is already reasonable (illustration + text), but add a CTA: "→ Log your first session" button calling `onOpenLogActivity`
-3. `DashboardScreen.tsx` Activity Status — if `classStatuses.length === 0`, show: "No activity classes configured. Go to Settings to set up your training blocks."
-
-**Files:** `frontend/src/components/screens/DashboardScreen.tsx`, `frontend/src/components/screens/LogHistoryScreen.tsx`
-
-**Props note:** `DashboardScreen` may need a new `onViewGoals?: () => void` and `onViewSettings?: () => void` callback prop passed from `App.tsx`. Check existing callbacks before adding.
+**Reuse/Extend:**
+- Reuse `Card` with `intent="info"`.
+- Dashboard may need new optional callback props (`onViewGoals?`, `onViewSettings?`) threaded from `App.tsx`. Check existing nav callbacks first; reuse `onOpenLogActivity`-style wiring rather than inventing a router concept.
+- Log History empty state already has illustration + copy — only add a CTA button.
 
 **Acceptance criteria:**
-- Empty weekly targets section shows an actionable card with a navigation CTA
-- Empty log history has a visible "Log your first session" button
-- All CTAs navigate to the correct screen
+- Empty weekly-targets section (`DashboardScreen.tsx:189`) shows an info card with a CTA that navigates to Goals.
+- Log History empty state gains a "Log your first session" button calling `onOpenLogActivity`.
+- If `classStatuses` is empty, Activity Status shows a card pointing the user to Settings.
+- Every CTA navigates to the correct screen.
+
+**Edge cases:**
+- If a nav callback is not provided (prop optional), the CTA must hide gracefully rather than render a dead button.
+- Copy must be product-voiced per `docs/patterns.md` "UI copy" — no mention of "configured", "blocks" jargon where avoidable.
 
 ---
 
-### UX-A8: Post-incident screen cleanup
+### UX-A8: Post-incident confirmation cleanup
 
-**Problem:** After submitting an incident, the confirmation screen shows:
-- `<DelayedTaxAttributionSection>` — a long wall of contributing activity data
-- A Done button styled as `bg-danger` (red) — the wrong semantic for "confirm / dismiss"
-- The button is cramped
+**Type:** Frontend
 
-**Fix:** In `LogIncidentScreen.tsx:80–99` (submitted state):
-1. Remove `<DelayedTaxAttributionSection>` from the confirmation state entirely
-2. Change Done button class from `bg-danger` to `bg-ink` (neutral confirm style)
-3. Keep the button at full width and `h-12`
-4. Keep the confirmation copy: "Incident recorded." + "Rest up. The heatmap and dashboard reflect today's status."
+**Problem:** The submitted-incident screen (`LogIncidentScreen.tsx:80–99`) shows the long `DelayedTaxAttributionSection` list and a cramped red Done button.
 
-The `DelayedTaxAttributionSection` import can remain (still used elsewhere if applicable) but is not rendered post-submit.
-
-**File:** `frontend/src/components/screens/LogIncidentScreen.tsx:80–99`
+**Reuse/Extend:**
+- Edit the `submitted` branch only. Keep the headline ("Incident recorded.") and body copy.
+- Remove `<DelayedTaxAttributionSection>` from this branch (leave the import if still used pre-submit; remove if now unused to satisfy lint).
 
 **Acceptance criteria:**
-- Post-incident screen shows icon + headline + body text + neutral Done button only
-- No contributing-activities list visible
-- Done button is full width, `h-12`, neutral background (not red)
+- Post-submit screen shows: icon, "Incident recorded." headline, one line of body copy, and a Done button — nothing else.
+- The contributing-activities list is not rendered post-submit.
+- Done button is full width, `h-12`, neutral background (`bg-ink`/white style), not `bg-danger`.
+
+**Edge cases:**
+- `DelayedTaxAttributionSection` import becomes unused → remove it to keep `tsc`/eslint clean, but confirm it isn't referenced elsewhere in the file first.
+- Done still calls `onComplete` and returns the user to the prior screen.
 
 ---
 
 ### UX-A9: Block safety map — legend and summary
 
-**Problem:** `BlockSafetyMapSection` renders a calendar heatmap with no legend, no title context, no summary count.
+**Type:** Frontend
 
-**Fix:** Add to `BlockSafetyMapSection.tsx`:
-1. A short summary label above the map: `"N / 14 days without issues"`
-2. A legend below the map: green / yellow / red dots + labels ("All clear", "Warning", "Rule violated")
-3. Improve the section heading from the generic label to "Block Progress"
+**Problem:** `BlockSafetyMapSection` shows a heatmap with no title context, legend, or summary.
 
-**File:** `frontend/src/components/composites/BlockSafetyMapSection.tsx`
+**Reuse/Extend:**
+- Edit `BlockSafetyMapSection.tsx`. Reuse the existing safe/caution/danger colour tokens already used by the heatmap cells for the legend swatches (single source of truth).
 
 **Acceptance criteria:**
-- Summary count renders above the heatmap
-- Legend with 3 colour swatches renders below
-- "Block Progress" section label used
+- A summary line (e.g. "N / 14 days without issues") renders above the heatmap, derived from the existing day-state data — not a hardcoded number.
+- A 3-item legend (safe / caution / danger with labels) renders below the heatmap.
+- Section heading reads "Block Progress" (or agreed product copy).
+
+**Edge cases:**
+- Block shorter/longer than 14 days, or partially elapsed → summary denominator must reflect the actual number of days in the period, not a fixed 14.
+- No active block → keep whatever empty/placeholder behaviour exists today; don't show a "0 / 0" summary.
 
 ---
 
 ## Group B — Structural Changes
 
-Each is a larger change. Work one area at a time; commit each before starting the next.
+Larger changes. Work one area at a time; commit each before the next. Still frontend-only except UX-B3 (the only ticket with backend/DB work, gated on owner sign-off).
 
 ---
 
 ### UX-B1: Incidents in Log History
 
-**Problem:** Flare-up incidents are never visible after being logged. Users lose track of them.
+**Type:** Frontend
 
-**Fix:** Merge `engine.incidents` (FlareUpIncident[]) with `engine.logs` (ActivityLog[]) into a single chronological timeline in `LogHistoryScreen`.
+**Problem:** Flare-up incidents are never visible after logging.
 
-**Implementation:**
-
-1. Create a discriminated union type for timeline items:
-```ts
-type TimelineItem =
-  | { kind: 'log'; log: ActivityLog }
-  | { kind: 'incident'; incident: FlareUpIncident };
-```
-
-2. Extend `groupLogs` to `groupTimeline(logs, incidents)` — returns the same month→day structure but with `TimelineItem[]` per day instead of `ActivityLog[]`.
-
-3. Add an `IncidentRow` component:
-```tsx
-const IncidentRow: React.FC<{ incident: FlareUpIncident }> = ({ incident }) => (
-  <div className="flex items-start gap-3 py-3 px-4 bg-caution/5">
-    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-caution/20 text-caution-fg">
-      {/* warning svg */}
-    </span>
-    <div>
-      <p className="text-body font-semibold text-caution-fg">
-        Incident — {incident.bodyPart}
-      </p>
-      <p className="text-caption text-ink-muted">
-        Severity {incident.severity}/10
-        {incident.notes ? ` · ${incident.notes}` : ''}
-      </p>
-    </div>
-  </div>
-);
-```
-
-4. Render `IncidentRow` or `LogRow` based on `item.kind` inside the day loop.
-
-5. `LogHistoryScreen` destructures `incidents` from `engine` — check the type in `MilestoneEngineResult`.
-
-**Files:** `frontend/src/components/screens/LogHistoryScreen.tsx`
+**Reuse/Extend:**
+- `engine.incidents` (`FlareUpIncident[]`) is already exposed (`useMilestoneEngine.ts:208`). `FlareUpIncident` has `incidentDate`, `bodyPart`, `severity`, `notes`.
+- Extend the existing `groupLogs` in `LogHistoryScreen.tsx` into a timeline grouping that merges logs and incidents by date. Introduce a local discriminated union (`{ kind: 'log' } | { kind: 'incident' }`) — page-local type, not a shared abstraction.
+- Add a page-local `IncidentRow` alongside the existing `LogRow`.
 
 **Acceptance criteria:**
-- Incidents appear inline in the log history timeline on the correct date
-- Incidents have a visually distinct treatment (caution/orange tint, warning icon)
-- Existing log rows are unaffected
-- Incident rows do not have edit/delete actions (read-only for now)
+- Incidents appear inline in the Log History timeline on their `incidentDate`, interleaved correctly with logs of the same day.
+- Incident rows are visually distinct (caution/orange tint + warning icon) from activity logs.
+- Incident rows show body part and severity; notes if present.
+- Existing log rows, month grouping, and counts are unchanged.
+- Incident rows have no edit/delete actions (read-only for now).
+
+**Edge cases:**
+- A day with only incidents (no logs) still renders that day group.
+- The header "N sessions logged" counts logs only — do not inflate it with incidents (or relabel clearly if combining).
+- Sort stability when a log and incident share a date — define order (e.g. incidents first or by created timestamp) and keep it deterministic.
+- Empty logs but present incidents → the empty-state must not show; the timeline renders the incidents.
 
 ---
 
 ### UX-B2: Log History — day and week visual breaks
 
-**Problem:** All logs within a month are inside one flat card with `divide-y`. Days blur together; weeks are indistinguishable.
+**Type:** Frontend
 
-**Fix:**
+**Problem:** Logs within a month read as one flat list; days and weeks are not visually separated.
 
-**Day break:** Each day group gets its own Card (or a visually separated block) with a small gap between days — instead of a flat divider line. Use `mb-2` spacing between day blocks within the month card.
-
-**Week break:** Add a week separator (thin rule + "Week of Jun 9" label) between day groups that cross a Monday boundary.
-
-```tsx
-// In groupTimeline / render loop: detect week boundary crossings
-function isSameWeek(dayA: string, dayB: string): boolean {
-  // Both are ISO dates — compare ISO week (Monday-based)
-  const getMonday = (d: Date) => {
-    const day = d.getDay(); // 0=Sun
-    const diff = d.getDate() - ((day + 6) % 7);
-    return new Date(d.setDate(diff));
-  };
-  return getMonday(new Date(dayA + 'T00:00:00Z')).getTime()
-    === getMonday(new Date(dayB + 'T00:00:00Z')).getTime();
-}
-```
-
-Between day keys that cross a week boundary, render a `<WeekSeparator>` component (subtle `<hr>` + week label).
-
-The month card stays (one card per month), but internally day groups have `pt-2.5 pb-3 rounded-lg mx-1 my-1` to feel visually distinct.
-
-**File:** `frontend/src/components/screens/LogHistoryScreen.tsx`
+**Reuse/Extend:**
+- Build on the same render path as UX-B1 (do UX-B1 first). Reuse existing month grouping; add per-day visual grouping and a week separator.
+- Week boundary = Monday-based (consistent with the app's existing Monday–Sunday weekly periods).
 
 **Acceptance criteria:**
-- Each day's logs are visually grouped (subtle card-within-card or padded block)
-- A "Week of [date]" separator appears between days that span different calendar weeks
-- Month header labels unchanged
-- Log rows unchanged
+- Each day's items are visually grouped as a distinct padded/rounded block, not separated only by a hairline divider.
+- A "Week of [date]" separator appears between day groups that fall in different calendar weeks.
+- Month headers are unchanged.
+- The change is subtle (owner: "doesn't need to be a lot").
+
+**Edge cases:**
+- Single-day or single-week month → no spurious week separators.
+- A week spanning a month boundary → month grouping wins at the top level; week separators operate within the existing month sections (accept that a week split across months reads as two segments).
+- Verify the Monday calculation handles Sunday correctly (JS `getDay()` returns 0 for Sunday).
 
 ---
 
-### UX-B3: "All Classes" rule — fix stale FK orphan + add DB guard
+### UX-B3: "All Classes" rule — stale FK orphan fix
 
-**Root cause (confirmed 2026-06-12):**
+**Type:** Full-stack (frontend + backend + production data) — **OWNER SIGN-OFF REQUIRED** (Parts 1 & 3)
 
-`SettingsScreen.tsx:135` has this fallback chain:
-```tsx
-{activity ? activity.name : cls ? cls.name : 'All classes'}
-```
+**Root cause (confirmed 2026-06-12):** `SettingsScreen.tsx:135` renders `activity ? activity.name : cls ? cls.name : 'All classes'`. `cls` comes from `classMap.get(rule.activityClassId)`. When a rule references an `activity_class_id` whose class was deleted, the lookup returns `undefined` and the label falls back to "All classes". This is a stale foreign key — an orphan rule row in production Supabase. It does not reproduce locally because the deletion only happened in the live DB. Screenshot confirms a `rest_between_class` ("Minimum days between sessions · 2") orphan that also appears legitimately for "Gentle walk".
 
-`cls` is resolved via `classMap.get(rule.activityClassId)`. When `activityClassId` references a class that has been **deleted** from the DB, `classMap.get(...)` returns `undefined` and the label falls back to `'All classes'`.
-
-This is a **stale foreign key bug**: one or more rules in the production Supabase DB reference an `activity_class_id` that no longer exists in `activity_classes`. It only manifests in production (not locally) because that class was deleted from the live Supabase instance.
-
-Screenshot evidence: production Settings screen shows `"All classes · Minimum days between sessions · 2"` — a `rest_between_class` rule with a deleted class ID. The rule `"Minimum days between sessions · 2"` also appears separately for "Gentle walk", confirming it's a duplicate orphan record, not an intentional cross-class rule.
-
-**Fix — three parts:**
-
-**Part 1 — Production data cleanup (do first):**
-Run against Supabase production:
-```sql
--- Find orphan rules (rules whose class no longer exists)
-SELECT r.id, r.rule_type, r.threshold, r.activity_class_id
-FROM rules r
-LEFT JOIN activity_classes ac ON r.activity_class_id = ac.id
-WHERE r.activity_class_id IS NOT NULL AND ac.id IS NULL;
-
--- Delete them (confirm the rows look correct first)
-DELETE FROM rules
-WHERE id IN (
-  SELECT r.id FROM rules r
-  LEFT JOIN activity_classes ac ON r.activity_class_id = ac.id
-  WHERE r.activity_class_id IS NOT NULL AND ac.id IS NULL
-);
-```
-
-**Part 2 — Frontend defensive label (don't silently mislead):**
-Change the fallback in `SettingsScreen.tsx:135` so orphan rules are either skipped or labelled clearly:
-```tsx
-// Option A (recommended): filter them out of visibleRecoveryRules before rendering
-const visibleRecoveryRules = rawRecoveryRules.filter(({ rule }) => {
-  if (rule.activityId) return activityMap.has(rule.activityId);
-  if (rule.activityClassId) return classMap.has(rule.activityClassId);
-  return false; // no class and no activity — orphan, skip
-});
-
-// Remove the 'All classes' fallback; if both lookups fail, the row is gone
-```
-
-**Part 3 — Backend: add FK constraint via Alembic migration:**
-Add `ON DELETE CASCADE` (or `RESTRICT`) on `rules.activity_class_id → activity_classes.id` so future class deletions either cascade-delete their rules or block the delete with a clear error.
-
-Check `backend/app/models.py` or equivalent SQLModel model for the `Rule` table. If the FK is defined without cascade, add a new Alembic migration.
-
-Note: `RESTRICT` is safer (forces the caller to explicitly handle rules before deleting a class). `CASCADE` is simpler. Align with whatever the class-delete flow in `ActivityManagerScreen` + backend does today.
-
-**Files:**
-- Production Supabase DB (manual SQL)
-- `frontend/src/components/screens/SettingsScreen.tsx:127–136`
-- `backend/app/models.py` (or equivalent) + new Alembic migration
+**Reuse/Extend:**
+- Frontend: tighten the `visibleRecoveryRules` filter (`SettingsScreen.tsx:91`) to drop rules whose class/activity cannot be resolved; remove the "All classes" fallback string.
+- Backend: inspect the `Rule` model FK definition; add cascade/restrict via Alembic.
 
 **Acceptance criteria:**
-- "All classes" label does not appear in production Settings
-- Orphan rule rows deleted from Supabase
-- Frontend filters out rules with unresolvable class/activity IDs (no fallback label rendered)
-- Backend FK constraint prevents future orphan rules on class delete
-- `make test` passes with new Alembic migration applied
+
+*Part 1 — production cleanup (owner-run):*
+- Orphan rule rows (non-null `activity_class_id` with no matching `activity_classes` row) are identified and deleted from production.
+
+*Part 2 — frontend guard (no sign-off needed):*
+- Rules with an unresolvable class **and** unresolvable activity are filtered out before render; the "All classes" fallback label is removed.
+- No legitimately-scoped rule disappears.
+
+*Part 3 — backend constraint (owner sign-off):*
+- A new Alembic migration adds `ON DELETE` behaviour (CASCADE or RESTRICT — owner to choose) to `rules.activity_class_id → activity_classes.id`.
+- Deleting a class either cascade-removes its rules or is blocked with a clear 409, consistent with the current class-delete flow.
+- `docs/database-schema.md` updated for the constraint change.
+
+**Edge cases:**
+- A rule with a valid class but a stale **activity** FK (exercise deleted) — same orphan logic must apply.
+- Choosing CASCADE vs RESTRICT must align with the existing `SettingsScreen` "Delete activities too?" flow so behaviour doesn't contradict the UI.
+- The frontend filter must ship even if the backend migration is deferred, so production stops showing "All classes" immediately.
+
+**Note:** Parts 2 (frontend) can land independently and first. Parts 1 and 3 are gated on owner sign-off.
 
 ---
 
-### UX-B4: Activity status — expandable rule detail panel
+### UX-B4: Activity status — expandable rule detail
 
-**Problem:** `classStatuses[].reason` gives terse text. Users don't know which rule was violated or when they'll be clear.
+**Type:** Frontend (no backend — corrected during review)
 
-**Fix:** Make each Activity Status row tappable to expand a detail panel.
+**Problem:** `classStatuses[].reason` is terse; users want to know why a class is blocked and when it clears.
 
-**Frontend:**
-```tsx
-// DashboardScreen.tsx — Activity status section
-const [expandedClassId, setExpandedClassId] = React.useState<string | null>(null);
-
-// In the classStatuses.map:
-<li key={cs.activityClassId}>
-  <button
-    type="button"
-    className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
-    onClick={() => setExpandedClassId(id => id === cs.activityClassId ? null : cs.activityClassId)}
-  >
-    <StatusDot state={cs.state} label={...} meta={cs.reason} />
-    <span className="text-caption text-ink-faint shrink-0">
-      {cs.nextSafeDate && `Safe ${formatShort(cs.nextSafeDate)}`}
-    </span>
-  </button>
-  {expandedClassId === cs.activityClassId && (
-    <div className="bg-bg-sunken px-4 pb-3 text-caption text-ink-muted">
-      {cs.estimatedRestDays != null && (
-        <p className="mb-1">Rest {cs.estimatedRestDays} more day(s) to clear.</p>
-      )}
-      {cs.violatedRuleLabel && (
-        <p>Rule: {cs.violatedRuleLabel}</p>
-      )}
-    </div>
-  )}
-</li>
-```
-
-**Backend/engine changes:**
-- Inspect `ClassStatus` shape in the backend engine service (Python) or frontend engine hook
-- Add optional fields: `violatedRuleLabel?: string`, `estimatedRestDays?: number`
-- `violatedRuleLabel`: the human-readable name of the violated rule (from `ruleTaxonomy` labels)
-- `estimatedRestDays`: days until `nextSafeDate` from today (can be computed in frontend if `nextSafeDate` is already present)
-
-If `nextSafeDate` is already in the response, `estimatedRestDays` can be derived in the frontend: `differenceInDays(nextSafeDate, todayDate)`.
-
-**Files:** `frontend/src/components/screens/DashboardScreen.tsx`, `frontend/src/hooks/useMilestoneEngine.ts` (type), backend engine service if `violatedRuleLabel` must come from server
+**Reuse/Extend:**
+- `ActivityClassStatus` already provides `reason`, `label` ("Resting"/"Pushing it"), `lastDoneDate`, `nextSafeDate`. The `reason` text **already** contains "X more rest day(s) needed. Safe from <date>." Derive any "rest days remaining" value in the frontend from `nextSafeDate − todayDate`. **Do not** add `violatedRuleLabel` or `estimatedRestDays` to the engine/API — the existing data is sufficient.
+- Local `useState<string | null>` for the expanded row id — page-local state per `docs/architecture.md`.
 
 **Acceptance criteria:**
-- Tapping an activity status row expands a detail panel
-- Panel shows rest-days estimate when available
-- Panel shows the rule label (plain-English) when a violation exists
-- Tapping again collapses the panel
-- Non-tapped rows are unaffected
+- Tapping an Activity Status row expands an inline detail panel; tapping again collapses it.
+- The panel surfaces the existing `reason` and, where `nextSafeDate` exists, a derived days-until-safe value.
+- Only one row expanded at a time (or document if multi-expand is chosen).
+- Non-expanded rows and the existing `StatusDot` + `nextSafeDate` summary are unchanged.
+
+**Edge cases:**
+- `nextSafeDate` absent (safe class) → panel shows the reason only, no rest-day math.
+- `nextSafeDate` in the past relative to `todayDate` → clamp days-remaining at 0, don't show negatives.
+- Keyboard/ARIA: the row becomes a button with `aria-expanded`; preserve existing `StatusDot` semantics.
 
 ---
 
-### UX-B5: Rules screen — preview grouping
+### UX-B5: Rules preview — group by class and exercise
 
-**Problem:** Rules preview (wherever it appears in Settings/Rules) shows a flat wall of rules in creation order — not grouped by class, and exercises within a class are not adjacent.
+**Type:** Frontend
 
-**Fix:** In the rules list rendering (likely `SettingsScreen.tsx` or `EditBlockRulesScreen.tsx` preview area), group rules:
-1. First by `activityClassId` (class-level rules first within each class group)
-2. Within each class, class-level rules first, then exercise-level rules grouped by `activityId`
+**Problem:** The rules preview list renders in rule-creation order, not grouped by class/exercise — a wall of text.
 
-The grouping function:
-```ts
-type RuleGroup = {
-  cls: ActivityClass;
-  classRules: Rule[];
-  exerciseGroups: { activity: Activity; rules: Rule[] }[];
-};
-
-function groupRulesForPreview(rules: Rule[], classes: ActivityClass[], activities: Activity[]): RuleGroup[] { ... }
-```
-
-Render each class group with its name as a section header.
-
-**Files:** Wherever the rules preview list is rendered — identify the exact file first (likely `SettingsScreen.tsx` or a sub-component)
+**Reuse/Extend:**
+- The preview list lives in `SettingsScreen.tsx` (`visibleRecoveryRules`, lines 122–143). Group there. Reuse `classMap` / `activityMap` already built in the component.
+- Grouping: by class; within a class, class-level rules first then exercise-level rules grouped by exercise. Preserve original order within each group.
+- Do this **after** UX-B3's filter so orphan rules are already excluded.
 
 **Acceptance criteria:**
-- Rules for the same class appear together under that class's name as a sub-header
-- Exercise-level rules appear under their class, grouped by exercise
-- No rules are reordered within the same class/exercise group (original order preserved within group)
+- Rules for the same class appear together under that class name as a sub-header.
+- Exercise-level rules appear under their class, grouped by exercise.
+- Original relative order is preserved within each group.
+- The "several rules for the same property" wall is visibly reduced (grouped headers instead of repeated class names per line).
+
+**Edge cases:**
+- A class with rules but no exercise-level rules → renders cleanly with just class rules.
+- An exercise-level rule whose class also has class-level rules → exercise rules nest under the same class header, not a duplicate header.
+- Stable, deterministic class ordering (e.g. by class creation/order field, not Map iteration chance).
 
 ---
 
-### UX-B6: Edit Rules — compact row layout
+### UX-B6: Edit Rules — compact one-line rows
 
-**Problem:** Each rule row in `EditBlockRulesScreen.tsx` takes up too much vertical space with an always-visible description, a full-line number input, and text "Delete" button.
+**Type:** Frontend (touches an 850-line file — keep the change scoped to the rule-row sub-component; see `large-component-refactor` skill if extraction is needed)
 
-**New layout (per owner spec):**
-```
-[toggle]  Rule name  [-] [value] [unit] [+]  [🗑]
-```
+**Problem:** Each rule row in `EditBlockRulesScreen.tsx` is tall: always-on description text, a full-width control line, and a text "Delete".
 
-**Changes:**
-1. **Toggle left** — move the enable/disable toggle to the start of the row
-2. **'i' tooltip** — replace the always-visible helper/description text with a small info icon (`ⓘ`) that shows a tooltip on hover/tap using `title` attribute or a lightweight popover
-3. **Inline controls** — `[−] [number-input] [unit-selector] [+]` all on one line, right-aligned within the row
-4. **Delete → bin icon** — use `<DeleteButton>` from UX-A5 at the far right
-
-**Structure per rule row:**
-```tsx
-<div className="flex items-center gap-2 py-2.5">
-  {/* Toggle */}
-  <Toggle checked={rule.isActive} onChange={...} />
-  {/* Label + info */}
-  <span className="flex-1 text-body text-ink truncate">{ruleLabel}</span>
-  <button type="button" title={ruleHelper} className="text-ink-faint hover:text-ink">ⓘ</button>
-  {/* Inline value controls */}
-  <button type="button" onClick={decrement}>−</button>
-  <input type="number" className="w-14 text-center ..." value={rule.threshold} onChange={...} />
-  <span className="text-caption text-ink-muted w-8">{ruleUnit}</span>
-  <button type="button" onClick={increment}>+</button>
-  {/* Delete */}
-  <DeleteButton onClick={() => onDeleteRule(rule.id)} />
-</div>
-```
-
-**File:** `frontend/src/components/screens/EditBlockRulesScreen.tsx`
+**Reuse/Extend:**
+- The on/off **switch already exists** as inline `role="switch"` markup (`EditBlockRulesScreen.tsx:207–225`) — **relocate** it to the row's left; do not build a new Toggle.
+- The `[−] [input] [unit] [+]` controls already exist on one line (lines 229–289) — keep, compress onto the same row as the label.
+- Replace the text "Delete" (line 205) with the UX-A5 `DeleteButton` (do UX-A5 first).
+- Replace the always-visible helper text (from `getRuleHelper`) with an "ⓘ" info affordance (tooltip via `title` or a lightweight popover). Reuse `getRuleHelper` for the tooltip content.
 
 **Acceptance criteria:**
-- Every rule row fits on one visual line (no wrapping description text below each rule)
-- Toggle is at the left
-- `ⓘ` icon shows the helper text on hover/tap
-- Number + unit + increment/decrement are on the same line
-- Delete is a bin icon at far right
-- No `<DeleteButton>` regressions (existing logic preserved)
+- Each rule row reads as a single line: switch (left) · rule label · ⓘ · value controls · bin icon (right).
+- The per-rule description no longer occupies its own permanent line; it is reachable via the ⓘ affordance.
+- Toggle, threshold edit, unit selection, increment/decrement, and delete all retain current behaviour (`onToggleEnabled`, `onCommitThreshold`, `onLimitUnitChange`, etc.).
+- Disabled rules still visually read as off.
+
+**Edge cases:**
+- Volume-cap rules show a unit `<select>`; non-volume rules show a static unit span — both must fit the compact row without wrapping on a 375px screen.
+- Long rule/exercise labels must truncate, not push controls off-screen.
+- ⓘ tooltip must be reachable on touch (tap), not hover-only.
+- Keep `aria-label`s on switch and delete.
 
 ---
 
-### UX-B7: Log Activity — collapse exercise picker after selection
+### UX-B7: Log Activity — collapse picker after selection
 
-**Problem:** After selecting an exercise, the full picker (all classes + all exercises) remains expanded, forcing the user to scroll past it to reach duration/RPE fields.
+**Type:** Frontend
 
-**Fix:** Add collapsed state to the activity picker section.
+**Problem:** After selecting an exercise, the full class/exercise picker stays expanded, pushing session details below the fold.
 
-```tsx
-// LogActivityScreen.tsx
-const [pickerCollapsed, setPickerCollapsed] = React.useState(false);
-
-// When an activity is selected:
-onClick={() => {
-  setSelectedId(act.id);
-  setPickerCollapsed(true); // collapse on select
-}}
-
-// In the picker Card:
-{pickerCollapsed && selectedId ? (
-  <button
-    type="button"
-    onClick={() => setPickerCollapsed(false)}
-    className="flex items-center justify-between gap-3 w-full text-left py-1"
-  >
-    <div>
-      <p className="text-caption text-ink-muted uppercase">{selectedClass.name}</p>
-      <p className="text-body font-medium text-ink">{selectedActivity.name}</p>
-    </div>
-    <span className="text-caption text-info">Change ↓</span>
-  </button>
-) : (
-  /* full grouped picker */
-)}
-```
-
-When `initialActivityId` is pre-set (from suggestion tap), set `pickerCollapsed = true` initially if `initialActivityId` is valid.
-
-In edit mode (`logId` set), also start collapsed since the exercise is already selected.
-
-**File:** `frontend/src/components/screens/LogActivityScreen.tsx`
+**Reuse/Extend:**
+- Add local `useState` for collapsed state in `LogActivityScreen.tsx`. Reuse the existing grouped picker for the expanded view and the existing selected activity/class lookup for the collapsed summary.
 
 **Acceptance criteria:**
-- Selecting an exercise collapses the picker to a one-line summary (class name + exercise name)
-- A "Change ↓" tap target re-expands the full picker
-- Session details (Date, Duration, RPE etc.) are immediately visible without scrolling once an exercise is selected
-- Pre-selected activities (from suggestions or edit mode) start collapsed
+- Selecting an exercise collapses the picker to a one-line summary (class name + exercise name) with a "Change" affordance.
+- Activating "Change" re-expands the full picker.
+- Once an exercise is selected, session details (Date, Duration, RPE, feel) are visible without scrolling past the full picker.
+- Pre-selected activity (from a suggestion tap, `initialActivityId`) and edit mode (`logId`) start collapsed.
+
+**Edge cases:**
+- Invalid/inactive `initialActivityId` → start expanded (nothing validly selected to collapse to).
+- Changing the exercise after entering details → keep entered duration/RPE/feel; only the activity changes (don't reset the form unless the unit change requires it).
+- No active activities at all → existing empty-state path is unaffected.
 
 ---
 
-### UX-B8: Load risk — actionable guidance for caution/danger states
+### UX-B8: Load risk — actionable guidance strip
 
-**Problem:** `LoadRiskSection` shows the load state but gives no guidance on what to do.
+**Type:** Frontend
 
-**Fix:** Add a contextual guidance strip below the rule-limit rows for caution/danger overall state.
+**Problem:** `LoadRiskSection` shows state but no guidance on what to do.
 
-```tsx
-// LoadRiskSection.tsx
-const overallState = ruleLimitRows.some(r => r.state === 'danger') ? 'danger'
-  : ruleLimitRows.some(r => r.state === 'caution') ? 'caution'
-  : 'safe';
-
-{overallState === 'caution' && (
-  <div className="mt-3 rounded-lg bg-caution/10 border border-caution/20 px-3 py-2.5 text-caption text-caution-fg">
-    Approaching your weekly limit. Consider lighter sessions or a rest day.
-  </div>
-)}
-{overallState === 'danger' && (
-  <div className="mt-3 rounded-lg bg-danger/10 border border-danger/20 px-3 py-2.5 text-caption text-danger-fg">
-    Weekly cap reached. Rest is recommended before your next high-load session.
-  </div>
-)}
-```
-
-Keep it read-only for now. No new screens or navigation required.
-
-**File:** `frontend/src/components/composites/LoadRiskSection.tsx`
+**Reuse/Extend:**
+- Derive overall state from existing `ruleLimitRows` / `weekDays` in `LoadRiskSection.tsx`. Reuse existing caution/danger colour tokens. Read-only — no new screens, no navigation.
 
 **Acceptance criteria:**
-- Caution state shows a yellow advisory strip
-- Danger state shows a red advisory strip
-- Safe state shows nothing extra
-- Existing progress bars and week strip unchanged
+- Caution overall state shows a yellow advisory strip with brief guidance.
+- Danger overall state shows a red advisory strip with brief guidance.
+- Safe state shows no extra strip.
+- Existing progress bars and the 7-day strip are unchanged.
+
+**Edge cases:**
+- Mixed rows (one danger, others safe) → overall state is the worst row's state.
+- No rules configured → no strip (don't show guidance for a system with no caps).
+- Copy stays advisory, not alarmist; product-voiced.
 
 ---
 
-### UX-B9: Dashboard sub-tabs refactor
+### UX-B9: Dashboard sub-tabs (Today / Metrics / Safety)
 
-**Problem:** Dashboard stacks 10+ sections vertically. Cognitive overload on first load.
+**Type:** Frontend (largest ticket — do last)
 
-**Implementation plan:**
+**Problem:** The Dashboard stacks 10+ sections vertically; daily actions are buried under metrics.
 
-**Step 1 — Add tab state to DashboardScreen:**
-```tsx
-const [dashTab, setDashTab] = React.useState<'today' | 'metrics' | 'safety'>(() => {
-  return (localStorage.getItem('dash_tab') as 'today' | 'metrics' | 'safety' | null) ?? 'today';
-});
-```
+**Reuse/Extend:**
+- Reuse the existing `SegmentedControl` (`components/ui/SegmentedControl.tsx`) for the tab switcher — do not build a new tab control.
+- Extract three **page-local** components in `components/screens/` (per `docs/patterns.md` screen-orchestration; these are feature-specific, not shared): `DashboardTodayTab`, `DashboardMetricsTab`, `DashboardSafetyTab`.
+- All three receive the same `engine` prop already passed to `DashboardScreen` — no new data fetching, no state lifting, no duplicated summary math (`docs/patterns.md` "Dashboard data composition").
+- Persist the active tab in `localStorage` (page-local view preference; there is no settings backend — see BACKLOG "Settings preference toggles").
 
-**Step 2 — Tab switcher using existing `SegmentedControl`:**
-```tsx
-const TAB_OPTIONS = [
-  { value: 'today',   label: 'Today' },
-  { value: 'metrics', label: 'Metrics' },
-  { value: 'safety',  label: 'Safety' },
-];
-<SegmentedControl
-  value={dashTab}
-  onChange={v => { setDashTab(v); localStorage.setItem('dash_tab', v); }}
-  options={TAB_OPTIONS}
-  ariaLabel="Dashboard section"
-/>
-```
-
-**Step 3 — Extract sub-components:**
-
-Extract to separate files to keep `DashboardScreen.tsx` manageable:
-
-`DashboardTodayTab.tsx`:
-- Greeting + date
-- Check-in status badge (UX-A1)
-- `SuggestedActivityCard`
-- One key metric: load risk state (green/yellow/red at a glance, no full detail)
-
-`DashboardMetricsTab.tsx`:
-- This week (weekly targets progress bars)
-- `GoalsCard`
-
-`DashboardSafetyTab.tsx`:
-- `WeeklyLoadGraph`
-- `LoadRiskSection` (full, with UX-B8 guidance)
-- `BlockSafetyMapSection` (with UX-A9 legend)
-- Activity Status (with UX-B4 expandable)
-
-**Step 4 — Update `DashboardScreen.tsx`:**
-Render the correct tab component based on `dashTab`. Props passed through unchanged.
-
-**Component boundary rules:**
-- `DashboardTodayTab`, `DashboardMetricsTab`, `DashboardSafetyTab` are page-local components (not shared design system) — live in `frontend/src/components/screens/`
-- Each receives the same `engine` prop (no new API calls, no lifting state)
-- `onOpenCheckIn`, `onOpenLogActivity`, `onQuickLog` passed through to `DashboardTodayTab`
-
-**File:** `frontend/src/components/screens/DashboardScreen.tsx` + 3 new sibling files
+**Tab contents:**
+- **Today:** greeting + date, check-in status (UX-A1), `SuggestedActivityCard`, and one at-a-glance load-risk indicator.
+- **Metrics:** This week weekly targets, `GoalsCard`.
+- **Safety:** `WeeklyLoadGraph`, `LoadRiskSection` (with UX-B8), `BlockSafetyMapSection` (with UX-A9), Activity Status (with UX-B4).
 
 **Acceptance criteria:**
-- Three tabs render the correct section groups (no bleed between tabs)
-- Active tab persists in `localStorage` across refreshes
-- All existing props are still passed through correctly
-- `SegmentedControl` tab switcher is visible at top of Dashboard, below greeting or as sticky header
-- Greeting + date appear on Today tab only (or as a fixed header outside the tabs — decide during implementation based on feel)
-- No regressions in existing Dashboard tests
+- Three tabs render their assigned section groups with no bleed between tabs.
+- Active tab persists across reloads via `localStorage`.
+- `DashboardScreen` stays a thin orchestrator delegating to the three tab components (`docs/patterns.md` "Screen orchestration").
+- All existing callbacks (`onOpenCheckIn`, `onOpenLogActivity`, `onQuickLog`) reach the Today tab unchanged.
+- Existing Dashboard behaviour within each section is preserved; only their grouping changes.
+
+**Edge cases:**
+- Unknown/corrupt `localStorage` value → default to "Today".
+- Greeting + date placement: decide whether it lives on the Today tab or as a persistent header above the tabs; keep it from disappearing on Metrics/Safety if that reads oddly.
+- Existing `DashboardScreen` tests will move with their sections — update them to target the new tab components rather than asserting everything renders at once.
+- Owner CLAUDE.md note: "4 preview tiles … overview at a glance without having to hover and click." Ensure the Today tab still gives an at-a-glance overview and does not hide essential status behind the other two tabs — the Today load-risk indicator covers this. Flag to owner if the 3-tab split conflicts with the 4-tile preference.
 
 ---
 
 ## Backlog Additions
 
-After completing this sprint, add the following to `plans/BACKLOG.md`:
+To append to `plans/BACKLOG.md` (already drafted in the same commit as this plan):
 
-```markdown
-## UX — Future (post-overhaul)
-
-- **True streak counter** — consecutive-week (or session) streak derived from weekly target history.
-  Replace the retired `cleanStreak` UI with a well-designed streaks section. Distinct from the
-  retired F10.1 recovery streaks.
-
-- **Load breakdown screen** — tap-through from LoadRiskSection to a per-class breakdown:
-  "X of Y budget used by class Z." Helps power users tune caps.
-
-- **Block safety map interactivity** — tap a heatmap cell to see which rules applied that day
-  (rest window, frequency, consecutive days). Adds context to the calendar view.
-
-- **Activity status → link to Edit Rules** — in the expanded rule detail panel (UX-B4),
-  add a "Adjust rules for this class →" navigation shortcut.
-```
+- True streak counter (replace retired clean-streak UI; derive from weekly-target history)
+- Load breakdown screen (tap-through from `LoadRiskSection`)
+- Block safety map interactivity (tap a day → rules that applied)
+- Activity status → link to Edit Rules from the UX-B4 expanded panel
 
 ---
 
-## Ticket Order (commit sequence)
+## Ticket Order (commit sequence) & Rationale
+
+Quick wins first (low risk, immediate user-visible clarity, no cross-ticket coupling), then structural. Within Group B the ordering encodes real dependencies.
 
 ```
+Group A (independent quick wins):
 UX-A1  check-in badge
-UX-A2  load risk label prefix
-UX-A3  activity status done-today meta fix
+UX-A2  load risk daily/weekly prefix
+UX-A3  activity status done-today meta
 UX-A4  remove clean streak
-UX-A5  delete → bin icon (new component + apply everywhere)
-UX-A6  log activity minute unit guard
-UX-A7  improved empty states
-UX-A8  post-incident screen cleanup
-UX-A9  block safety map legend
----
-UX-B1  incidents in log history
+UX-A5  DeleteButton primitive          ← must precede UX-B6
+UX-A6  log activity minute-unit guard
+UX-A7  actionable empty states
+UX-A8  post-incident cleanup
+UX-A9  block safety map legend          ← consumed by UX-B9 Safety tab
+
+Group B (structural, dependency-ordered):
+UX-B1  incidents in log history         ← must precede UX-B2 (shared render path)
 UX-B2  log history day/week breaks
-UX-B3  all-classes rule investigation + fix
-UX-B4  activity status expandable tooltip
+UX-B3  all-classes orphan fix           ← Part 2 frontend precedes UX-B5 grouping
+UX-B4  activity status expandable        ← consumed by UX-B9 Safety tab
 UX-B5  rules preview grouping
-UX-B6  edit rules compact row
+UX-B6  edit rules compact row            ← depends on UX-A5
 UX-B7  log activity collapse picker
-UX-B8  load risk actionable guidance
-UX-B9  dashboard sub-tabs refactor
+UX-B8  load risk guidance strip          ← consumed by UX-B9 Safety tab
+UX-B9  dashboard sub-tabs                ← last; composes A1, A9, B4, B8
 ```
+
+**Dependencies:** A5→B6; A9/B4/B8→B9; B1→B2; B3(Part 2)→B5.
+
+---
+
+## Unresolved Assumptions / Owner Decisions
+
+1. **UX-B3 cascade vs restrict** — owner to choose `ON DELETE CASCADE` (auto-remove rules with class) or `RESTRICT` (block class delete until rules cleared). Affects the migration and the class-delete UX.
+2. **UX-B3 Part 1** — production data deletion must be owner-run or owner-approved; do not execute against live Supabase autonomously.
+3. **UX-B9 vs 4-tile preference** — the global CLAUDE.md asks for an at-a-glance overview without hover/click. The Today tab's load-risk indicator is intended to satisfy this; confirm the 3-tab split is acceptable before building.
+4. **UX-A3** — substitute "N sessions this week" vs simply omitting the redundant line: pick one; recommend omit for simplicity unless the count is wanted.
 
 ---
 
 ## Notes for Implementer
 
-- **State ownership:** All new UI state in this plan is ephemeral local `useState`. Nothing new goes to React Context or a global store. `localStorage` only for the dashboard tab preference.
-- **No new API endpoints.** All changes are frontend-only except UX-B3 (possible backend guard) and UX-B4 (possible ClassStatus field additions — check first if `nextSafeDate` is enough to derive `estimatedRestDays` in the frontend).
-- **Reuse `SegmentedControl`** for the dashboard tabs — it already exists in the UI kit.
-- **`DeleteButton`** created in UX-A5 is used by UX-B6. Do UX-A5 before UX-B6.
-- **Tests:** Each ticket must follow the standard TDD gate — failing test before code, `make test` green before commit.
-- **Do not change anything outside the listed files per ticket.** Out-of-scope observations go to `BACKLOG.md`.
+- All new UI state is ephemeral `useState`; nothing goes to Context or a store. `localStorage` only for the dashboard tab preference (UX-B9).
+- **Only UX-B3 touches backend/schema/data**, and only Parts 1 & 3, gated on owner sign-off. Every other ticket is frontend-only — no `api-map.md` / `database-schema.md` changes.
+- Reuse `SegmentedControl` (tabs) and the existing inline rule switch markup — do not build new toggle/tab primitives.
+- `DeleteButton` (UX-A5) is the one new shared primitive; it is reused by UX-B6.
+- TDD gate applies per `AGENTS.md`: failing test before code; targeted tests green before each ticket commit; `make test` green before handoff.
+- Test names describe behaviour, not ticket IDs (`docs/patterns.md` "Test naming").
+- Out-of-scope findings go to `plans/BACKLOG.md`, not into these tickets.
+```
