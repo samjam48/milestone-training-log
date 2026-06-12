@@ -331,10 +331,10 @@ Larger changes. Work one area at a time; commit each before the next. Still fron
 
 *Part 3 — backend constraint (✅ CASCADE chosen; migration still gets standard pre-merge review):*
 - A new Alembic migration sets `ON DELETE CASCADE` on `rules.activity_class_id → activity_classes.id` (and on `rules.activity_id → activities.id` if not already cascading).
-- Deleting a class automatically removes its class-level and exercise-level rules — no orphan rows can remain, and no separate "delete rules?" prompt is added to the class-delete UX.
+- The existing class-delete confirmation is preserved; after it is confirmed, the class's class-level and exercise-level rules are removed automatically — no orphan rows remain and no separate "delete rules?" prompt is added.
 - `docs/database-schema.md` updated for the constraint change.
 
-**UX of the chosen behaviour (CASCADE):** Deleting a class silently removes its rules along with it. This sits *underneath* the existing "Delete activities too?" confirmation — rules are not surfaced as a separate decision. This matches the owner intent ("just delete rules related to classes that no longer exist") and prevents the orphan bug recurring.
+**UX of the chosen behaviour (CASCADE):** The class delete itself still requires the existing confirmation step (the "Delete class?" / "Delete activities too?" modal) — that gate is **preserved, not removed**. Once the user confirms the class delete, its rules are removed immediately and silently, with **no separate rules confirmation**. Rules are never surfaced as their own decision. This matches the owner intent ("class delete requires confirmation; rules can go straight away once done") and prevents the orphan bug recurring.
 
 **Edge cases:**
 - A rule with a valid class but a stale **activity** FK (exercise deleted) → same orphan cleanup (Part 1) and same CASCADE (Part 3) applies.
