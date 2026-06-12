@@ -159,7 +159,14 @@ export const DashboardScreen: React.FC<Props> = ({
       </div>
 
       {/* ── Check-in CTA ── */}
-      {!hasCheckedInToday && <CheckInCTA onPress={onOpenCheckIn} />}
+      {hasCheckedInToday === true ? (
+        <Card intent="safe" pad="md">
+          <p className="text-body-lg font-semibold text-safe-fg">Check-in complete</p>
+          <p className="text-caption text-ink-muted mt-0.5">Logged today</p>
+        </Card>
+      ) : (
+        <CheckInCTA onPress={onOpenCheckIn} />
+      )}
 
       {/* ── Suggested activities ── */}
       <SuggestedActivityCard
