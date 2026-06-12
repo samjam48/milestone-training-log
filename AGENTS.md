@@ -61,7 +61,7 @@ from `backend/` so `backend/pyproject.toml` is loaded.
 ---
 ## Current Sprint — Stage 3: UX Overhaul (active)
 **Goal:** Reduce dashboard cognitive load, fix log and rules screen friction, surface incidents in log history, and introduce a Today/Metrics/Safety tab structure on the Dashboard.
-**Status (2026-06-12):** Planning complete. Branch `feat/ux-overhaul-2026-06` not yet created.
+**Status (2026-06-12):** Tickets planner-reviewed and owner decisions resolved (UX-B3 CASCADE + orphan cleanup approved; UX-B9 3-tab approved; UX-A3 spec locked). Branch `feat/ux-overhaul-2026-06` created. Ready for Test Writer handoff.
 **Production (live):** App `https://milestone-activity.netlify.app` · API `https://milestone-training-log.onrender.com` · DB Supabase Postgres (session pooler). Runbook: `docs/deploy.md`.
 **Deploy branch:** `main` (Render + Netlify auto-deploy from GitHub).
 **Ticket source:** `plans/tickets-ux-overhaul-2026-06-12.md` (UX-A1–A9 quick wins; UX-B1–B9 structural)

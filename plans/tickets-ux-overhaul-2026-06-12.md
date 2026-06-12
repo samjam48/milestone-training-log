@@ -25,12 +25,12 @@ Tickets below follow the planner ticket shape: each has a **Type**, a **Reuse/Ex
 
 ## ⚠️ Owner Sign-Off Required Before Implementation
 
-Per `docs/architecture.md` ("Migration creation requires explicit approval", "add or materially change database schema"), the following are **blocked until the owner approves**. Everything else in this plan is frontend-only and needs no schema/API sign-off.
+Per `docs/architecture.md` ("Migration creation requires explicit approval", "add or materially change database schema"), the following touch schema/data. **Owner decisions resolved 2026-06-12** (see below) — proceed as specified.
 
-| Item | Ticket | What needs sign-off |
-|------|--------|---------------------|
-| Production data deletion | UX-B3 Part 1 | Manual `DELETE` of orphan rule rows from live Supabase |
-| FK constraint migration | UX-B3 Part 3 | New Alembic migration adding `ON DELETE` behaviour to `rules.activity_class_id` |
+| Item | Ticket | Status |
+|------|--------|--------|
+| Production data deletion (orphan rules) | UX-B3 Part 1 | ✅ **Approved 2026-06-12.** Owner-run or owner-approved execution against live Supabase. |
+| FK constraint migration | UX-B3 Part 3 | ✅ **`ON DELETE CASCADE` chosen.** Alembic migration still requires the standard pre-merge owner review. |
 
 **No other ticket changes schema, API contracts, or shared state.** UX-A2 and UX-B4 were re-scoped during this review to be frontend-only (see those tickets).
 
@@ -87,25 +87,36 @@ Pure frontend display/copy tweaks. Each is a standalone commit. None touch the e
 
 ---
 
-### UX-A3: Activity status — fix redundant "done today" meta
+### UX-A3: Activity status — this-week sessions + units (owner spec 2026-06-12)
 
-**Type:** Frontend
+**Type:** Frontend (adds a small derived computation in the engine/orchestration layer — still no API change)
 
-**Problem:** Items the user has done today show meta text like "Last done 0 days ago" — redundant inside a today-context section.
+**Problem:** Items done today show redundant recency text ("Last done 0 days ago"). The owner wants each row to read simply, with at-a-glance this-week numbers instead.
+
+**Owner spec (locked 2026-06-12):**
+- Keep each row to **one** description-style line under the title — no stacked metadata.
+- Drop the redundant "last done today / N days ago" phrase entirely.
+- That single line shows **"{n} session{s} this week"**.
+- **Next to the title**, show the **units of exercise completed this week** for that class, e.g. "5 km".
 
 **Reuse/Extend:**
-- `classStatuses` (`ActivityClassStatus[]`) already carries `reason`, `lastDoneDate`, `nextSafeDate`. `lastDoneDate === todayDate` identifies a done-today row.
-- `weeklyProgress` is available on the engine if a "N sessions this week" substitute is wanted.
+- `classStatuses` (`ActivityClassStatus[]`) gives state/label/reason but **not** session count or units. Compute per-class this-week totals from `engine.logs` (already client-side) + activity→class mapping + the current weekly period (Monday–Sunday, the app's existing week).
+- Put the derived per-class summary (sessions count + summed volume by unit) in `lib/engine.ts` or `useMilestoneEngine` — **not** inline in `DashboardScreen`, per `docs/patterns.md` "Dashboard data composition" (don't duplicate summary math in leaf cards).
+- Reuse the current-week period already used by `weeklyProgress` so both features agree on week boundaries.
 
 **Acceptance criteria:**
-- No Activity Status row shows a "0 days ago" / "Last done 0 days ago" style string.
-- For a row done today, the secondary line either shows a useful alternative (e.g. this-week unit/session count) or is omitted entirely.
-- Rows not done today keep their existing reason text.
+- No Activity Status row shows a "0 days ago" / "Last done today" style string.
+- Each row shows the units completed this week beside the class title (e.g. "Gentle walk · 5 km").
+- Each row shows exactly one secondary line: "{n} session{s} this week".
+- The this-week session count and units are derived from the current Monday–Sunday period and match the logs.
+- The `StatusDot` traffic-light state and `nextSafeDate` summary are unchanged.
 
 **Edge cases:**
-- A class done today **and** already in violation (caution/danger) → keep the violation reason; suppress only the redundant recency phrase.
-- A class with no logs at all → unaffected (no "0 days" text applies).
-- Decide one consistent rule (substitute vs omit) and apply it uniformly; do not mix per-row.
+- **Mixed units in one class** (e.g. a class with both km- and minute-based exercises logged this week): default to showing the unit total only when the class's logged activities this week share a single volume unit; if mixed, show the session count only and omit the title units (do not concatenate "5 km + 30 min"). Flag this to the owner if mixed-unit classes are common.
+- **Zero sessions this week** → show "0 sessions this week" and no title units (don't render "0 km").
+- A class in **caution/danger**: the violation reason is more important than the session count — show the violation reason as the single line instead, so the row still has exactly one line. (Safe/clear rows use the session-count line.)
+- Singular/plural: "1 session this week" vs "3 sessions this week".
+- Units formatting consistent with existing log display (e.g. no trailing ".0").
 
 ---
 
@@ -300,7 +311,7 @@ Larger changes. Work one area at a time; commit each before the next. Still fron
 
 ### UX-B3: "All Classes" rule — stale FK orphan fix
 
-**Type:** Full-stack (frontend + backend + production data) — **OWNER SIGN-OFF REQUIRED** (Parts 1 & 3)
+**Type:** Full-stack (frontend + backend + production data) — owner decisions resolved 2026-06-12 (CASCADE; Part 1 approved)
 
 **Root cause (confirmed 2026-06-12):** `SettingsScreen.tsx:135` renders `activity ? activity.name : cls ? cls.name : 'All classes'`. `cls` comes from `classMap.get(rule.activityClassId)`. When a rule references an `activity_class_id` whose class was deleted, the lookup returns `undefined` and the label falls back to "All classes". This is a stale foreign key — an orphan rule row in production Supabase. It does not reproduce locally because the deletion only happened in the live DB. Screenshot confirms a `rest_between_class` ("Minimum days between sessions · 2") orphan that also appears legitimately for "Gentle walk".
 
@@ -310,24 +321,27 @@ Larger changes. Work one area at a time; commit each before the next. Still fron
 
 **Acceptance criteria:**
 
-*Part 1 — production cleanup (owner-run):*
+*Part 1 — production cleanup (✅ approved 2026-06-12; owner-run/owner-approved execution):*
 - Orphan rule rows (non-null `activity_class_id` with no matching `activity_classes` row) are identified and deleted from production.
+- The same query also catches rules with a stale `activity_id` (deleted exercise) — delete those too.
 
-*Part 2 — frontend guard (no sign-off needed):*
+*Part 2 — frontend guard (no sign-off needed; ships first):*
 - Rules with an unresolvable class **and** unresolvable activity are filtered out before render; the "All classes" fallback label is removed.
 - No legitimately-scoped rule disappears.
 
-*Part 3 — backend constraint (owner sign-off):*
-- A new Alembic migration adds `ON DELETE` behaviour (CASCADE or RESTRICT — owner to choose) to `rules.activity_class_id → activity_classes.id`.
-- Deleting a class either cascade-removes its rules or is blocked with a clear 409, consistent with the current class-delete flow.
+*Part 3 — backend constraint (✅ CASCADE chosen; migration still gets standard pre-merge review):*
+- A new Alembic migration sets `ON DELETE CASCADE` on `rules.activity_class_id → activity_classes.id` (and on `rules.activity_id → activities.id` if not already cascading).
+- Deleting a class automatically removes its class-level and exercise-level rules — no orphan rows can remain, and no separate "delete rules?" prompt is added to the class-delete UX.
 - `docs/database-schema.md` updated for the constraint change.
 
-**Edge cases:**
-- A rule with a valid class but a stale **activity** FK (exercise deleted) — same orphan logic must apply.
-- Choosing CASCADE vs RESTRICT must align with the existing `SettingsScreen` "Delete activities too?" flow so behaviour doesn't contradict the UI.
-- The frontend filter must ship even if the backend migration is deferred, so production stops showing "All classes" immediately.
+**UX of the chosen behaviour (CASCADE):** Deleting a class silently removes its rules along with it. This sits *underneath* the existing "Delete activities too?" confirmation — rules are not surfaced as a separate decision. This matches the owner intent ("just delete rules related to classes that no longer exist") and prevents the orphan bug recurring.
 
-**Note:** Parts 2 (frontend) can land independently and first. Parts 1 and 3 are gated on owner sign-off.
+**Edge cases:**
+- A rule with a valid class but a stale **activity** FK (exercise deleted) → same orphan cleanup (Part 1) and same CASCADE (Part 3) applies.
+- The frontend filter (Part 2) must ship even if the migration is deferred, so production stops showing "All classes" immediately.
+- After CASCADE lands, confirm the existing class-delete flow (`performDeleteClass`, `SettingsScreen.tsx:1161`) no longer needs to manually pre-delete rules — remove any now-redundant manual rule cleanup if present.
+
+**Note:** Part 2 (frontend) lands independently and first. Parts 1 and 3 proceed per the approved decisions above.
 
 ---
 
@@ -476,7 +490,7 @@ Larger changes. Work one area at a time; commit each before the next. Still fron
 - Unknown/corrupt `localStorage` value → default to "Today".
 - Greeting + date placement: decide whether it lives on the Today tab or as a persistent header above the tabs; keep it from disappearing on Metrics/Safety if that reads oddly.
 - Existing `DashboardScreen` tests will move with their sections — update them to target the new tab components rather than asserting everything renders at once.
-- Owner CLAUDE.md note: "4 preview tiles … overview at a glance without having to hover and click." Ensure the Today tab still gives an at-a-glance overview and does not hide essential status behind the other two tabs — the Today load-risk indicator covers this. Flag to owner if the 3-tab split conflicts with the 4-tile preference.
+- Owner CLAUDE.md note: "4 preview tiles … overview at a glance without having to hover and click." **Confirmed acceptable by owner 2026-06-12** — the 3-tab split is approved provided the Today tab carries an at-a-glance overview (greeting, check-in status, suggestions, and the load-risk indicator) so essential status is visible without switching tabs.
 
 ---
 
@@ -523,19 +537,21 @@ UX-B9  dashboard sub-tabs                ← last; composes A1, A9, B4, B8
 
 ---
 
-## Unresolved Assumptions / Owner Decisions
+## Owner Decisions — Resolved 2026-06-12
 
-1. **UX-B3 cascade vs restrict** — owner to choose `ON DELETE CASCADE` (auto-remove rules with class) or `RESTRICT` (block class delete until rules cleared). Affects the migration and the class-delete UX.
-2. **UX-B3 Part 1** — production data deletion must be owner-run or owner-approved; do not execute against live Supabase autonomously.
-3. **UX-B9 vs 4-tile preference** — the global CLAUDE.md asks for an at-a-glance overview without hover/click. The Today tab's load-risk indicator is intended to satisfy this; confirm the 3-tab split is acceptable before building.
-4. **UX-A3** — substitute "N sessions this week" vs simply omitting the redundant line: pick one; recommend omit for simplicity unless the count is wanted.
+1. **UX-B3 cascade vs restrict** → ✅ **`ON DELETE CASCADE`.** Deleting a class auto-removes its rules; no separate prompt. Prevents orphans recurring.
+2. **UX-B3 Part 1 (production deletion)** → ✅ **Approved.** Owner-run or owner-approved; not executed autonomously.
+3. **UX-B9 vs 4-tile preference** → ✅ **3-tab split approved**, provided the Today tab carries the at-a-glance overview (check-in, suggestions, load-risk indicator).
+4. **UX-A3 secondary line** → ✅ **One line only: "{n} sessions this week"**, plus **units completed this week beside the title** (e.g. "5 km"). Drop the recency phrase. See UX-A3 for the mixed-unit edge case (the one remaining sub-decision: omit title units when a class logged mixed units this week — flag if mixed-unit classes turn out common).
+
+**No open blockers remain.** The plan is ready for Test Writer handoff.
 
 ---
 
 ## Notes for Implementer
 
 - All new UI state is ephemeral `useState`; nothing goes to Context or a store. `localStorage` only for the dashboard tab preference (UX-B9).
-- **Only UX-B3 touches backend/schema/data**, and only Parts 1 & 3, gated on owner sign-off. Every other ticket is frontend-only — no `api-map.md` / `database-schema.md` changes.
+- **Only UX-B3 touches backend/schema/data** (Parts 1 & 3 — both owner-approved: orphan cleanup + `ON DELETE CASCADE` migration). Every other ticket is frontend-only — no `api-map.md` / `database-schema.md` changes. Note UX-A3 adds a derived this-week computation in the engine layer, but no API/schema change.
 - Reuse `SegmentedControl` (tabs) and the existing inline rule switch markup — do not build new toggle/tab primitives.
 - `DeleteButton` (UX-A5) is the one new shared primitive; it is reused by UX-B6.
 - TDD gate applies per `AGENTS.md`: failing test before code; targeted tests green before each ticket commit; `make test` green before handoff.
