@@ -63,6 +63,23 @@ function ruleRowLabel(row: LoadRiskRuleLimitRow): React.ReactNode {
   return <span className="truncate">{row.label}</span>;
 }
 
+/**
+ * Returns a period prefix for bar-mode rule rows, derived from ruleType only.
+ * daily_volume_cap → "Daily:"
+ * weekly_volume_cap | weekly_load_cap | frequency_limit → "Weekly:"
+ * All others → null (no prefix)
+ */
+function rulePeriodPrefix(ruleType: string): 'Daily:' | 'Weekly:' | null {
+  if (ruleType === 'daily_volume_cap') return 'Daily:';
+  if (
+    ruleType === 'weekly_volume_cap' ||
+    ruleType === 'weekly_load_cap' ||
+    ruleType === 'frequency_limit'
+  )
+    return 'Weekly:';
+  return null;
+}
+
 const LoadRiskWeekStrip: React.FC<{
   weekDays: LoadRiskSummary['weekDays'];
 }> = ({ weekDays }) => (
@@ -108,6 +125,10 @@ const LoadRiskRuleRow: React.FC<{ row: LoadRiskRuleLimitRow }> = ({ row }) => {
     );
   }
 
+  const prefix = rulePeriodPrefix(row.ruleType);
+  const baseValueText = formatActualLimit(row.actual, row.limit, row.unit);
+  const valueText = prefix !== null ? `${prefix} ${baseValueText}` : baseValueText;
+
   return (
     <div
       data-testid={`load-risk-rule-row-${row.id}`}
@@ -121,7 +142,7 @@ const LoadRiskRuleRow: React.FC<{ row: LoadRiskRuleLimitRow }> = ({ row }) => {
         overshootAt={0.99}
         dangerAt={1}
         label={ruleRowLabel(row)}
-        valueText={formatActualLimit(row.actual, row.limit, row.unit)}
+        valueText={valueText}
       />
     </div>
   );
