@@ -59,16 +59,16 @@ from `backend/` so `backend/pyproject.toml` is loaded.
 
 `make lint` and `make test` should wrap the canonical commands once the repo bootstrap is in place.
 ---
-## Current Sprint — Stage 2.5: Usage logic & block clarity (active)
-**Goal:** Close the gap between stored block rules, goals, and logs and daily-use behaviour: activity-linked goals with auto-progress, retroactive log dates, class/exercise caps in Edit Rules, smarter suggestion buckets, and cap-driven load risk.
-**Status (2026-06-06):** **Stage 2.5 implementation complete** on `feat/stage-2-5-usage-logic` (S25.B1–S25.D1). Pending **O25.1** owner smoke before merge to `main`.
+## Current Sprint — Stage 3: UX Overhaul (active)
+**Goal:** Reduce dashboard cognitive load, fix log and rules screen friction, surface incidents in log history, and introduce a Today/Metrics/Safety tab structure on the Dashboard.
+**Status (2026-06-12):** Planning complete. Branch `feat/ux-overhaul-2026-06` not yet created.
 **Production (live):** App `https://milestone-activity.netlify.app` · API `https://milestone-training-log.onrender.com` · DB Supabase Postgres (session pooler). Runbook: `docs/deploy.md`.
 **Deploy branch:** `main` (Render + Netlify auto-deploy from GitHub).
-**Ticket source:** `plans/tickets-stage-2-5-usage-logic-2026-06-06.md` (S25.B1–S25.D1 required; **O25.1** owner smoke)
-**Planning:** `plans/feature-brief-stage-2-5-usage-logic-2026-06-06.md`, `plans/technical-design-stage-2-5-usage-logic-2026-06-06.md`
-**Primary references:** `DESIGN.md`, `docs/patterns.md`, `docs/api-map.md`, `docs/database-schema.md`
+**Ticket source:** `plans/tickets-ux-overhaul-2026-06-12.md` (UX-A1–A9 quick wins; UX-B1–B9 structural)
+**Assessment sources:** `plans/ux-assessment-2026-06-12.md` (AI), `plans/user-ux-assessment-12-06-2026.md` (owner)
+**Primary references:** `DESIGN.md`, `docs/patterns.md`, `docs/architecture.md`
 
-**Archive:** Stage 2 polish in `plans/tickets-stage-2-polish-2026-06-05.md` · Phase 0–10 in `plans/archive/phase-0-10/` · Phase 11 in `plans/tickets-phase-11-production-2026-06-04.md`
+**Archive:** Stage 2.5 on `feat/stage-2-5-usage-logic` (S25.B1–D1 done, O25.1 smoke pending merge) · Stage 2 polish in `plans/tickets-stage-2-polish-2026-06-05.md` · Phase 0–10 in `plans/archive/phase-0-10/` · Phase 11 in `plans/tickets-phase-11-production-2026-06-04.md`
 
 ---
 ## Definition of Done
