@@ -481,7 +481,7 @@ describe('DashboardScreen — WTL.F6 remove recovery streaks section', () => {
     expect(screen.queryByText('Recovery streaks')).not.toBeInTheDocument();
   });
 
-  it('keeps clean streak separate and unaffected by recoveryStreaks payload', () => {
+  it('does not show clean streak section or recovery streaks when recoveryStreaks has entries (UX-A4)', () => {
     setupDashboardWtlF6({
       recoveryStreaks: [DAILY_RECOVERY_STREAK],
       cleanStreak: 3,
@@ -489,44 +489,10 @@ describe('DashboardScreen — WTL.F6 remove recovery streaks section', () => {
 
     renderDashboard();
 
-    expect(screen.getByText('Clean streak')).toBeInTheDocument();
-    expect(screen.getByText(/3 clean sessions in a row/i)).toBeInTheDocument();
+    expect(screen.queryByText('Clean streak')).not.toBeInTheDocument();
+    expect(screen.queryByText(/3 clean sessions in a row/i)).not.toBeInTheDocument();
     expect(screen.queryByText('Recovery streaks')).not.toBeInTheDocument();
     expect(screen.queryByText(/Stretching: 4 days in a row/i)).not.toBeInTheDocument();
-  });
-});
-
-describe('DashboardScreen — F10.2 clean streak relabel', () => {
-  it('renders the clean streak section with Clean streak heading and StreakRow copy', () => {
-    mockEngine.block = ACTIVE_BLOCK;
-    mockEngine.dailyScores = DAILY_SCORES;
-    mockEngine.previousBlocks = [];
-    mockEngine.cleanStreak = 5;
-
-    useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
-
-    renderDashboard();
-
-    expect(screen.getByText('Clean streak')).toBeInTheDocument();
-    expect(screen.getByText(/5 clean sessions in a row/i)).toBeInTheDocument();
-    expect(
-      screen.getByText(/No rule violations or reported bad sessions/i),
-    ).toBeInTheDocument();
-    expect(screen.queryByText('Compliance')).not.toBeInTheDocument();
-  });
-
-  it('shows zero clean sessions copy when cleanStreak is 0', () => {
-    mockEngine.block = ACTIVE_BLOCK;
-    mockEngine.dailyScores = DAILY_SCORES;
-    mockEngine.previousBlocks = [];
-    mockEngine.cleanStreak = 0;
-
-    useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
-
-    renderDashboard();
-
-    expect(screen.getByText('Clean streak')).toBeInTheDocument();
-    expect(screen.getByText(/0 clean sessions in a row/i)).toBeInTheDocument();
   });
 });
 

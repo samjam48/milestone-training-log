@@ -127,20 +127,6 @@ const ChevronRight: React.FC<{ className?: string }> = ({ className }) => (
   </svg>
 );
 
-const StreakRow: React.FC<{ count: number }> = ({ count }) => (
-  <div className="flex items-center gap-3 py-2.5">
-    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-safe/15">
-      <svg width={14} height={14} viewBox="0 0 14 14" fill="none" aria-hidden="true">
-        <path d="M2 7l3.5 3.5L12 3" stroke="#3DD68C" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    </span>
-    <div>
-      <p className="text-body font-medium text-ink">{count} clean session{count === 1 ? '' : 's'} in a row</p>
-      <p className="text-caption text-ink-muted">No rule violations or reported bad sessions</p>
-    </div>
-  </div>
-);
-
 // ---------------------------------------------------------------------------
 // Screen
 // ---------------------------------------------------------------------------
@@ -154,7 +140,7 @@ export const DashboardScreen: React.FC<Props> = ({
   const {
     todayDate, userName, hasCheckedInToday,
     suggestionBuckets, weeklyProgress, classStatuses,
-    loadSeries, graphClassId, flareUpDates, weekLoadThreshold, cleanStreak,
+    loadSeries, graphClassId, flareUpDates, weekLoadThreshold,
     activityClasses, activities, loadRiskSummary,
     goalRows, classWeeklySummaries,
   } = engine;
@@ -271,13 +257,6 @@ export const DashboardScreen: React.FC<Props> = ({
         </Card>
       </div>
 
-      {/* ── Clean streak ── */}
-      <div>
-        <SectionLabel>Clean streak</SectionLabel>
-        <Card pad="sm">
-          <StreakRow count={cleanStreak} />
-        </Card>
-      </div>
     </div>
   );
 };
