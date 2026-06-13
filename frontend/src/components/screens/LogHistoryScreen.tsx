@@ -5,6 +5,7 @@
 import * as React from 'react';
 import { cn } from '../../lib/cn';
 import { Card } from '../ui/Card';
+import { DeleteButton } from '../ui/DeleteButton';
 import type { MilestoneEngineResult } from '../../hooks/useMilestoneEngine';
 import type { ActivityLog } from '../../types';
 
@@ -70,13 +71,10 @@ const LogRow: React.FC<{
             </button>
           )}
           {onDelete != null && (
-            <button
-              type="button"
+            <DeleteButton
+              aria-label={`Delete ${activityName} log`}
               onClick={onDelete}
-              className="text-caption font-semibold text-danger-fg hover:bg-danger/10 rounded-sm px-1 transition-colors duration-snap"
-            >
-              Delete
-            </button>
+            />
           )}
           {log.rpe && (
             <Pill className="bg-bg-sunken text-ink-muted">RPE {log.rpe}</Pill>

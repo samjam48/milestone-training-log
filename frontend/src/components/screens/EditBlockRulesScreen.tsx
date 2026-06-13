@@ -2,6 +2,7 @@ import * as React from 'react';
 import { cn } from '../../lib/cn';
 import { BackButton } from '../ui/BackButton';
 import { Card } from '../ui/Card';
+import { DeleteButton } from '../ui/DeleteButton';
 import { StackScreenEngineBody } from '../ui/StackScreenEngineBody';
 import type { MilestoneEngineResult, RuleDraft } from '../../hooks/useMilestoneEngine';
 import type {
@@ -197,13 +198,10 @@ function RuleRow({
           ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <button
-            type="button"
+          <DeleteButton
+            aria-label={`Delete ${activityName ?? definition.label} rule`}
             onClick={() => onDelete(rule.id)}
-            className="text-caption font-medium text-danger-fg hover:underline"
-          >
-            Delete
-          </button>
+          />
           <button
             type="button"
             role="switch"

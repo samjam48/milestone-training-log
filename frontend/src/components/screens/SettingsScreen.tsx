@@ -9,6 +9,7 @@ import * as React from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '../../lib/cn';
 import { Card, CardHeader, CardTitle } from '../ui/Card';
+import { DeleteButton } from '../ui/DeleteButton';
 import { CenteredModal } from '../ui/CenteredModal';
 import { ReviewMilestoneBadge } from '../ui/ReviewMilestoneBadge';
 import { apiFetch, ApiError } from '../../lib/api/client';
@@ -1286,18 +1287,14 @@ export function SettingsScreen({
                       >
                         Edit
                       </button>
-                      <button
-                        type="button"
+                      <DeleteButton
                         aria-label={`Delete ${cls.name}`}
                         onClick={() => {
                           setDeleteTarget(cls);
                           setDeleteStep(1);
                           setDeleteError(null);
                         }}
-                        className="h-8 px-2.5 rounded-md text-caption font-medium text-danger-fg hover:bg-danger/10 transition-colors duration-snap"
-                      >
-                        Delete
-                      </button>
+                      />
                     </div>
                   </li>
                 ))}
