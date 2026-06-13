@@ -127,11 +127,12 @@ function buildLogPatch(
   notes: string,
   violations: ReturnType<MilestoneEngineResult['checkViolations']>,
 ): LogPatch {
+  const effectiveVolume = selAct?.defaultVolumeUnit === 'minutes' ? 0 : volume;
   return {
     activityId: selectedId,
     loggedDate,
     durationMinutes: duration,
-    volumeValue: volume,
+    volumeValue: effectiveVolume,
     volumeUnit: selAct?.defaultVolumeUnit,
     rpe: rpe > 0 ? rpe as RPE : undefined,
     postActivityFeel: feel,
@@ -188,10 +189,11 @@ export const LogActivityScreen: React.FC<Props> = ({
 
   // Live violation check — updates on every relevant input change
   const violations = React.useMemo(() => {
-    if (!selectedId || (volume <= 0 && duration <= 0)) return [];
+    const effectiveVolume = selAct?.defaultVolumeUnit === 'minutes' ? 0 : volume;
+    if (!selectedId || (effectiveVolume <= 0 && duration <= 0)) return [];
     return checkViolations(
       selectedId,
-      volume,
+      effectiveVolume,
       rpe > 0 ? rpe : 5,
       duration > 0 ? duration : undefined,
       selAct?.defaultVolumeUnit,
@@ -216,7 +218,7 @@ export const LogActivityScreen: React.FC<Props> = ({
           activityId: selectedId,
           loggedDate,
           durationMinutes: duration,
-          volumeValue: volume,
+          volumeValue: selAct?.defaultVolumeUnit === 'minutes' ? 0 : volume,
           volumeUnit: selAct?.defaultVolumeUnit,
           rpe: rpe > 0 ? rpe as RPE : undefined,
           postActivityFeel: feel,
@@ -319,7 +321,7 @@ export const LogActivityScreen: React.FC<Props> = ({
                   <p className="text-body font-medium text-ink mb-2">Duration</p>
                   <NumberField value={duration} onChange={setDuration} unit="min" min={1} placeholder="20" />
                 </div>
-                {selAct?.defaultVolumeUnit && (
+                {selAct?.defaultVolumeUnit && selAct.defaultVolumeUnit !== 'minutes' && (
                   <div>
                     <p className="text-body font-medium text-ink mb-2">Volume</p>
                     <NumberField value={volume} onChange={setVolume} unit={selAct.defaultVolumeUnit} placeholder="0" step="any" />
