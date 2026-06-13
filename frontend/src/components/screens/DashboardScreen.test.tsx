@@ -679,12 +679,12 @@ describe('DashboardScreen — WTL.F1 This Week weekly progress card', () => {
     expect(screen.queryByText('Last 7 days')).not.toBeInTheDocument();
   });
 
-  it('shows neutral empty copy when no weekly targets are configured', () => {
+  it('shows an info card when no weekly targets are configured', () => {
     setupDashboardWeeklyProgress([]);
     renderDashboard();
 
     expect(
-      within(weeklyProgressSection()).getByText(/No weekly targets configured/i),
+      within(weeklyProgressSection()).getByTestId('weekly-targets-empty-state'),
     ).toBeInTheDocument();
   });
 

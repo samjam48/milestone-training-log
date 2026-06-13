@@ -23,6 +23,8 @@ interface Props {
   onOpenCheckIn: () => void;
   onOpenLogActivity: (activityId?: string) => void;
   onQuickLog?: (activity: Activity) => void;
+  onViewGoals?: () => void;
+  onViewSettings?: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -136,6 +138,8 @@ export const DashboardScreen: React.FC<Props> = ({
   onOpenCheckIn,
   onOpenLogActivity,
   onQuickLog,
+  onViewGoals,
+  onViewSettings,
 }) => {
   const {
     todayDate, userName, hasCheckedInToday,
@@ -189,10 +193,22 @@ export const DashboardScreen: React.FC<Props> = ({
             {formatWeekPeriod(weeklyProgress[0].periodStart, weeklyProgress[0].periodEnd)}
           </p>
         ) : null}
-        <Card pad="md">
-          {weeklyProgress.length === 0 ? (
-            <p className="text-caption text-ink-muted">No weekly targets configured.</p>
-          ) : (
+        {weeklyProgress.length === 0 ? (
+          <Card intent="info" pad="md" data-testid="weekly-targets-empty-state">
+            <p className="text-body text-info-fg font-medium">No weekly goals set</p>
+            <p className="text-caption text-ink-muted mt-0.5">Track your weekly progress by adding goals.</p>
+            {onViewGoals != null && (
+              <button
+                type="button"
+                onClick={onViewGoals}
+                className="mt-3 text-caption font-semibold text-info-fg underline hover:opacity-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info-fg rounded"
+              >
+                Set up goals
+              </button>
+            )}
+          </Card>
+        ) : (
+          <Card pad="md">
             <div className="flex flex-col gap-4">
               {weeklyProgress.map((wp) => (
                 <ProgressBar
@@ -205,8 +221,8 @@ export const DashboardScreen: React.FC<Props> = ({
                 />
               ))}
             </div>
-          )}
-        </Card>
+          </Card>
+        )}
       </div>
 
       <GoalsCard goalRows={goalRows} />
@@ -230,31 +246,47 @@ export const DashboardScreen: React.FC<Props> = ({
       {/* ── Activity class status ── */}
       <div>
         <SectionLabel>Activity status</SectionLabel>
-        <Card pad="none">
-          <ul className="divide-y divide-border-subtle">
-            {classStatuses.map(cs => {
-              const summary = classWeeklySummaries?.find(s => s.activityClassId === cs.activityClassId);
-              const name = classStatusLabel(cs.activityClassId, activityClasses);
-              const title = classTitleWithVolume(name, summary);
-              const isSafe = cs.state === 'safe';
-              const secondaryLine = isSafe
-                ? sessionCountLine(summary?.sessionCount ?? 0)
-                : cs.reason;
-              return (
-                <li key={cs.activityClassId} className="flex items-center justify-between gap-3 px-4 py-3">
-                  <StatusDot
-                    state={cs.state}
-                    label={title}
-                    meta={secondaryLine}
-                  />
-                  {cs.nextSafeDate && (
-                    <span className="text-caption text-ink-faint shrink-0">Safe {formatShort(cs.nextSafeDate)}</span>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        </Card>
+        {classStatuses.length === 0 ? (
+          <Card intent="info" pad="md" data-testid="activity-status-empty-state">
+            <p className="text-body text-info-fg font-medium">No activities tracked</p>
+            <p className="text-caption text-ink-muted mt-0.5">Add activities to see your readiness at a glance.</p>
+            {onViewSettings != null && (
+              <button
+                type="button"
+                onClick={onViewSettings}
+                className="mt-3 text-caption font-semibold text-info-fg underline hover:opacity-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info-fg rounded"
+              >
+                Set up activities
+              </button>
+            )}
+          </Card>
+        ) : (
+          <Card pad="none">
+            <ul className="divide-y divide-border-subtle">
+              {classStatuses.map(cs => {
+                const summary = classWeeklySummaries?.find(s => s.activityClassId === cs.activityClassId);
+                const name = classStatusLabel(cs.activityClassId, activityClasses);
+                const title = classTitleWithVolume(name, summary);
+                const isSafe = cs.state === 'safe';
+                const secondaryLine = isSafe
+                  ? sessionCountLine(summary?.sessionCount ?? 0)
+                  : cs.reason;
+                return (
+                  <li key={cs.activityClassId} className="flex items-center justify-between gap-3 px-4 py-3">
+                    <StatusDot
+                      state={cs.state}
+                      label={title}
+                      meta={secondaryLine}
+                    />
+                    {cs.nextSafeDate && (
+                      <span className="text-caption text-ink-faint shrink-0">Safe {formatShort(cs.nextSafeDate)}</span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </Card>
+        )}
       </div>
 
     </div>

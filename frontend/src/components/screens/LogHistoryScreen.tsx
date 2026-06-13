@@ -11,7 +11,7 @@ import type { ActivityLog } from '../../types';
 
 interface Props {
   engine: MilestoneEngineResult;
-  onOpenLogActivity: () => void;
+  onOpenLogActivity?: () => void;
   onOpenLogIncident: () => void;
   onOpenNewActivity?: () => void;
   onEditLog?: (logId: string) => void;
@@ -176,6 +176,15 @@ export const LogHistoryScreen: React.FC<Props> = ({
             </div>
             <p className="text-body text-ink-muted">No sessions logged yet.</p>
             <p className="text-body text-ink-muted">Create an activity to start logging.</p>
+            {onOpenLogActivity != null && (
+              <button
+                type="button"
+                onClick={onOpenLogActivity}
+                className="mt-1 text-caption font-semibold text-ink underline hover:opacity-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink rounded"
+              >
+                Log your first session
+              </button>
+            )}
           </div>
         ) : (
           <div className="flex flex-col gap-4">

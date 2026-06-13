@@ -248,6 +248,8 @@ export function App(): React.ReactElement {
         onOpenCheckIn={() => setOverlay('check-in')}
         onOpenLogActivity={openLogActivity}
         onQuickLog={setInlineLogActivity}
+        onViewGoals={() => setActiveTab('goals')}
+        onViewSettings={() => setActiveTab('settings')}
       />
     );
   } else if (activeTab === 'log') {
