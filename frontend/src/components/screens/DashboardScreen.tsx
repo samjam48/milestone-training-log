@@ -15,6 +15,7 @@ import { LoadRiskSection } from '../composites/LoadRiskSection';
 import { GoalsCard } from '../composites/GoalsCard';
 import { allWeeklyTargetsComplete } from '../../lib/engine';
 import type { MilestoneEngineResult } from '../../hooks/useMilestoneEngine';
+import type { ClassWeeklySummary } from '../../lib/engine';
 import type { Activity, ActivityClass, SafetyState } from '../../types';
 
 interface Props {
@@ -82,6 +83,17 @@ function classStatusLabel(
   return activityClasses.find((c) => c.id === activityClassId)?.name ?? 'Unknown class';
 }
 
+function sessionCountLine(count: number): string {
+  return `${count} ${count === 1 ? 'session' : 'sessions'} this week`;
+}
+
+function classTitleWithVolume(name: string, summary: ClassWeeklySummary | undefined): string {
+  if (!summary || summary.sessionCount === 0 || !summary.totalVolume || !summary.volumeUnit) {
+    return name;
+  }
+  return `${name} · ${summary.totalVolume} ${summary.volumeUnit}`;
+}
+
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
@@ -144,7 +156,7 @@ export const DashboardScreen: React.FC<Props> = ({
     suggestionBuckets, weeklyProgress, classStatuses,
     loadSeries, graphClassId, flareUpDates, weekLoadThreshold, cleanStreak,
     activityClasses, activities, loadRiskSummary,
-    goalRows,
+    goalRows, classWeeklySummaries,
   } = engine;
 
   const weeklyLoadGraphTitle = loadGraphTitle(graphClassId, activityClasses);
@@ -234,18 +246,27 @@ export const DashboardScreen: React.FC<Props> = ({
         <SectionLabel>Activity status</SectionLabel>
         <Card pad="none">
           <ul className="divide-y divide-border-subtle">
-            {classStatuses.map(cs => (
-              <li key={cs.activityClassId} className="flex items-center justify-between gap-3 px-4 py-3">
-                <StatusDot
-                  state={cs.state}
-                  label={classStatusLabel(cs.activityClassId, activityClasses)}
-                  meta={cs.reason}
-                />
-                {cs.nextSafeDate && (
-                  <span className="text-caption text-ink-faint shrink-0">Safe {formatShort(cs.nextSafeDate)}</span>
-                )}
-              </li>
-            ))}
+            {classStatuses.map(cs => {
+              const summary = classWeeklySummaries?.find(s => s.activityClassId === cs.activityClassId);
+              const name = classStatusLabel(cs.activityClassId, activityClasses);
+              const title = classTitleWithVolume(name, summary);
+              const isSafe = cs.state === 'safe';
+              const secondaryLine = isSafe
+                ? sessionCountLine(summary?.sessionCount ?? 0)
+                : cs.reason;
+              return (
+                <li key={cs.activityClassId} className="flex items-center justify-between gap-3 px-4 py-3">
+                  <StatusDot
+                    state={cs.state}
+                    label={title}
+                    meta={secondaryLine}
+                  />
+                  {cs.nextSafeDate && (
+                    <span className="text-caption text-ink-faint shrink-0">Safe {formatShort(cs.nextSafeDate)}</span>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </Card>
       </div>

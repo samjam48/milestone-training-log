@@ -592,7 +592,7 @@ describe('DashboardScreen — Load risk visual panel (engine.loadRiskSummary)', 
 
     expect(screen.getByTestId('load-risk-week-strip')).toBeInTheDocument();
     expect(screen.getByTestId('load-risk-rule-rows')).toBeInTheDocument();
-    expect(screen.getByText('8 / 10 km')).toBeInTheDocument();
+    expect(screen.getByText('Weekly: 8 / 10 km')).toBeInTheDocument();
   });
 
   it('highlights flagged days on the week strip', () => {

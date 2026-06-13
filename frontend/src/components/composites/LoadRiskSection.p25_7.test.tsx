@@ -58,7 +58,7 @@ describe('LoadRiskSection — P25.7 volume-cap units', () => {
     );
 
     const row = screen.getByTestId('load-risk-rule-row-row-walk-cap');
-    expect(within(row).getByText('1.5 / 3 hours')).toBeInTheDocument();
+    expect(within(row).getByText('Weekly: 1.5 / 3 hours')).toBeInTheDocument();
   });
 
   it('renders exercise bar actual/limit with minutes unit', () => {
@@ -86,7 +86,7 @@ describe('LoadRiskSection — P25.7 volume-cap units', () => {
     );
 
     const row = screen.getByTestId('load-risk-rule-row-row-walk-cap');
-    expect(within(row).getByText('45 / 60 minutes')).toBeInTheDocument();
+    expect(within(row).getByText('Weekly: 45 / 60 minutes')).toBeInTheDocument();
   });
 
   it('renders class bar actual/limit with km unit from volume-cap summary', () => {
@@ -112,6 +112,6 @@ describe('LoadRiskSection — P25.7 volume-cap units', () => {
     );
 
     const row = screen.getByTestId('load-risk-rule-row-row-foot-cap');
-    expect(within(row).getByText('8 / 12 km')).toBeInTheDocument();
+    expect(within(row).getByText('Weekly: 8 / 12 km')).toBeInTheDocument();
   });
 });

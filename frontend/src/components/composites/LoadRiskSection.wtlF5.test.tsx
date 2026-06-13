@@ -55,9 +55,9 @@ describe('LoadRiskSection — WTL.F5 rule-limit rows grouped by class', () => {
 
     expect(screen.queryByTestId('load-risk-class-bars')).not.toBeInTheDocument();
     expect(screen.getByTestId('load-risk-rule-rows')).toBeInTheDocument();
-    expect(screen.getByText('4 / 3 sessions')).toBeInTheDocument();
-    expect(screen.getByText('7 / 8 km')).toBeInTheDocument();
-    expect(screen.getByText('20 / 45 minutes')).toBeInTheDocument();
+    expect(screen.getByText('Weekly: 4 / 3 sessions')).toBeInTheDocument();
+    expect(screen.getByText('Weekly: 7 / 8 km')).toBeInTheDocument();
+    expect(screen.getByText('Daily: 20 / 45 minutes')).toBeInTheDocument();
     expect(screen.queryByText(/0 \/ 8 km/i)).not.toBeInTheDocument();
   });
 });
@@ -92,7 +92,7 @@ describe('LoadRiskSection — WTL.F5 fill bars vs rest status copy', () => {
     const freqRow = screen.getByTestId(`load-risk-rule-row-${wtlF5ClassFrequencyRow.id}`);
     expect(freqRow).toHaveAttribute('data-display-mode', 'bar');
     expect(within(freqRow).getByRole('progressbar')).toBeInTheDocument();
-    expect(within(freqRow).getByText('4 / 3 sessions')).toBeInTheDocument();
+    expect(within(freqRow).getByText('Weekly: 4 / 3 sessions')).toBeInTheDocument();
 
     const walkRow = screen.getByTestId(`load-risk-rule-row-${wtlF5WalkWeeklyVolumeRow.id}`);
     expect(walkRow).toHaveAttribute('data-display-mode', 'bar');

@@ -35,10 +35,11 @@ import type {
   VolumeUnit,
   WeeklyTarget,
 } from '../types';
-import type { LoadRiskSummary, WeeklyProgress, Suggestion } from '../lib/engine';
+import type { LoadRiskSummary, WeeklyProgress, Suggestion, ClassWeeklySummary } from '../lib/engine';
+import { computeClassWeeklySummary } from '../lib/engine';
 import type { LoadPoint } from '../lib/load';
 import { ApiError, isUnauthorizedError } from '../lib/api/client';
-import { addDays } from '../lib/load';
+import { addDays, parseISODate } from '../lib/load';
 import {
   getDashboard,
   listActivityLogs,
@@ -228,6 +229,7 @@ export interface MilestoneEngineResult {
   rules: Rule[];
   weeklyTargets: WeeklyTarget[];
   previousBlocks: TrainingBlock[];
+  classWeeklySummaries: ClassWeeklySummary[];
   // F2.0 mutations
   submitNewActivity: (draft: NewActivityDraft) => void;
   submitNewActivityClass: (draft: NewActivityClassDraft) => Promise<void>;
@@ -660,6 +662,17 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     return liveViolations;
   }, [queryClient, todayDate, liveViolations]);
 
+  const weeklyPeriodStart = React.useMemo((): ISODate => {
+    if (!todayDate) return '' as ISODate;
+    const daysFromMonday = (parseISODate(todayDate).getUTCDay() + 6) % 7;
+    return addDays(todayDate, -daysFromMonday);
+  }, [todayDate]);
+
+  const weeklyPeriodEnd = React.useMemo((): ISODate => {
+    if (!weeklyPeriodStart) return '' as ISODate;
+    return addDays(weeklyPeriodStart, 6);
+  }, [weeklyPeriodStart]);
+
   const dashboardActivities = dashboard?.activities ?? [];
   const resolvedActivities = (
     dashboardActivities.length > 0 ? dashboardActivities : (activitiesQuery.data ?? [])
@@ -789,6 +802,15 @@ export function useMilestoneEngine(): MilestoneEngineResult {
     rules: (rulesQuery.data ?? []) as Rule[],
     weeklyTargets: (weeklyTargetsQuery.data ?? []) as WeeklyTarget[],
     previousBlocks: (dashboard?.previousBlocks ?? []) as TrainingBlock[],
+    classWeeklySummaries: weeklyPeriodStart
+      ? computeClassWeeklySummary(
+          (dashboard?.activityClasses ?? []) as ActivityClass[],
+          resolvedActivities,
+          (activityLogsQuery.data ?? []) as ActivityLog[],
+          weeklyPeriodStart,
+          weeklyPeriodEnd,
+        )
+      : [],
     // F2.0 mutations
     submitNewActivity,
     submitNewActivityClass,

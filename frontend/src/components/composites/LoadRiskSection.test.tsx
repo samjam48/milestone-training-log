@@ -90,7 +90,7 @@ describe('LoadRiskSection — S25.F7 load_risk_summary', () => {
     renderWithProviders(<LoadRiskSection loadRiskSummary={buildSummary()} />);
 
     expect(screen.getByText('Foot load')).toBeInTheDocument();
-    expect(screen.getByText('8 / 10 km')).toBeInTheDocument();
+    expect(screen.getByText('Weekly: 8 / 10 km')).toBeInTheDocument();
   });
 
   it('renders activity-scoped rule rows under the class group', () => {
@@ -98,7 +98,7 @@ describe('LoadRiskSection — S25.F7 load_risk_summary', () => {
 
     const group = screen.getByTestId('load-risk-class-group-cls-foot');
     expect(within(group).getByText('Walking')).toBeInTheDocument();
-    expect(within(group).getByText('5 / 6 km')).toBeInTheDocument();
+    expect(within(group).getByText('Weekly: 5 / 6 km')).toBeInTheDocument();
     expect(within(group).getByText('Jogging')).toBeInTheDocument();
   });
 
