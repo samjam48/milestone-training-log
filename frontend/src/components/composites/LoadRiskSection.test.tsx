@@ -89,7 +89,8 @@ describe('LoadRiskSection — S25.F7 load_risk_summary', () => {
   it('renders class progress bars with actual / limit and unit', () => {
     renderWithProviders(<LoadRiskSection loadRiskSummary={buildSummary()} />);
 
-    expect(screen.getByText('Foot load')).toBeInTheDocument();
+    // 'Foot load' appears as both the group header and the bar-mode class row label (UX-A10)
+    expect(screen.getAllByText('Foot load').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('Weekly: 8 / 10 km')).toBeInTheDocument();
   });
 
@@ -105,7 +106,8 @@ describe('LoadRiskSection — S25.F7 load_risk_summary', () => {
   it('renders only performance class rule rows from the summary payload', () => {
     renderWithProviders(<LoadRiskSection loadRiskSummary={buildSummary()} />);
 
-    expect(screen.getByText('Foot load')).toBeInTheDocument();
+    // 'Foot load' appears as both the group header and the bar-mode class row label (UX-A10)
+    expect(screen.getAllByText('Foot load').length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText('Recovery')).not.toBeInTheDocument();
     expect(screen.getAllByTestId(/^load-risk-class-group-/)).toHaveLength(1);
   });

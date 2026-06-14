@@ -10,7 +10,7 @@
  *   AC-5  rest_between_class row shows NO period prefix
  *   AC-6  consecutive_day_limit row shows NO period prefix
  *   AC-7  Unknown ruleType shows no prefix and does not crash
- *   AC-8  displayMode: 'status' rows are unaffected (still render label text)
+ *   AC-8  displayMode: 'status' rows render nothing (superseded by UX-A10)
  *
  * Prefix format per ticket: "Daily: {value}" / "Weekly: {value}" (colon + space).
  * Progress bar geometry and data-testid hooks must be unchanged.
@@ -225,11 +225,17 @@ describe('UX-A2 — unknown ruleType', () => {
 });
 
 // ---------------------------------------------------------------------------
-// AC-8: displayMode: 'status' rows — unaffected (label text preserved)
+// AC-8: displayMode: 'status' rows — updated by UX-A10
+//
+// UX-A2 originally asserted that status rows render label text (AC-8).
+// UX-A10 removes status-mode rows entirely (return null). These tests are
+// updated to assert the new behaviour: status rows produce no DOM output and
+// no period prefix. The underlying AC-8 guarantee (no prefix injected into
+// status rows) is preserved by the fact that they render nothing at all.
 // ---------------------------------------------------------------------------
 
-describe('UX-A2 — displayMode status rows', () => {
-  it('renders status-mode rows with their label text unchanged (AC-8)', () => {
+describe('UX-A2 — displayMode status rows (updated by UX-A10)', () => {
+  it('does not render status-mode rows — no DOM node produced (AC-8 / UX-A10)', () => {
     const row = makeRow({
       id: 'r8',
       ruleType: 'rest_between_class',
@@ -238,14 +244,13 @@ describe('UX-A2 — displayMode status rows', () => {
     });
     renderWithProviders(<LoadRiskSection loadRiskSummary={buildSummary([row])} />);
 
-    expect(screen.getByText('Rest OK')).toBeInTheDocument();
-    expect(screen.getByTestId('load-risk-rule-row-r8')).toHaveAttribute(
-      'data-display-mode',
-      'status',
-    );
+    // UX-A10: status rows render null — testid must be absent
+    expect(screen.queryByTestId('load-risk-rule-row-r8')).not.toBeInTheDocument();
+    // Label text must also be absent
+    expect(screen.queryByText('Rest OK')).not.toBeInTheDocument();
   });
 
-  it('does not inject period prefix into status-mode rows (AC-8)', () => {
+  it('does not inject period prefix into status-mode rows — they render nothing (AC-8 / UX-A10)', () => {
     const row = makeRow({
       id: 'r9',
       ruleType: 'weekly_volume_cap',
@@ -254,8 +259,8 @@ describe('UX-A2 — displayMode status rows', () => {
     });
     renderWithProviders(<LoadRiskSection loadRiskSummary={buildSummary([row])} />);
 
-    // Status rows should not show a bar prefix — they render plain label text
+    // Status rows produce no DOM: no prefix, no label text
     expect(screen.queryByText(/^Weekly:/)).not.toBeInTheDocument();
-    expect(screen.getByText('Volume cap status')).toBeInTheDocument();
+    expect(screen.queryByText('Volume cap status')).not.toBeInTheDocument();
   });
 });

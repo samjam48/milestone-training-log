@@ -60,7 +60,8 @@ function ruleRowLabel(row: LoadRiskRuleLimitRow): React.ReactNode {
   if (row.scope === 'activity' && row.activityName) {
     return <span className="truncate">{row.activityName}</span>;
   }
-  return <span className="truncate">{row.label}</span>;
+  // Class-scoped rows: the group header already renders className; no bar label needed.
+  return null;
 }
 
 /**
@@ -113,16 +114,7 @@ const LoadRiskRuleRow: React.FC<{ row: LoadRiskRuleLimitRow }> = ({ row }) => {
       : { 'data-scope': 'class' as const };
 
   if (row.displayMode === 'status') {
-    return (
-      <div
-        data-testid={`load-risk-rule-row-${row.id}`}
-        data-display-mode="status"
-        {...scopeProps}
-        className="rounded-md"
-      >
-        <p className="text-body text-ink">{row.label}</p>
-      </div>
-    );
+    return null;
   }
 
   const prefix = rulePeriodPrefix(row.ruleType);
@@ -165,8 +157,9 @@ export const LoadRiskSection: React.FC<LoadRiskSectionProps> = ({ loadRiskSummar
   }
 
   const { weekDays, ruleLimitRows } = loadRiskSummary;
-  const hasRuleRows = ruleLimitRows.length > 0;
-  const classGroups = groupRuleRowsByClass(ruleLimitRows);
+  const barRows = ruleLimitRows.filter((row) => row.displayMode !== 'status');
+  const hasRuleRows = barRows.length > 0;
+  const classGroups = groupRuleRowsByClass(barRows);
   const hasRisk =
     weekDays.some((day) => day.state !== 'safe') ||
     ruleLimitRows.some((row) => row.state !== 'safe');

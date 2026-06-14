@@ -44,10 +44,15 @@ describe('LoadRiskSection — WTL.F5 rule-limit rows grouped by class', () => {
 
     const groups = screen.getAllByTestId(/^load-risk-class-group-/);
     expect(groups).toHaveLength(1);
-    expect(within(groups[0]!).getByText(WTL_F5_CLASS_NAME)).toBeInTheDocument();
+    // WTL_F5_CLASS_NAME now appears in both the group header and class-scoped bar labels (UX-A10)
+    expect(within(groups[0]!).getAllByText(WTL_F5_CLASS_NAME).length).toBeGreaterThanOrEqual(1);
 
+    // UX-A10: status rows are suppressed; only bar-mode rows render
+    const barRowCount = wtlF5FootLoadSummary.ruleLimitRows.filter(
+      (r) => r.displayMode !== 'status',
+    ).length;
     const ruleRows = within(groups[0]!).getAllByTestId(/^load-risk-rule-row-/);
-    expect(ruleRows).toHaveLength(wtlF5FootLoadSummary.ruleLimitRows.length);
+    expect(ruleRows).toHaveLength(barRowCount);
   });
 
   it('does not collapse exercise caps into a single class-wide bar', () => {
@@ -99,13 +104,15 @@ describe('LoadRiskSection — WTL.F5 fill bars vs rest status copy', () => {
     expect(within(walkRow).getByRole('progressbar')).toBeInTheDocument();
   });
 
-  it('renders status copy for rest-spacing rows without a fill bar', () => {
+  it('does not render status-mode rows — rest-spacing rows produce no DOM output (UX-A10)', () => {
     renderLoadRisk(wtlF5FootLoadSummary);
 
-    const restRow = screen.getByTestId(`load-risk-rule-row-${wtlF5ClassRestRow.id}`);
-    expect(restRow).toHaveAttribute('data-display-mode', 'status');
-    expect(within(restRow).queryByRole('progressbar')).not.toBeInTheDocument();
-    expect(within(restRow).getByText(wtlF5ClassRestRow.label)).toBeInTheDocument();
+    // UX-A10: status rows render null; the row wrapper must be absent
+    expect(
+      screen.queryByTestId(`load-risk-rule-row-${wtlF5ClassRestRow.id}`),
+    ).not.toBeInTheDocument();
+    // Label text must also be absent
+    expect(screen.queryByText(wtlF5ClassRestRow.label)).not.toBeInTheDocument();
   });
 
   it('applies danger styling on over-limit fill rows', () => {

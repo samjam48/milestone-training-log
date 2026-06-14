@@ -254,6 +254,40 @@ Pure frontend display/copy tweaks. Each is a standalone commit. None touch the e
 
 ---
 
+### UX-A10: Load Risk — fix redundant bar-mode label and remove status rows
+
+**Type:** Frontend
+
+**Problem:** Two visual problems spotted in `LoadRiskSection.tsx` after UX-A2 shipped.
+
+*Problem 1 — Redundant row label:* Bar-mode class-scoped rows show the count in the left label AND again as the right-side value. The `label` field returned by the backend includes the count string (e.g. "1 / 3 sessions · High-Intensity Foot Load"). `ruleRowLabel()` passes `row.label` straight to `ProgressBar` as the label, so the left side reads "1 / 3 sessions · High-Intensity Foot Load" while the right side already reads "Weekly: 1 / 3 sessions". The left label should be the class or exercise name only — the count belongs on the right.
+
+*Problem 2 — Status rows clutter the layout:* `displayMode: 'status'` rows render `row.label` as a plain `<p>` (e.g. "6 days since last session (3-day minimum)"). These add no actionable information and clutter the layout.
+
+**Reuse/Extend:**
+- Edit `ruleRowLabel()` in `LoadRiskSection.tsx` (line 59). For class-scoped (`row.scope !== 'activity'`) bar-mode rows, return `row.className` instead of `row.label`. For activity-scoped bar-mode rows, `row.activityName` is already the right display name — leave that branch unchanged. `className: string` is always present on `LoadRiskRuleLimitRow` (`types.ts:298`); no nullability guard needed.
+- The `displayMode === 'status'` branch of `LoadRiskRuleRow` (lines 115–126) renders only a `<p>` with `row.label`. Remove this branch entirely — return `null` for status-mode rows so they produce no DOM output.
+- No type changes, no API changes, no engine changes.
+- Existing test file: `LoadRiskSection.uxA2.test.tsx` — tests that assert the label text for bar-mode rows will need updating to expect the class/exercise name, not the count-bearing `label` string. Tests that cover the `displayMode === 'status'` render path must be removed or updated to assert that status rows render nothing.
+
+**Acceptance criteria:**
+- For a class-scoped bar-mode row, the `ProgressBar` `label` prop receives the value of `row.className` (e.g. "High-Intensity Foot Load"), not `row.label`.
+- For an activity-scoped bar-mode row, the `ProgressBar` `label` prop still receives `row.activityName` — unchanged from today.
+- The right-side `valueText` (e.g. "Weekly: 1 / 3 sessions") is not changed by this ticket.
+- `displayMode === 'status'` rows render nothing — `LoadRiskRuleRow` returns `null` for that branch.
+- Status rows produce no DOM node under `[data-testid="load-risk-rule-rows"]`.
+- Progress bar geometry, `data-testid` hooks, `data-display-mode`, `data-scope`, and `data-activity-id` attributes on bar-mode rows are unchanged.
+- `LoadRiskSection.uxA2.test.tsx` is updated: label assertions use the class/exercise name; any test covering the `status` display mode is removed or updated to assert no render.
+- `tsc --noEmit` and ESLint pass clean.
+
+**Edge cases:**
+- `row.className` is typed as `string` (non-nullable) — no fallback needed; do not re-introduce a fallback to `row.label`.
+- A rule group that contains only status rows: after filtering, the `rows` array for that group renders no `LoadRiskRuleRow` children. The class group header (`<p>{group.className}</p>`) would then be an orphaned heading. Filter out groups where all rows are status-mode before rendering class groups, or guard the group rendering so an empty visible-rows list suppresses the header. Either approach is acceptable — state the chosen one in the commit message.
+- Mixed group (some bar rows, some status rows): the bar rows render normally; only the status rows are suppressed. The class header remains.
+- `row.activityName` null/undefined on an activity-scoped row: the existing `row.activityName &&` guard in `ruleRowLabel()` covers this — no change needed for that case; leave fallback behaviour as-is.
+
+---
+
 ## Group B — Structural Changes
 
 Larger changes. Work one area at a time; commit each before the next. Still frontend-only except UX-B3 (the only ticket with backend/DB work, gated on owner sign-off).
@@ -520,6 +554,7 @@ UX-A6  log activity minute-unit guard
 UX-A7  actionable empty states
 UX-A8  post-incident cleanup
 UX-A9  block safety map legend          ← consumed by UX-B9 Safety tab
+UX-A10 load risk label + status-row fix ← no cross-ticket dependencies
 
 Group B (structural, dependency-ordered):
 UX-B1  incidents in log history         ← must precede UX-B2 (shared render path)
