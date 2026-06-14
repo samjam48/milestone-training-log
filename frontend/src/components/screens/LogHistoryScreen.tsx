@@ -30,6 +30,21 @@ function dayLabel(iso: string): string {
   return new Date(iso + 'T00:00:00Z').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
 }
 
+function weekLabel(iso: string): string {
+  return new Date(iso + 'T00:00:00Z').toLocaleDateString(undefined, { month: 'long', day: 'numeric', timeZone: 'UTC' });
+}
+
+function mondayForWeek(iso: string): string {
+  const date = new Date(iso + 'T00:00:00Z');
+  const mondayOffset = (date.getUTCDay() + 6) % 7;
+  date.setUTCDate(date.getUTCDate() - mondayOffset);
+  return date.toISOString().substring(0, 10);
+}
+
+function startsWeek(iso: string): boolean {
+  return iso === mondayForWeek(iso);
+}
+
 function feelLabel(feel?: string): { label: string; color: string } {
   if (feel === 'mild_discomfort') return { label: 'Discomfort', color: 'text-caution-fg bg-caution/15' };
   if (feel === 'bad')             return { label: 'Bad',        color: 'text-danger-fg bg-danger/15' };
@@ -241,6 +256,7 @@ export const LogHistoryScreen: React.FC<Props> = ({
               const monthData = byMonth[month];
               if (!monthData) return null;
               const dayKeys = Object.keys(monthData).sort((a, b) => b.localeCompare(a));
+              const weekCount = new Set(dayKeys.map(mondayForWeek)).size;
               return (
                 <section key={month}>
                   {/* Month header */}
@@ -248,45 +264,63 @@ export const LogHistoryScreen: React.FC<Props> = ({
                     {monthLabel(month + '-01')}
                   </p>
                   <Card pad="none">
-                    <div className="divide-y divide-border-subtle">
-                      {dayKeys.map(day => (
-                        <div key={day}>
-                          {/* Day sub-header */}
-                          <div className="px-4 pt-2.5 pb-1">
-                            <span className="text-caption font-medium text-ink-muted">
-                              {dayLabel(day)}
-                            </span>
-                          </div>
-                          {(monthData[day] ?? []).map(item => {
-                            if (item.kind === 'incident') {
-                              return (
-                                <IncidentRow
-                                  key={`incident-${item.incident.id}`}
-                                  incident={item.incident}
-                                />
-                              );
-                            }
+                    <div className="flex flex-col gap-2 p-2">
+                      {dayKeys.map((day, index) => {
+                        const previousDay = dayKeys[index - 1];
+                        const startsNewVisibleWeek =
+                          previousDay != null && mondayForWeek(day) !== mondayForWeek(previousDay);
 
-                            return (
-                              <LogRow
-                                key={`log-${item.log.id}`}
-                                log={item.log}
-                                activityName={activityMap.get(item.log.activityId) ?? 'Unknown'}
-                                onEdit={
-                                  onEditLog != null
-                                    ? () => onEditLog(item.log.id)
-                                    : undefined
-                                }
-                                onDelete={
-                                  onDeleteLog != null
-                                    ? () => handleDeleteLog(item.log)
-                                    : undefined
-                                }
-                              />
-                            );
-                          })}
-                        </div>
-                      ))}
+                        return (
+                          <React.Fragment key={day}>
+                            {weekCount > 1 && index > 0 && (startsWeek(day) || startsNewVisibleWeek) && (
+                              <div className="px-1 pt-1 text-caption font-semibold text-ink-muted">
+                                Week of {weekLabel(mondayForWeek(day))}
+                              </div>
+                            )}
+                            <div
+                              data-testid={`log-history-day-group-${day}`}
+                              className="rounded-md border border-border-subtle bg-bg-sunken p-2"
+                            >
+                              {/* Day sub-header */}
+                              <div className="px-2 pt-0.5 pb-1">
+                                <span className="text-caption font-medium text-ink-muted">
+                                  {dayLabel(day)}
+                                </span>
+                              </div>
+                              <div className="divide-y divide-border-subtle overflow-hidden rounded-sm bg-bg-raised">
+                                {(monthData[day] ?? []).map(item => {
+                                  if (item.kind === 'incident') {
+                                    return (
+                                      <IncidentRow
+                                        key={`incident-${item.incident.id}`}
+                                        incident={item.incident}
+                                      />
+                                    );
+                                  }
+
+                                  return (
+                                    <LogRow
+                                      key={`log-${item.log.id}`}
+                                      log={item.log}
+                                      activityName={activityMap.get(item.log.activityId) ?? 'Unknown'}
+                                      onEdit={
+                                        onEditLog != null
+                                          ? () => onEditLog(item.log.id)
+                                          : undefined
+                                      }
+                                      onDelete={
+                                        onDeleteLog != null
+                                          ? () => handleDeleteLog(item.log)
+                                          : undefined
+                                      }
+                                    />
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </React.Fragment>
+                        );
+                      })}
                     </div>
                   </Card>
                 </section>
