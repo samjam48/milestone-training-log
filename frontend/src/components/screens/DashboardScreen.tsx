@@ -96,6 +96,13 @@ function classTitleWithVolume(name: string, summary: ClassWeeklySummary | undefi
   return `${name} · ${summary.totalVolume} ${summary.volumeUnit}`;
 }
 
+function daysUntilSafe(todayDate: string, nextSafeDate: string): number {
+  const today = new Date(`${todayDate}T00:00:00Z`).getTime();
+  const nextSafe = new Date(`${nextSafeDate}T00:00:00Z`).getTime();
+  const days = Math.ceil((nextSafe - today) / 86_400_000);
+  return Math.max(0, days);
+}
+
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
@@ -151,6 +158,7 @@ export const DashboardScreen: React.FC<Props> = ({
 
   const weeklyLoadGraphTitle = loadGraphTitle(graphClassId, activityClasses);
   const loadGraphStartDate = addDays(todayDate, -(LOAD_GRAPH_WINDOW_DAYS - 1));
+  const [expandedClassStatusId, setExpandedClassStatusId] = React.useState<string | null>(null);
 
   return (
     <div className="flex flex-col gap-5 px-4 pt-5 pb-4">
@@ -271,15 +279,40 @@ export const DashboardScreen: React.FC<Props> = ({
                 const secondaryLine = isSafe
                   ? sessionCountLine(summary?.sessionCount ?? 0)
                   : cs.reason;
+                const isExpanded = expandedClassStatusId === cs.activityClassId;
+                const detailId = `activity-status-detail-${cs.activityClassId}`;
+                const restDaysRemaining = cs.nextSafeDate
+                  ? daysUntilSafe(todayDate, cs.nextSafeDate)
+                  : null;
                 return (
-                  <li key={cs.activityClassId} className="flex items-center justify-between gap-3 px-4 py-3">
-                    <StatusDot
-                      state={cs.state}
-                      label={title}
-                      meta={secondaryLine}
-                    />
-                    {cs.nextSafeDate && (
-                      <span className="text-caption text-ink-faint shrink-0">Safe {formatShort(cs.nextSafeDate)}</span>
+                  <li key={cs.activityClassId}>
+                    <button
+                      type="button"
+                      className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors duration-snap ease-out-quint hover:bg-bg-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info-fg"
+                      aria-expanded={isExpanded}
+                      aria-controls={detailId}
+                      onClick={() => {
+                        setExpandedClassStatusId(isExpanded ? null : cs.activityClassId);
+                      }}
+                    >
+                      <StatusDot
+                        state={cs.state}
+                        label={title}
+                        meta={isExpanded && !isSafe ? undefined : secondaryLine}
+                      />
+                      {cs.nextSafeDate && (
+                        <span className="text-caption text-ink-faint shrink-0">Safe {formatShort(cs.nextSafeDate)}</span>
+                      )}
+                    </button>
+                    {isExpanded && (
+                      <div id={detailId} className="px-4 pb-3 pl-11">
+                        <p className="text-caption text-ink-muted">{cs.reason}</p>
+                        {restDaysRemaining !== null && (
+                          <p className="text-caption font-medium text-ink mt-1">
+                            {restDaysRemaining} rest {restDaysRemaining === 1 ? 'day' : 'days'} remaining
+                          </p>
+                        )}
+                      </div>
                     )}
                   </li>
                 );
