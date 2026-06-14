@@ -7,7 +7,7 @@ import { cn } from '../../lib/cn';
 import { Card } from '../ui/Card';
 import { DeleteButton } from '../ui/DeleteButton';
 import type { MilestoneEngineResult } from '../../hooks/useMilestoneEngine';
-import type { ActivityLog } from '../../types';
+import type { ActivityLog, FlareUpIncident } from '../../types';
 
 interface Props {
   engine: MilestoneEngineResult;
@@ -104,21 +104,67 @@ const LogRow: React.FC<{
   );
 };
 
+const IncidentRow: React.FC<{ incident: FlareUpIncident }> = ({ incident }) => (
+  <div
+    data-testid={`log-history-incident-row-${incident.id}`}
+    className="flex flex-col gap-2 py-3 px-4 bg-caution/10 text-caution-fg"
+  >
+    <div className="flex items-start justify-between gap-2">
+      <div className="flex items-center gap-2">
+        <span aria-hidden="true">⚠</span>
+        <span className="text-body font-semibold">{incident.bodyPart}</span>
+      </div>
+      <Pill className="bg-caution/15 text-caution-fg">
+        Severity {incident.severity}/10
+      </Pill>
+    </div>
+    {incident.notes && (
+      <p className="text-caption text-ink-muted">{incident.notes}</p>
+    )}
+  </div>
+);
+
 // ---------------------------------------------------------------------------
 // Grouping logic
 // ---------------------------------------------------------------------------
 
-type ByDay = Record<string, ActivityLog[]>;
+type TimelineItem =
+  | { kind: 'incident'; incident: FlareUpIncident; sortIndex: number }
+  | { kind: 'log'; log: ActivityLog; sortIndex: number };
+
+type ByDay = Record<string, TimelineItem[]>;
 type ByMonth = Record<string, ByDay>;
 
-function groupLogs(logs: ActivityLog[]): { monthKeys: string[]; byMonth: ByMonth } {
+function timelineItemDate(item: TimelineItem): string {
+  return item.kind === 'incident' ? item.incident.incidentDate : item.log.loggedDate;
+}
+
+function timelineItemKindRank(item: TimelineItem): number {
+  return item.kind === 'incident' ? 0 : 1;
+}
+
+function groupTimeline(
+  logs: ActivityLog[],
+  incidents: FlareUpIncident[],
+): { monthKeys: string[]; byMonth: ByMonth } {
   const byMonth: ByMonth = {};
-  for (const log of [...logs].sort((a, b) => b.loggedDate.localeCompare(a.loggedDate))) {
-    const month = log.loggedDate.substring(0, 7);
-    const day = log.loggedDate;
+  const timelineItems: TimelineItem[] = [
+    ...incidents.map((incident, sortIndex) => ({ kind: 'incident' as const, incident, sortIndex })),
+    ...logs.map((log, sortIndex) => ({ kind: 'log' as const, log, sortIndex })),
+  ].sort((a, b) => {
+    const dateComparison = timelineItemDate(b).localeCompare(timelineItemDate(a));
+    if (dateComparison !== 0) return dateComparison;
+    const kindComparison = timelineItemKindRank(a) - timelineItemKindRank(b);
+    if (kindComparison !== 0) return kindComparison;
+    return a.sortIndex - b.sortIndex;
+  });
+
+  for (const item of timelineItems) {
+    const day = timelineItemDate(item);
+    const month = day.substring(0, 7);
     if (!byMonth[month]) byMonth[month] = {};
     if (!byMonth[month][day]) byMonth[month][day] = [];
-    byMonth[month][day].push(log);
+    byMonth[month][day].push(item);
   }
   const monthKeys = Object.keys(byMonth).sort((a, b) => b.localeCompare(a));
   return { monthKeys, byMonth };
@@ -136,12 +182,15 @@ export const LogHistoryScreen: React.FC<Props> = ({
   onEditLog,
   onDeleteLog,
 }) => {
-  const { logs, activities } = engine;
+  const { logs, activities, incidents } = engine;
   const activityMap = React.useMemo(
     () => new Map(activities.map(a => [a.id, a.name])),
     [activities],
   );
-  const { monthKeys, byMonth } = React.useMemo(() => groupLogs(logs), [logs]);
+  const { monthKeys, byMonth } = React.useMemo(
+    () => groupTimeline(logs, incidents),
+    [incidents, logs],
+  );
   const handleDeleteLog = React.useCallback((log: ActivityLog) => {
     if (onDeleteLog == null) return;
     const confirmed = window.confirm('Delete this activity log?');
@@ -208,23 +257,34 @@ export const LogHistoryScreen: React.FC<Props> = ({
                               {dayLabel(day)}
                             </span>
                           </div>
-                          {(monthData[day] ?? []).map(log => (
-                            <LogRow
-                              key={log.id}
-                              log={log}
-                              activityName={activityMap.get(log.activityId) ?? 'Unknown'}
-                              onEdit={
-                                onEditLog != null
-                                  ? () => onEditLog(log.id)
-                                  : undefined
-                              }
-                              onDelete={
-                                onDeleteLog != null
-                                  ? () => handleDeleteLog(log)
-                                  : undefined
-                              }
-                            />
-                          ))}
+                          {(monthData[day] ?? []).map(item => {
+                            if (item.kind === 'incident') {
+                              return (
+                                <IncidentRow
+                                  key={`incident-${item.incident.id}`}
+                                  incident={item.incident}
+                                />
+                              );
+                            }
+
+                            return (
+                              <LogRow
+                                key={`log-${item.log.id}`}
+                                log={item.log}
+                                activityName={activityMap.get(item.log.activityId) ?? 'Unknown'}
+                                onEdit={
+                                  onEditLog != null
+                                    ? () => onEditLog(item.log.id)
+                                    : undefined
+                                }
+                                onDelete={
+                                  onDeleteLog != null
+                                    ? () => handleDeleteLog(item.log)
+                                    : undefined
+                                }
+                              />
+                            );
+                          })}
                         </div>
                       ))}
                     </div>
