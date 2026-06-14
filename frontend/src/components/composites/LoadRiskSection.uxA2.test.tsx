@@ -172,11 +172,11 @@ describe('UX-A2 — rest_between_class row', () => {
 });
 
 // ---------------------------------------------------------------------------
-// AC-6: consecutive_day_limit → NO prefix
+// AC-6 (updated): consecutive_day_limit → "Consecutive:" prefix
 // ---------------------------------------------------------------------------
 
 describe('UX-A2 — consecutive_day_limit row', () => {
-  it('shows no period prefix (AC-6)', () => {
+  it('shows "Consecutive:" prefix before the actual/limit value (AC-6)', () => {
     const row = makeRow({
       id: 'r6',
       ruleType: 'consecutive_day_limit',
@@ -185,9 +185,13 @@ describe('UX-A2 — consecutive_day_limit row', () => {
     });
     renderWithProviders(<LoadRiskSection loadRiskSummary={buildSummary([row])} />);
 
+    // Must show the "Consecutive:" prefix — implementation does not yet return it
+    expect(screen.getByText(/^Consecutive:/)).toBeInTheDocument();
+    // Full composed value text must be present
+    expect(screen.getByText(/Consecutive: 3 \/ 10 days/)).toBeInTheDocument();
+    // Must NOT show Daily: or Weekly: for this rule type
     expect(screen.queryByText(/^Daily:/)).not.toBeInTheDocument();
     expect(screen.queryByText(/^Weekly:/)).not.toBeInTheDocument();
-    expect(screen.getByText(/3 \/ 10 days/)).toBeInTheDocument();
   });
 });
 
@@ -221,6 +225,75 @@ describe('UX-A2 — unknown ruleType', () => {
     renderWithProviders(<LoadRiskSection loadRiskSummary={buildSummary([row])} />);
 
     expect(screen.getByTestId('load-risk-rule-row-r7')).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AC-9 (new): valueText is flush-right regardless of whether a label is present
+//
+// ProgressBar renders a `div.flex.justify-between` header row containing an
+// optional label <span> and the valueText <span>. When no label is present
+// (class-scoped rows), the valueText span must carry `ml-auto` so it stays
+// flush-right as the lone flex child.
+//
+// Currently ProgressBar.tsx line 82 does NOT have `ml-auto` — these tests will
+// FAIL until the Implementer adds it.
+// ---------------------------------------------------------------------------
+
+describe('UX-A2 — AC-9 valueText flush-right alignment', () => {
+  it('valueText span has ml-auto when no label is present (class-scoped row, AC-9)', () => {
+    // Class-scoped row: ruleRowLabel() returns null → ProgressBar receives no label prop
+    const row = makeRow({
+      id: 'r9a',
+      ruleType: 'weekly_volume_cap',
+      displayMode: 'bar',
+      scope: 'class',
+    });
+    renderWithProviders(<LoadRiskSection loadRiskSummary={buildSummary([row])} />);
+
+    // The valueText span is identified by its tabular-nums class (unique to the
+    // valueText span inside ProgressBar's header row).
+    const valueSpan = document.querySelector('.tabular-nums');
+    expect(valueSpan).not.toBeNull();
+    // Must have ml-auto so it pushes flush-right even without a sibling label
+    expect(valueSpan?.className).toMatch(/\bml-auto\b/);
+  });
+
+  it('valueText span has ml-auto when a label is present (activity-scoped row, AC-9)', () => {
+    // Activity-scoped row: ruleRowLabel() returns activityName → label is present
+    const row = makeRow({
+      id: 'r9b',
+      ruleType: 'daily_volume_cap',
+      displayMode: 'bar',
+      scope: 'activity',
+      activityId: 'act-1',
+      activityName: 'Running',
+    });
+    renderWithProviders(<LoadRiskSection loadRiskSummary={buildSummary([row])} />);
+
+    const valueSpan = document.querySelector('.tabular-nums');
+    expect(valueSpan).not.toBeNull();
+    // ml-auto must be present on the valueText span in the two-label case too
+    expect(valueSpan?.className).toMatch(/\bml-auto\b/);
+  });
+
+  it('class-scoped row renders valueText as the only child of the header flex row (AC-9)', () => {
+    // When no label is present the header flex row must have exactly one child:
+    // the valueText span. This confirms the layout is not broken.
+    const row = makeRow({
+      id: 'r9c',
+      ruleType: 'frequency_limit',
+      displayMode: 'bar',
+      scope: 'class',
+    });
+    renderWithProviders(<LoadRiskSection loadRiskSummary={buildSummary([row])} />);
+
+    // The header row is div.flex.justify-between inside the ProgressBar wrapper
+    const headerRow = document.querySelector('.justify-between');
+    expect(headerRow).not.toBeNull();
+    // Only the valueText span — no label span sibling
+    expect(headerRow?.children).toHaveLength(1);
+    expect(headerRow?.children[0]?.className).toMatch(/\btabular-nums\b/);
   });
 });
 

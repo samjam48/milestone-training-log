@@ -551,10 +551,10 @@ describe('DashboardScreen — Load risk visual panel (engine.loadRiskSummary)', 
     renderDashboard();
 
     const section = screen.getByTestId('load-risk-section');
-    const blockSafetyLabel = screen.getByText('Block Safety Map');
+    const loadGraphHeading = screen.getByRole('heading', { name: 'Foot load' });
 
     expect(section).toBeInTheDocument();
-    assertAppearsAfter(section, blockSafetyLabel);
+    assertAppearsAfter(loadGraphHeading, section);
 
     expect(screen.getByTestId('load-risk-week-strip')).toBeInTheDocument();
     expect(screen.getByTestId('load-risk-rule-rows')).toBeInTheDocument();

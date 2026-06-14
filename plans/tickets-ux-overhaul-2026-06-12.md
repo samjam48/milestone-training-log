@@ -64,26 +64,37 @@ Pure frontend display/copy tweaks. Each is a standalone commit. None touch the e
 
 ---
 
-### UX-A2: Load risk — daily/weekly prefix on rule rows
+### UX-A2: Load risk — daily/weekly/consecutive prefix on rule rows + right-aligned value text
 
 **Type:** Frontend (no backend — corrected during review)
 
-**Problem:** Load-risk rule rows render `"0 / 3 km"` with no indication of the period.
+**Problem:** Load-risk rule rows render `"0 / 3 km"` with no indication of the period. Two gaps remain after initial implementation:
+1. `consecutive_day_limit` rows show no period prefix, losing the "consecutive days" context.
+2. When a row has no left label (class-scoped rows), the `valueText` renders flush-left instead of flush-right, making the layout inconsistent with activity-scoped rows.
 
 **Reuse/Extend:**
 - `LoadRiskRuleLimitRow` (`types.ts:292`) has **no `period` field** but does have `ruleType: string`. Derive the period from `ruleType` — do **not** add a field or change the API.
-- Period mapping by rule type: `daily_volume_cap` → "Daily"; `weekly_volume_cap`, `weekly_load_cap`, `frequency_limit` → "Weekly"; `rest_between_class`, `consecutive_day_limit` → no period prefix (they are not volume/count-over-window caps). Confirm the exact set against `lib/ruleTaxonomy.ts` during implementation.
-- Apply the prefix inside `LoadRiskSection.tsx` (`formatActualLimit` / `ruleRowLabel`), not in the engine.
+- Period mapping by rule type: `daily_volume_cap` → "Daily:"; `weekly_volume_cap`, `weekly_load_cap`, `frequency_limit` → "Weekly:"; `consecutive_day_limit` → "Consecutive:"; `rest_between_class` → no prefix (rest gap is not a windowed cap). Confirm the exact set against `lib/ruleTaxonomy.ts` during implementation.
+- Apply the prefix inside `LoadRiskSection.tsx` (`rulePeriodPrefix`), not in the engine. Update the return type of `rulePeriodPrefix` to include `'Consecutive:'`.
+- The right-alignment fix belongs in `ProgressBar.tsx`: add `ml-auto` to the `valueText` span so it is always flush-right regardless of whether a `label` is present. With `ml-auto` on the last flex child, both the two-child case (label left, value right) and the one-child case (no label, value right) are correct.
 
 **Acceptance criteria:**
-- Daily-cap rows display a "Daily:" prefix before the value (e.g. "Daily: 0 / 3 km").
-- Weekly-cap rows display a "Weekly:" prefix (e.g. "Weekly: 5 / 20 km").
-- Rule types with no meaningful period show no prefix.
+- AC-1: `daily_volume_cap` rows display a "Daily:" prefix before the value (e.g. "Daily: 0 / 3 km").
+- AC-2–4: `weekly_volume_cap`, `weekly_load_cap`, `frequency_limit` rows display a "Weekly:" prefix.
+- AC-6 (updated): `consecutive_day_limit` rows display a "Consecutive:" prefix (e.g. "Consecutive: 1 / 2 days").
+- AC-5: `rest_between_class` rows show no prefix.
+- AC-7: Unknown/future `ruleType` → no prefix, no crash.
+- AC-9 (new): For class-scoped bar rows (where `label` is `null`), the `valueText` is flush-right, not flush-left. For activity-scoped rows (where `label` is present), the label is flush-left and `valueText` is flush-right — no change to existing behaviour.
 - Progress bar geometry and `data-testid` hooks are unchanged.
+
+**Test file to update:** `LoadRiskSection.uxA2.test.tsx`
+- AC-6 test currently asserts NO prefix for `consecutive_day_limit` — must be inverted to assert "Consecutive:" prefix.
+- Add AC-9 tests: render a class-scoped row (scope: 'class', no activityName) and assert the valueText element has `ml-auto` in its className (or assert it is the only/rightmost element in the header row).
 
 **Edge cases:**
 - Unknown/future `ruleType` not in the mapping → render with no prefix rather than crashing or showing "undefined".
-- `displayMode: 'status'` rows (non-bar) — apply the same period logic only if it reads naturally; otherwise leave status rows unprefixed.
+- `displayMode: 'status'` rows render `null` (UX-A10) — no prefix logic runs for them; no change needed.
+- The `ml-auto` addition to `ProgressBar.tsx` is additive and must not break any existing ProgressBar tests.
 
 ---
 

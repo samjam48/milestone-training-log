@@ -70,7 +70,7 @@ function ruleRowLabel(row: LoadRiskRuleLimitRow): React.ReactNode {
  * weekly_volume_cap | weekly_load_cap | frequency_limit → "Weekly:"
  * All others → null (no prefix)
  */
-function rulePeriodPrefix(ruleType: string): 'Daily:' | 'Weekly:' | null {
+function rulePeriodPrefix(ruleType: string): 'Daily:' | 'Weekly:' | 'Consecutive:' | null {
   if (ruleType === 'daily_volume_cap') return 'Daily:';
   if (
     ruleType === 'weekly_volume_cap' ||
@@ -78,6 +78,7 @@ function rulePeriodPrefix(ruleType: string): 'Daily:' | 'Weekly:' | null {
     ruleType === 'frequency_limit'
   )
     return 'Weekly:';
+  if (ruleType === 'consecutive_day_limit') return 'Consecutive:';
   return null;
 }
 
