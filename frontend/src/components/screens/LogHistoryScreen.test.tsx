@@ -414,7 +414,7 @@ describe('LogHistoryScreen — S25.F4 edit log', () => {
       />,
     );
 
-    await user.click(screen.getByRole('button', { name: 'Delete' }));
+    await user.click(screen.getByRole('button', { name: /^delete\b/i }));
 
     expect(confirmSpy).toHaveBeenCalledTimes(1);
     expect(onDeleteLog).toHaveBeenCalledTimes(1);
