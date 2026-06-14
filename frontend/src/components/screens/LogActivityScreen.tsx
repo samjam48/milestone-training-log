@@ -19,7 +19,7 @@ import { Slider } from '../ui/Slider';
 import { SegmentedControl } from '../ui/SegmentedControl';
 import { RuleViolationBanner } from '../composites/RuleViolationBanner';
 import { DatePickerPopover } from '../ui/DatePickerPopover';
-import type { MilestoneEngineResult, LogDraft, LogPatch } from '../../hooks/useMilestoneEngine';
+import type { MilestoneEngineResult, LogDraft } from '../../hooks/useMilestoneEngine';
 import { ApiError } from '../../lib/api/client';
 import type { Activity, ActivityClass, ISODate, RPE, PostActivityFeel, SafetyState } from '../../types';
 
@@ -116,7 +116,7 @@ function resolveInitialActivityId(
 // Screen
 // ---------------------------------------------------------------------------
 
-function buildLogPatch(
+function buildLogDraft(
   selectedId: string,
   loggedDate: ISODate,
   duration: number,
@@ -126,7 +126,7 @@ function buildLogPatch(
   feel: PostActivityFeel,
   notes: string,
   violations: ReturnType<MilestoneEngineResult['checkViolations']>,
-): LogPatch {
+): LogDraft {
   const effectiveVolume = selAct?.defaultVolumeUnit === 'minutes' ? 0 : volume;
   return {
     activityId: selectedId,
@@ -209,22 +209,12 @@ export const LogActivityScreen: React.FC<Props> = ({
     setSaveError(null);
     setIsSaving(true);
     try {
+      const draft = buildLogDraft(
+        selectedId, loggedDate, duration, volume, selAct, rpe, feel, notes, violations,
+      );
       if (isEditMode && logId != null) {
-        await updateLog(logId, buildLogPatch(
-          selectedId, loggedDate, duration, volume, selAct, rpe, feel, notes, violations,
-        ));
+        await updateLog(logId, draft);
       } else {
-        const draft: LogDraft = {
-          activityId: selectedId,
-          loggedDate,
-          durationMinutes: duration,
-          volumeValue: selAct?.defaultVolumeUnit === 'minutes' ? 0 : volume,
-          volumeUnit: selAct?.defaultVolumeUnit,
-          rpe: rpe > 0 ? rpe as RPE : undefined,
-          postActivityFeel: feel,
-          notes: notes || undefined,
-          ruleViolationsAtLog: violations.length > 0 ? violations : undefined,
-        };
         await submitLog(draft);
       }
       setSubmitted(true);

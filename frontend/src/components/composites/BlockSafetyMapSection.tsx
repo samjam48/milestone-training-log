@@ -4,7 +4,8 @@
 
 import * as React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { CalendarHeatmap, SAFETY_CELL_CLASSES } from './CalendarHeatmap';
+import { CalendarHeatmap } from './CalendarHeatmap';
+import { SAFETY_CELL_CLASSES } from './safetyCellClasses';
 import { getTrainingBlockReview } from '../../lib/api/trainingBlocks';
 import type { MilestoneEngineResult } from '../../hooks/useMilestoneEngine';
 import type { DailySafetyScore, TrainingBlock, ISODate } from '../../types';
