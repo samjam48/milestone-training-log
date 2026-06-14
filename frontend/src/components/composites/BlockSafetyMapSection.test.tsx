@@ -28,6 +28,11 @@ vi.mock('./CalendarHeatmap', () => ({
       data-score-count={scores.length}
     />
   ),
+  SAFETY_CELL_CLASSES: {
+    safe:    'bg-safe/70 ring-1 ring-inset ring-safe-border',
+    caution: 'bg-caution/70 ring-1 ring-inset ring-caution-border',
+    danger:  'bg-danger/70 ring-1 ring-inset ring-danger-border',
+  },
 }));
 
 const { getTrainingBlockReviewMock } = vi.hoisted(() => ({

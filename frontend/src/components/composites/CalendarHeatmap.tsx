@@ -51,12 +51,18 @@ export interface CalendarHeatmapProps {
 // honors theme overrides for free.
 // -----------------------------------------------------------------------------
 
-const cellState: Record<SafetyState | 'neutral', string> = {
-  // `bg-*` is the tinted dark surface, ring adds a thin same-hue border so the
-  // cell still reads as a discrete tile on the bg-raised card.
+/** Shared colour tokens for heatmap cells. Export so legend swatches
+ *  can reuse the same classes — single source of truth. */
+export const SAFETY_CELL_CLASSES: Record<'safe' | 'caution' | 'danger', string> = {
   safe:    'bg-safe/70    ring-1 ring-inset ring-safe-border',
   caution: 'bg-caution/70 ring-1 ring-inset ring-caution-border',
   danger:  'bg-danger/70  ring-1 ring-inset ring-danger-border',
+};
+
+const cellState: Record<SafetyState | 'neutral', string> = {
+  // `bg-*` is the tinted dark surface, ring adds a thin same-hue border so the
+  // cell still reads as a discrete tile on the bg-raised card.
+  ...SAFETY_CELL_CLASSES,
   neutral: 'bg-bg-sunken  ring-1 ring-inset ring-border-subtle',
 };
 
