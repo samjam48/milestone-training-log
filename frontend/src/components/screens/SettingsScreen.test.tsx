@@ -517,23 +517,58 @@ describe('SettingsScreen — Recovery Rules', () => {
     ).toBeInTheDocument();
   });
 
-  it('renders "All classes" label for rules with null activityClassId', () => {
-    const crossClassRestRule: Rule = {
+  it('filters orphaned recovery rules instead of rendering an all-classes fallback', () => {
+    const orphanedClassRule: Rule = {
       ...RULE_REST,
-      id: 'rule-cross-rest',
-      activityClassId: null,
+      id: 'rule-orphaned-class',
+      activityClassId: 'cls-deleted',
+      activityId: undefined,
     };
 
     const engine = makeEngine({
       block: ACTIVE_BLOCK,
-      rules: [crossClassRestRule],
+      rules: [orphanedClassRule],
       weeklyTargets: [],
       activityClasses: [],
     });
 
     renderWithProviders(<SettingsScreen engine={engine} />);
 
-    expect(screen.getByText(/all classes/i)).toBeInTheDocument();
+    expect(screen.queryByText(/all classes/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/recovery rules/i)).not.toBeInTheDocument();
+  });
+
+  it('keeps valid class and exercise scoped rules when filtering orphaned rules', () => {
+    const orphanedActivityRule: Rule = {
+      ...RULE_FREQ,
+      id: 'rule-orphaned-activity',
+      activityClassId: 'cls-running',
+      activityId: 'act-deleted',
+    };
+    const exerciseRule: Rule = {
+      ...RULE_REST,
+      id: 'rule-valid-exercise',
+      activityId: ACTIVITY_RUNNING.id,
+    };
+
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      rules: [RULE_REST, orphanedActivityRule, exerciseRule],
+      weeklyTargets: [],
+      activityClasses: [CLASS_RUNNING],
+      activities: [ACTIVITY_RUNNING],
+    });
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    const recoveryRules = screen.getByText(/recovery rules/i).parentElement;
+    expect(recoveryRules).not.toBeNull();
+    expect(within(recoveryRules!).getAllByText(CLASS_RUNNING.name)).toHaveLength(1);
+    expect(within(recoveryRules!).getByText(ACTIVITY_RUNNING.name)).toBeInTheDocument();
+    expect(within(recoveryRules!).queryByText(/all classes/i)).not.toBeInTheDocument();
+    expect(
+      within(recoveryRules!).queryByText(new RegExp(P25_6_RULE_LABELS.frequency_limit, 'i')),
+    ).not.toBeInTheDocument();
   });
 
   it('labels exercise-specific rules with the exercise name', () => {

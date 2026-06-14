@@ -68,7 +68,7 @@ User-facing name: **Weekly rules**. Internal table and route prefix remain `trai
 | `GET` | `/api/activity-classes` | List activity classes |
 | `POST` | `/api/activity-classes` | Create an activity class |
 | `PATCH` | `/api/activity-classes/{class_id}` | Update class metadata |
-| `DELETE` | `/api/activity-classes/{class_id}` | Delete class when no blocking references; returns `409` if any activity in the class has logs or goals/rules/weekly targets reference the class or its activities; otherwise `204` and cascade-deletes unlogged activities in one transaction |
+| `DELETE` | `/api/activity-classes/{class_id}` | Delete class when no blocking references; returns `409` if any activity in the class has logs or goals/weekly targets reference the class or its activities; otherwise `204` and cascade-deletes unlogged activities plus class- and exercise-scoped rules in one transaction |
 
 ### Activities
 

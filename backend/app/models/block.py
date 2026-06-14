@@ -83,11 +83,19 @@ class Rule(SQLModel, table=True):
     )
     activity_class_id: str | None = Field(
         default=None,
-        sa_column=Column(String, ForeignKey("activity_classes.id"), nullable=True),
+        sa_column=Column(
+            String,
+            ForeignKey("activity_classes.id", ondelete="CASCADE"),
+            nullable=True,
+        ),
     )
     activity_id: str | None = Field(
         default=None,
-        sa_column=Column(String, ForeignKey("activities.id"), nullable=True),
+        sa_column=Column(
+            String,
+            ForeignKey("activities.id", ondelete="CASCADE"),
+            nullable=True,
+        ),
     )
     rule_type: str
     threshold_value: float

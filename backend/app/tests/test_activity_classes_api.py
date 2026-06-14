@@ -7,6 +7,7 @@ import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
 
+from app.models.activity import Activity
 from app.tests.helpers.seed import (
     seed_activity,
     seed_activity_class,
@@ -16,6 +17,7 @@ from app.tests.helpers.seed import (
     seed_training_block,
     seed_weekly_target,
     utc_datetime,
+    with_session,
 )
 
 
@@ -466,7 +468,7 @@ async def test_delete_activity_class_with_goal_reference_returns_conflict_and_pr
     assert goals_response.json()[0]["id"] == "goal-walk"
 
 
-async def test_delete_activity_class_with_rule_reference_returns_conflict_and_preserves_rows(
+async def test_delete_activity_class_cascades_class_and_exercise_rules(
     app_with_test_database: FastAPI,
     client: AsyncClient,
 ) -> None:
@@ -482,32 +484,92 @@ async def test_delete_activity_class_with_rule_reference_returns_conflict_and_pr
         class_id="cls-foot-load",
         name="Foot Load",
     )
+    seed_activity(
+        app_with_test_database,
+        activity_id="act-walk",
+        activity_class_id="cls-foot-load",
+        name="Walk",
+    )
     seed_rule(
         app_with_test_database,
-        rule_id="rule-cap",
+        rule_id="rule-class-cap",
         training_block_id="blk-1",
         rule_type="weekly_load_cap",
         threshold_value=100.0,
         window_days=7,
         activity_class_id="cls-foot-load",
     )
+    seed_rule(
+        app_with_test_database,
+        rule_id="rule-walk-cap",
+        training_block_id="blk-1",
+        rule_type="weekly_load_cap",
+        threshold_value=40.0,
+        window_days=7,
+        activity_class_id="cls-foot-load",
+        activity_id="act-walk",
+    )
 
     response = await client.delete("/api/activity-classes/cls-foot-load")
 
-    assert response.status_code == 409
-    assert response.json() == {
-        "detail": "Cannot delete activity class while rules reference it",
-    }
+    assert response.status_code == 204
+    assert response.content == b""
 
     classes_response = await client.get("/api/activity-classes")
     assert classes_response.status_code == 200
-    assert len(classes_response.json()) == 1
-    assert classes_response.json()[0]["id"] == "cls-foot-load"
+    assert classes_response.json() == []
+
+    activities_response = await client.get("/api/activities")
+    assert activities_response.status_code == 200
+    assert activities_response.json() == []
 
     rules_response = await client.get("/api/training-blocks/blk-1/rules")
     assert rules_response.status_code == 200
-    assert len(rules_response.json()) == 1
-    assert rules_response.json()[0]["id"] == "rule-cap"
+    assert rules_response.json() == []
+
+
+async def test_delete_activity_cascades_exercise_scoped_rules(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    seed_training_block(
+        app_with_test_database,
+        block_id="blk-1",
+        name="Rehab Block",
+        start_date=date(2026, 4, 7),
+        status="archived",
+    )
+    seed_activity_class(
+        app_with_test_database,
+        class_id="cls-foot-load",
+        name="Foot Load",
+    )
+    seed_activity(
+        app_with_test_database,
+        activity_id="act-walk",
+        activity_class_id="cls-foot-load",
+        name="Walk",
+    )
+    seed_rule(
+        app_with_test_database,
+        rule_id="rule-walk-cap",
+        training_block_id="blk-1",
+        rule_type="weekly_load_cap",
+        threshold_value=40.0,
+        window_days=7,
+        activity_class_id="cls-foot-load",
+        activity_id="act-walk",
+    )
+
+    for session in with_session(app_with_test_database):
+        activity = session.get(Activity, "act-walk")
+        assert activity is not None
+        session.delete(activity)
+        session.commit()
+
+    rules_response = await client.get("/api/training-blocks/blk-1/rules")
+    assert rules_response.status_code == 200
+    assert rules_response.json() == []
 
 
 async def test_delete_activity_class_with_weekly_target_ref_returns_conflict_preserves_rows(

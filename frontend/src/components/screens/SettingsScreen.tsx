@@ -90,11 +90,31 @@ function WeeklyRulesSummaryCard({
   const activityMap = new Map(activities.map((activity) => [activity.id, activity]));
   const activeRules = rules.filter((r) => r.enabled);
   const visibleRecoveryRules = activeRules
-    .map((rule) => ({
-      rule,
-      summary: formatSettingsRuleSummary(rule.ruleType, rule.thresholdValue),
-    }))
-    .filter((entry): entry is { rule: Rule; summary: string } => entry.summary != null);
+    .map((rule) => {
+      const cls = rule.activityClassId ? classMap.get(rule.activityClassId) : null;
+      const activity = rule.activityId ? activityMap.get(rule.activityId) : null;
+      const hasResolvableScope =
+        cls != null && (rule.activityId == null || activity != null);
+
+      return {
+        rule,
+        cls,
+        activity,
+        summary: hasResolvableScope
+          ? formatSettingsRuleSummary(rule.ruleType, rule.thresholdValue)
+          : null,
+      };
+    })
+    .filter(
+      (
+        entry,
+      ): entry is {
+        rule: Rule;
+        cls: ActivityClass;
+        activity: Activity | null;
+        summary: string;
+      } => entry.summary != null,
+    );
 
   return (
     <Card pad="md">
@@ -124,16 +144,14 @@ function WeeklyRulesSummaryCard({
         <div className="mb-4 pt-3 border-t border-border-subtle">
           <p className="text-label uppercase font-medium text-ink-faint mb-2">Recovery Rules</p>
           <ul className="flex flex-col divide-y divide-border-subtle">
-            {visibleRecoveryRules.map(({ rule, summary }) => {
-              const cls = rule.activityClassId ? classMap.get(rule.activityClassId) : null;
-              const activity = rule.activityId ? activityMap.get(rule.activityId) : null;
+            {visibleRecoveryRules.map(({ rule, cls, activity, summary }) => {
               return (
                 <li
                   key={rule.id}
                   className="flex items-center justify-between gap-3 py-2 text-body"
                 >
                   <span className="text-ink-muted truncate">
-                    {activity ? activity.name : cls ? cls.name : 'All classes'}
+                    {activity ? activity.name : cls.name}
                   </span>
                   <span className="text-ink shrink-0">{summary}</span>
                 </li>

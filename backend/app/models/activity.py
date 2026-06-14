@@ -31,7 +31,10 @@ class ActivityClass(SQLModel, table=True):
     activities: list["Activity"] = Relationship(back_populates="activity_class")
     flare_up_incidents: list["FlareUpIncident"] = Relationship(back_populates="activity_class")
     goals: list["Goal"] = Relationship(back_populates="activity_class")
-    rules: list["Rule"] = Relationship(back_populates="activity_class")
+    rules: list["Rule"] = Relationship(
+        back_populates="activity_class",
+        sa_relationship_kwargs={"passive_deletes": True},
+    )
     weekly_targets: list["WeeklyTarget"] = Relationship(back_populates="activity_class")
 
 
@@ -56,5 +59,8 @@ class Activity(SQLModel, table=True):
     activity_class: ActivityClass = Relationship(back_populates="activities")
     logs: list["ActivityLog"] = Relationship(back_populates="activity")
     goals: list["Goal"] = Relationship(back_populates="activity")
-    rules: list["Rule"] = Relationship(back_populates="activity")
+    rules: list["Rule"] = Relationship(
+        back_populates="activity",
+        sa_relationship_kwargs={"passive_deletes": True},
+    )
     weekly_targets: list["WeeklyTarget"] = Relationship(back_populates="activity")
