@@ -11,6 +11,10 @@ import type { SafetyState } from '../../types';
 
 const NO_SUMMARY_COPY = 'No load caps configured.';
 const NO_RULES_COPY = 'No load rules are configured.';
+const LOAD_RISK_GUIDANCE_COPY: Record<Exclude<SafetyState, 'safe'>, string> = {
+  caution: 'Ease back a little: keep the next session light and watch how symptoms respond.',
+  danger: 'Reduce load today: choose recovery or a lighter session before adding more.',
+};
 
 function formatActualLimit(actual: number, limit: number, unit: string): string {
   const roundedActual = Number.isInteger(actual) ? actual : Math.round(actual * 10) / 10;
@@ -27,6 +31,33 @@ function dayCellClasses(state: SafetyState): string {
     default:
       return 'bg-bg-sunken';
   }
+}
+
+function overallLoadRiskState(
+  ruleLimitRows: LoadRiskRuleLimitRow[],
+  weekDays: LoadRiskSummary['weekDays'],
+): SafetyState {
+  if (
+    ruleLimitRows.some((row) => row.state === 'danger') ||
+    weekDays.some((day) => day.state === 'danger')
+  ) {
+    return 'danger';
+  }
+
+  if (
+    ruleLimitRows.some((row) => row.state === 'caution') ||
+    weekDays.some((day) => day.state === 'caution')
+  ) {
+    return 'caution';
+  }
+
+  return 'safe';
+}
+
+function guidanceStripClasses(state: Exclude<SafetyState, 'safe'>): string {
+  return state === 'danger'
+    ? 'bg-danger/10 border-danger-border text-danger-fg'
+    : 'bg-caution/10 border-caution-border text-caution-fg';
 }
 
 function groupRuleRowsByClass(
@@ -108,6 +139,18 @@ const LoadRiskWeekStrip: React.FC<{
   </div>
 );
 
+const LoadRiskGuidanceStrip: React.FC<{
+  state: Exclude<SafetyState, 'safe'>;
+}> = ({ state }) => (
+  <div
+    className={cn('mb-4 rounded-md border px-3 py-2 text-caption', guidanceStripClasses(state))}
+    data-testid="load-risk-guidance-strip"
+    data-state={state}
+  >
+    {LOAD_RISK_GUIDANCE_COPY[state]}
+  </div>
+);
+
 const LoadRiskRuleRow: React.FC<{ row: LoadRiskRuleLimitRow }> = ({ row }) => {
   const scopeProps =
     row.scope === 'activity'
@@ -161,15 +204,17 @@ export const LoadRiskSection: React.FC<LoadRiskSectionProps> = ({ loadRiskSummar
   const barRows = ruleLimitRows.filter((row) => row.displayMode !== 'status');
   const hasRuleRows = barRows.length > 0;
   const classGroups = groupRuleRowsByClass(barRows);
-  const hasRisk =
-    weekDays.some((day) => day.state !== 'safe') ||
-    ruleLimitRows.some((row) => row.state !== 'safe');
+  const overallState = overallLoadRiskState(ruleLimitRows, weekDays);
+  const hasRisk = overallState !== 'safe';
 
   return (
     <div data-testid="load-risk-section">
       <p className="text-label uppercase font-medium text-ink-muted mb-2">Load risk</p>
       <Card intent={hasRisk ? 'caution' : 'default'} pad="md">
         <LoadRiskWeekStrip weekDays={weekDays} />
+        {hasRuleRows && overallState !== 'safe' ? (
+          <LoadRiskGuidanceStrip state={overallState} />
+        ) : null}
 
         {hasRuleRows ? (
           <div className="flex flex-col gap-4" data-testid="load-risk-rule-rows">
