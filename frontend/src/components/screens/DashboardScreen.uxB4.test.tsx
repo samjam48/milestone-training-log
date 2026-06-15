@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { screen, cleanup, within } from '@testing-library/react';
+import { fireEvent, screen, cleanup, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders';
 import { mockEngine, resetMockEngine } from '../../test/mockEngine';
@@ -129,13 +129,15 @@ function setupBase(): void {
 }
 
 function renderDashboard() {
-  return renderWithProviders(
+  const view = renderWithProviders(
     <DashboardScreen
       engine={mockEngine}
       onOpenCheckIn={vi.fn()}
       onOpenLogActivity={vi.fn()}
     />,
   );
+  fireEvent.click(screen.getByRole('radio', { name: 'Safety' }));
+  return view;
 }
 
 afterEach(() => {

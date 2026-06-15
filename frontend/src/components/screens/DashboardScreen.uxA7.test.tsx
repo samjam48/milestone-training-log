@@ -27,7 +27,7 @@
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { screen, cleanup } from '@testing-library/react';
+import { fireEvent, screen, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders';
 import { mockEngine, resetMockEngine } from '../../test/mockEngine';
@@ -38,6 +38,8 @@ import type { WeeklyProgress } from '../../lib/engine';
 // ---------------------------------------------------------------------------
 // Shared mocks — same pattern as DashboardScreen.uxA1.test.tsx
 // ---------------------------------------------------------------------------
+
+type DashboardTab = 'today' | 'metrics' | 'safety';
 
 vi.mock('../../components/composites/CalendarHeatmap', () => ({
   CalendarHeatmap: ({ startDate, endDate }: { startDate: string; endDate: string }) => (
@@ -130,10 +132,11 @@ function makeUseQuerySuccess(data: unknown) {
 interface RenderOptions {
   onViewGoals?: () => void;
   onViewSettings?: () => void;
+  tab?: DashboardTab;
 }
 
 function renderDashboard(opts: RenderOptions = {}) {
-  return renderWithProviders(
+  const view = renderWithProviders(
     <DashboardScreen
       engine={mockEngine}
       onOpenCheckIn={vi.fn()}
@@ -142,6 +145,13 @@ function renderDashboard(opts: RenderOptions = {}) {
       onViewSettings={opts.onViewSettings}
     />,
   );
+  if (opts.tab === 'metrics') {
+    fireEvent.click(screen.getByRole('radio', { name: 'Metrics' }));
+  }
+  if (opts.tab === 'safety') {
+    fireEvent.click(screen.getByRole('radio', { name: 'Safety' }));
+  }
+  return view;
 }
 
 function setupBase() {
@@ -169,7 +179,7 @@ describe('DashboardScreen — UX-A7 weekly targets empty state', () => {
     setupBase();
     mockEngine.weeklyProgress = [];
 
-    renderDashboard({ onViewGoals: vi.fn() });
+    renderDashboard({ onViewGoals: vi.fn(), tab: 'metrics' });
 
     // The old fallback text must not appear as the sole content
     // A new empty-state element must be present in the weekly targets slot
@@ -183,7 +193,7 @@ describe('DashboardScreen — UX-A7 weekly targets empty state', () => {
     mockEngine.weeklyProgress = [];
     const onViewGoals = vi.fn();
 
-    renderDashboard({ onViewGoals });
+    renderDashboard({ onViewGoals, tab: 'metrics' });
 
     const cta = screen.getByRole('button', { name: /set up.*goals|add.*goal|go to goals|view goals/i });
     await user.click(cta);
@@ -196,7 +206,7 @@ describe('DashboardScreen — UX-A7 weekly targets empty state', () => {
     mockEngine.weeklyProgress = [];
 
     // No onViewGoals prop — CTA must be absent, not a dead button
-    renderDashboard();
+    renderDashboard({ tab: 'metrics' });
 
     // Empty state card may still show, but there must be no clickable CTA button
     // targeting Goals that would be dead
@@ -210,7 +220,7 @@ describe('DashboardScreen — UX-A7 weekly targets empty state', () => {
     mockEngine.weeklyProgress = [WEEKLY_PROGRESS_ROW];
     mockEngine.activityClasses = [ACTIVITY_CLASS];
 
-    renderDashboard({ onViewGoals: vi.fn() });
+    renderDashboard({ onViewGoals: vi.fn(), tab: 'metrics' });
 
     expect(screen.queryByTestId('weekly-targets-empty-state')).not.toBeInTheDocument();
     // Progress bar for the row must be present
@@ -227,7 +237,7 @@ describe('DashboardScreen — UX-A7 activity status empty state', () => {
     setupBase();
     mockEngine.classStatuses = [];
 
-    renderDashboard({ onViewSettings: vi.fn() });
+    renderDashboard({ onViewSettings: vi.fn(), tab: 'safety' });
 
     const emptyStateCard = screen.getByTestId('activity-status-empty-state');
     expect(emptyStateCard).toBeInTheDocument();
@@ -239,7 +249,7 @@ describe('DashboardScreen — UX-A7 activity status empty state', () => {
     mockEngine.classStatuses = [];
     const onViewSettings = vi.fn();
 
-    renderDashboard({ onViewSettings });
+    renderDashboard({ onViewSettings, tab: 'safety' });
 
     const cta = screen.getByRole('button', { name: /go to settings|set up.*activit|open settings|add.*activit/i });
     await user.click(cta);
@@ -252,7 +262,7 @@ describe('DashboardScreen — UX-A7 activity status empty state', () => {
     mockEngine.classStatuses = [];
 
     // No onViewSettings prop — CTA must be absent
-    renderDashboard();
+    renderDashboard({ tab: 'safety' });
 
     expect(
       screen.queryByRole('button', { name: /go to settings|set up.*activit|open settings|add.*activit/i }),
@@ -264,7 +274,7 @@ describe('DashboardScreen — UX-A7 activity status empty state', () => {
     mockEngine.classStatuses = [CLASS_STATUS_SAFE];
     mockEngine.activityClasses = [ACTIVITY_CLASS];
 
-    renderDashboard({ onViewSettings: vi.fn() });
+    renderDashboard({ onViewSettings: vi.fn(), tab: 'safety' });
 
     expect(screen.queryByTestId('activity-status-empty-state')).not.toBeInTheDocument();
     // The row content must be visible
@@ -281,7 +291,7 @@ describe('DashboardScreen — UX-A7 empty-state copy quality', () => {
     setupBase();
     mockEngine.weeklyProgress = [];
 
-    renderDashboard({ onViewGoals: vi.fn() });
+    renderDashboard({ onViewGoals: vi.fn(), tab: 'metrics' });
 
     const emptyStateCard = screen.getByTestId('weekly-targets-empty-state');
     expect(emptyStateCard.textContent).not.toMatch(/configured/i);
@@ -291,7 +301,7 @@ describe('DashboardScreen — UX-A7 empty-state copy quality', () => {
     setupBase();
     mockEngine.classStatuses = [];
 
-    renderDashboard({ onViewSettings: vi.fn() });
+    renderDashboard({ onViewSettings: vi.fn(), tab: 'safety' });
 
     const emptyStateCard = screen.getByTestId('activity-status-empty-state');
     expect(emptyStateCard.textContent).not.toMatch(/configured/i);

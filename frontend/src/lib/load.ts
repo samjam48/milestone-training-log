@@ -12,7 +12,7 @@
 // silently under-weight unscored logs, which produces deceptively "safe" graphs.
 // =============================================================================
 
-import type { ActivityLog, ID, ISODate, RPE } from '../types';
+import type { ActivityLog, ID, ISODate, LoadRiskSummary, RPE, SafetyState } from '../types';
 
 /** RPE assumed when a log was saved without one. Neutral midpoint of 1–10. */
 export const DEFAULT_RPE: RPE = 5;
@@ -154,3 +154,31 @@ export const byActivityIds =
   (activityIds: ID[]) =>
   (log: ActivityLog): boolean =>
     activityIds.includes(log.activityId);
+
+// -----------------------------------------------------------------------------
+// Load-risk summary display helpers
+// -----------------------------------------------------------------------------
+
+export function overallLoadRiskState(loadRiskSummary: LoadRiskSummary | null): SafetyState {
+  if (loadRiskSummary == null) {
+    return 'safe';
+  }
+
+  const { ruleLimitRows, weekDays } = loadRiskSummary;
+
+  if (
+    ruleLimitRows.some((row) => row.state === 'danger') ||
+    weekDays.some((day) => day.state === 'danger')
+  ) {
+    return 'danger';
+  }
+
+  if (
+    ruleLimitRows.some((row) => row.state === 'caution') ||
+    weekDays.some((day) => day.state === 'caution')
+  ) {
+    return 'caution';
+  }
+
+  return 'safe';
+}

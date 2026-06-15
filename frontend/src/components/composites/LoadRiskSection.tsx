@@ -4,6 +4,7 @@
 
 import * as React from 'react';
 import { cn } from '../../lib/cn';
+import { overallLoadRiskState } from '../../lib/load';
 import { Card } from '../ui/Card';
 import { ProgressBar } from '../ui/ProgressBar';
 import type { LoadRiskRuleLimitRow, LoadRiskSummary } from '../../lib/engine';
@@ -31,27 +32,6 @@ function dayCellClasses(state: SafetyState): string {
     default:
       return 'bg-bg-sunken';
   }
-}
-
-function overallLoadRiskState(
-  ruleLimitRows: LoadRiskRuleLimitRow[],
-  weekDays: LoadRiskSummary['weekDays'],
-): SafetyState {
-  if (
-    ruleLimitRows.some((row) => row.state === 'danger') ||
-    weekDays.some((day) => day.state === 'danger')
-  ) {
-    return 'danger';
-  }
-
-  if (
-    ruleLimitRows.some((row) => row.state === 'caution') ||
-    weekDays.some((day) => day.state === 'caution')
-  ) {
-    return 'caution';
-  }
-
-  return 'safe';
 }
 
 function guidanceStripClasses(state: Exclude<SafetyState, 'safe'>): string {
@@ -204,7 +184,7 @@ export const LoadRiskSection: React.FC<LoadRiskSectionProps> = ({ loadRiskSummar
   const barRows = ruleLimitRows.filter((row) => row.displayMode !== 'status');
   const hasRuleRows = barRows.length > 0;
   const classGroups = groupRuleRowsByClass(barRows);
-  const overallState = overallLoadRiskState(ruleLimitRows, weekDays);
+  const overallState = overallLoadRiskState(loadRiskSummary);
   const hasRisk = overallState !== 'safe';
 
   return (

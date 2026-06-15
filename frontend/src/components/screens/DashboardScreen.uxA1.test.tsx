@@ -169,14 +169,14 @@ describe('DashboardScreen — UX-A1 check-in completion badge', () => {
     expect(allText).not.toMatch(/Logged at \d/i);
   });
 
-  it('surrounding sections do not shift — This week section present in both states', () => {
+  it('surrounding Today sections do not shift in either check-in state', () => {
     setupBase();
 
     // Render with CTA state first
     mockEngine.hasCheckedInToday = false;
     const { rerender } = renderDashboard();
-    const weekLabelFalse = screen.getByText('This week');
-    expect(weekLabelFalse).toBeInTheDocument();
+    expect(screen.getByText('Suggested for today')).toBeInTheDocument();
+    expect(screen.getByTestId('dashboard-today-load-risk-indicator')).toBeInTheDocument();
 
     // Rerender with success badge state
     mockEngine.hasCheckedInToday = true;
@@ -187,8 +187,8 @@ describe('DashboardScreen — UX-A1 check-in completion badge', () => {
         onOpenLogActivity={vi.fn()}
       />,
     );
-    const weekLabelTrue = screen.getByText('This week');
-    expect(weekLabelTrue).toBeInTheDocument();
+    expect(screen.getByText('Suggested for today')).toBeInTheDocument();
+    expect(screen.getByTestId('dashboard-today-load-risk-indicator')).toBeInTheDocument();
   });
 
   it('the success badge card has success/safe intent (not info)', () => {

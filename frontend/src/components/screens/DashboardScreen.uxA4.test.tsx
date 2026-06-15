@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { screen, cleanup } from '@testing-library/react';
+import { fireEvent, screen, cleanup } from '@testing-library/react';
 import { renderWithProviders } from '../../test/renderWithProviders';
 import { mockEngine, resetMockEngine } from '../../test/mockEngine';
 import type { MilestoneEngineResult } from '../../hooks/useMilestoneEngine';
@@ -42,6 +42,8 @@ vi.mock('@tanstack/react-query', async (importOriginal) => {
 // Helpers
 // ---------------------------------------------------------------------------
 
+type DashboardTab = 'today' | 'metrics' | 'safety';
+
 function makeUseQuerySuccess(data: unknown) {
   return {
     data,
@@ -52,14 +54,21 @@ function makeUseQuerySuccess(data: unknown) {
   };
 }
 
-function renderDashboard() {
-  return renderWithProviders(
+function renderDashboard(tab: DashboardTab = 'today') {
+  const view = renderWithProviders(
     <DashboardScreen
       engine={mockEngine}
       onOpenCheckIn={vi.fn()}
       onOpenLogActivity={vi.fn()}
     />,
   );
+  if (tab === 'metrics') {
+    fireEvent.click(screen.getByRole('radio', { name: 'Metrics' }));
+  }
+  if (tab === 'safety') {
+    fireEvent.click(screen.getByRole('radio', { name: 'Safety' }));
+  }
+  return view;
 }
 
 afterEach(() => {
@@ -78,7 +87,7 @@ describe('UX-A4 — Clean Streak section removed from Dashboard', () => {
     mockEngine.previousBlocks = [];
     useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
 
-    renderDashboard();
+    renderDashboard('metrics');
 
     expect(screen.queryByText('Clean streak')).not.toBeInTheDocument();
   });
@@ -88,7 +97,7 @@ describe('UX-A4 — Clean Streak section removed from Dashboard', () => {
     mockEngine.previousBlocks = [];
     useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
 
-    renderDashboard();
+    renderDashboard('metrics');
 
     // StreakRow renders "{count} clean session{s} in a row"
     expect(screen.queryByText(/clean sessions in a row/i)).not.toBeInTheDocument();
@@ -163,7 +172,7 @@ describe('UX-A4 — Remaining Dashboard sections unaffected', () => {
     mockEngine.weeklyProgress = [];
     useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
 
-    renderDashboard();
+    renderDashboard('metrics');
 
     expect(screen.getByText('This week')).toBeInTheDocument();
   });
@@ -173,7 +182,7 @@ describe('UX-A4 — Remaining Dashboard sections unaffected', () => {
     mockEngine.classStatuses = [];
     useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
 
-    renderDashboard();
+    renderDashboard('safety');
 
     expect(screen.getByText('Activity status')).toBeInTheDocument();
   });

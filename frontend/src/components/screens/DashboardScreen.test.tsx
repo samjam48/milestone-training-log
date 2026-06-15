@@ -17,7 +17,7 @@
  */
 
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { screen, cleanup, within } from '@testing-library/react';
+import { fireEvent, screen, cleanup, within } from '@testing-library/react';
 import { renderWithProviders } from '../../test/renderWithProviders';
 import { mockEngine, resetMockEngine } from '../../test/mockEngine';
 import type { MilestoneEngineResult } from '../../hooks/useMilestoneEngine';
@@ -42,9 +42,22 @@ import type { WeeklyProgress } from '../../lib/engine';
 import { DashboardScreen } from './DashboardScreen';
 
 type EngineWithGoalRows = MilestoneEngineResult & { goalRows: GoalDashboardRow[] };
+type DashboardTab = 'today' | 'metrics' | 'safety';
+
+let dashboardTab: DashboardTab = 'today';
 
 function assignGoalRows(rows: GoalDashboardRow[]): void {
   (mockEngine as EngineWithGoalRows).goalRows = rows;
+}
+
+function useDashboardTab(tab: DashboardTab): void {
+  dashboardTab = tab;
+}
+
+function dashboardTabLabel(tab: DashboardTab): 'Today' | 'Metrics' | 'Safety' {
+  if (tab === 'metrics') return 'Metrics';
+  if (tab === 'safety') return 'Safety';
+  return 'Today';
 }
 
 vi.mock('../../components/composites/CalendarHeatmap', () => ({
@@ -247,18 +260,23 @@ function makeUseQueryError() {
 
 afterEach(() => {
   cleanup();
+  dashboardTab = 'today';
   resetMockEngine();
   vi.clearAllMocks();
 });
 
 function renderDashboard() {
-  return renderWithProviders(
+  const view = renderWithProviders(
     <DashboardScreen
       engine={mockEngine}
       onOpenCheckIn={vi.fn()}
       onOpenLogActivity={vi.fn()}
     />,
   );
+  if (dashboardTab !== 'today') {
+    fireEvent.click(screen.getByRole('radio', { name: dashboardTabLabel(dashboardTab) }));
+  }
+  return view;
 }
 
 function setupDashboardWeeklyProgress(
@@ -291,6 +309,10 @@ function progressBarFillForLabel(label: string): HTMLElement | null {
 }
 
 describe('DashboardScreen — BlockSafetyMapSection: active block heatmap', () => {
+  beforeEach(() => {
+    useDashboardTab('safety');
+  });
+
   it('renders a CalendarHeatmap for the active block without firing a useQuery for that block id', () => {
     mockEngine.block = ACTIVE_BLOCK;
     mockEngine.dailyScores = DAILY_SCORES;
@@ -316,6 +338,10 @@ describe('DashboardScreen — BlockSafetyMapSection: active block heatmap', () =
 });
 
 describe('DashboardScreen — BlockSafetyMapSection: one page per previous block', () => {
+  beforeEach(() => {
+    useDashboardTab('safety');
+  });
+
   it('calls useQuery for each previous block keyed ["block-review", block.id]', () => {
     mockEngine.block = ACTIVE_BLOCK;
     mockEngine.dailyScores = [];
@@ -342,6 +368,10 @@ describe('DashboardScreen — BlockSafetyMapSection: one page per previous block
 });
 
 describe('DashboardScreen — BlockSafetyMapSection: loading skeleton', () => {
+  beforeEach(() => {
+    useDashboardTab('safety');
+  });
+
   it('shows a loading skeleton while a previous-block query is pending', () => {
     mockEngine.block = ACTIVE_BLOCK;
     mockEngine.dailyScores = [];
@@ -365,6 +395,10 @@ describe('DashboardScreen — BlockSafetyMapSection: loading skeleton', () => {
 });
 
 describe('DashboardScreen — BlockSafetyMapSection: error state', () => {
+  beforeEach(() => {
+    useDashboardTab('safety');
+  });
+
   it('shows an error state with a retry button when a previous-block query fails', () => {
     mockEngine.block = ACTIVE_BLOCK;
     mockEngine.dailyScores = DAILY_SCORES;
@@ -384,6 +418,10 @@ describe('DashboardScreen — BlockSafetyMapSection: error state', () => {
 });
 
 describe('DashboardScreen — BlockSafetyMapSection: no active block', () => {
+  beforeEach(() => {
+    useDashboardTab('safety');
+  });
+
   it('renders no scroll container and no CalendarHeatmap when engine.block.id is empty', () => {
     mockEngine.block = {
       ...mockEngine.block,
@@ -440,6 +478,7 @@ function setupDashboardWtlF6(options: {
 
 describe('DashboardScreen — WTL.F6 remove recovery streaks section', () => {
   beforeEach(() => {
+    useDashboardTab('metrics');
     useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
   });
 
@@ -497,6 +536,10 @@ describe('DashboardScreen — WTL.F6 remove recovery streaks section', () => {
 });
 
 describe('DashboardScreen — F10.5 load graph title (engine.graphClassId / B10.2)', () => {
+  beforeEach(() => {
+    useDashboardTab('safety');
+  });
+
   it('uses the activity class name for graphClassId, not first performance class by ID sort', () => {
     mockEngine.block = ACTIVE_BLOCK;
     mockEngine.dailyScores = DAILY_SCORES;
@@ -544,6 +587,10 @@ describe('DashboardScreen — F10.5 load graph title (engine.graphClassId / B10.
 });
 
 describe('DashboardScreen — Load risk visual panel (engine.loadRiskSummary)', () => {
+  beforeEach(() => {
+    useDashboardTab('safety');
+  });
+
   it('renders Load risk after the load graph with week strip and rule rows', () => {
     setupDashboardWithLoadRisk(LOAD_RISK_SUMMARY);
     useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
@@ -584,6 +631,10 @@ describe('DashboardScreen — Load risk visual panel (engine.loadRiskSummary)', 
 });
 
 describe('DashboardScreen — S25.F2 Goals card', () => {
+  beforeEach(() => {
+    useDashboardTab('metrics');
+  });
+
   function setupDashboardWithGoalRows(goalRows: GoalDashboardRow[]): void {
     mockEngine.block = ACTIVE_BLOCK;
     mockEngine.dailyScores = DAILY_SCORES;
@@ -668,6 +719,7 @@ describe('DashboardScreen — S25.F2 Goals card', () => {
 
 describe('DashboardScreen — WTL.F1 This Week weekly progress card', () => {
   beforeEach(() => {
+    useDashboardTab('metrics');
     useQueryMock.mockReturnValue(makeUseQuerySuccess(undefined));
   });
 
@@ -737,6 +789,10 @@ describe('DashboardScreen — WTL.F1 This Week weekly progress card', () => {
 });
 
 describe('DashboardScreen — BlockSafetyMapSection: only active block rendered', () => {
+  beforeEach(() => {
+    useDashboardTab('safety');
+  });
+
   it('renders exactly one CalendarHeatmap (the active block) when previousBlocks is empty', () => {
     mockEngine.block = ACTIVE_BLOCK;
     mockEngine.dailyScores = DAILY_SCORES;
