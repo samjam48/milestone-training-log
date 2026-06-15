@@ -423,10 +423,10 @@ describe('LogActivityScreen — D3 async save', () => {
 });
 
 // ---------------------------------------------------------------------------
-// UX-B7 — Log Activity picker collapse after selection
+// Log Activity picker collapse after selection
 // ---------------------------------------------------------------------------
 
-describe('LogActivityScreen — UX-B7 activity picker collapse', () => {
+describe('LogActivityScreen — activity picker collapse', () => {
   afterEach(() => {
     cleanup();
   });

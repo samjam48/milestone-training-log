@@ -1,6 +1,5 @@
 /**
- * UX-A5 — DeleteButton call-site integration tests
- * plans/tickets-ux-overhaul-2026-06-12.md
+ * DeleteButton call-site integration tests
  *
  * For each of the four row-trigger call sites:
  *   1. The row delete control is a button with a descriptive aria-label
@@ -14,7 +13,7 @@
  *   C. EditBlockRulesScreen — direct deleteRule call (no confirmation step)
  *   D. GoalsScreen       — inline confirm state pattern (confirmingDelete)
  *
- * These tests FAIL until the UX-A5 implementation exists (the text "Delete"
+ * These tests describe expected behavior (the text "Delete"
  * row triggers are replaced with <DeleteButton> instances).
  */
 
@@ -129,7 +128,7 @@ afterEach(() => {
 // A. LogHistoryScreen — log row delete trigger
 // ---------------------------------------------------------------------------
 
-describe('UX-A5 — LogHistoryScreen: log row delete trigger', () => {
+describe('LogHistoryScreen: log row delete trigger', () => {
   function renderLogHistory(onDeleteLog = vi.fn()) {
     const engine = makeEngine({
       block: ACTIVE_BLOCK,
@@ -215,7 +214,7 @@ describe('UX-A5 — LogHistoryScreen: log row delete trigger', () => {
 // B. SettingsScreen — activity class row delete trigger
 // ---------------------------------------------------------------------------
 
-describe('UX-A5 — SettingsScreen: activity class row delete trigger', () => {
+describe('SettingsScreen: activity class row delete trigger', () => {
   function renderSettings() {
     const engine = makeEngine({
       block: ACTIVE_BLOCK,
@@ -238,8 +237,8 @@ describe('UX-A5 — SettingsScreen: activity class row delete trigger', () => {
 
   it('does NOT render a bare text "Delete" label on the class row trigger', () => {
     renderSettings();
-    // Before UX-A5: SettingsScreen:1299 renders text "Delete" inside the button.
-    // After UX-A5: it must be an icon button with aria-label "Delete Running" etc.
+    // Previous behavior: SettingsScreen:1299 renders text "Delete" inside the button.
+    // Expected behavior: it must be an icon button with aria-label "Delete Running" etc.
     // This test verifies the text-content button is gone.
     // We check that no button whose ONLY accessible name (from text content) is
     // the literal word "Delete" appears as the row trigger.
@@ -280,7 +279,7 @@ describe('UX-A5 — SettingsScreen: activity class row delete trigger', () => {
 // C. EditBlockRulesScreen — rule row delete trigger
 // ---------------------------------------------------------------------------
 
-describe('UX-A5 — EditBlockRulesScreen: rule row delete trigger', () => {
+describe('EditBlockRulesScreen: rule row delete trigger', () => {
   function renderRules(deleteRule = vi.fn()) {
     const engine = makeEngine({
       block: ACTIVE_BLOCK,
@@ -307,8 +306,8 @@ describe('UX-A5 — EditBlockRulesScreen: rule row delete trigger', () => {
 
   it('does NOT render a bare text-content "Delete" button as the row trigger', () => {
     renderRules();
-    // Before UX-A5: EditBlockRulesScreen:205 renders text "Delete".
-    // After UX-A5: must be an icon button with a descriptive aria-label.
+    // Previous behavior: EditBlockRulesScreen:205 renders text "Delete".
+    // Expected behavior: must be an icon button with a descriptive aria-label.
     const buttons = screen.getAllByRole('button');
     const plainDeleteBtns = buttons.filter(
       (btn) => btn.textContent?.trim() === 'Delete',
@@ -334,7 +333,7 @@ describe('UX-A5 — EditBlockRulesScreen: rule row delete trigger', () => {
 // D. GoalsScreen — weekly target row delete trigger (sets confirmingDelete)
 // ---------------------------------------------------------------------------
 
-describe('UX-A5 — GoalsScreen: weekly target row delete trigger', () => {
+describe('GoalsScreen: weekly target row delete trigger', () => {
   function renderGoals() {
     const engine = makeEngine({
       block: ACTIVE_BLOCK,
@@ -361,8 +360,8 @@ describe('UX-A5 — GoalsScreen: weekly target row delete trigger', () => {
 
   it('does NOT render a bare text-content "Delete" button as the row trigger', () => {
     renderGoals();
-    // Before UX-A5: GoalsScreen:444 (inside WeeklyTargetCard) renders text "Delete"
-    // for the row trigger. After UX-A5 the row trigger becomes an icon button.
+    // Previous behavior: GoalsScreen:444 (inside WeeklyTargetCard) renders text "Delete"
+    // for the row trigger. After the delete-control cleanup the row trigger becomes an icon button.
     // Note: once clicked, the inline-confirm "Confirm" button appears instead —
     // the confirm-state itself never said "Delete" (it says "Confirm"), so no
     // exclusion is needed here for the initial render.
@@ -437,7 +436,7 @@ describe('UX-A5 — GoalsScreen: weekly target row delete trigger', () => {
 // Cross-cutting: confirmation-dialog text buttons are NOT converted to icons
 // ---------------------------------------------------------------------------
 
-describe('UX-A5 — confirmation-dialog buttons remain text (edge case guard)', () => {
+describe('confirmation-dialog buttons remain text (edge case guard)', () => {
   it('SettingsScreen:773 "Delete class" confirm button is a text button, not icon-only', async () => {
     const user = userEvent.setup();
     const engine = makeEngine({

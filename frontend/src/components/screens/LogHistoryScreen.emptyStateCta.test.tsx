@@ -1,8 +1,7 @@
 /**
- * UX-A7 — Actionable empty-state cards (LogHistoryScreen)
- * (plans/tickets-ux-overhaul-2026-06-12.md)
+ * Actionable empty-state cards (LogHistoryScreen)
  *
- * These tests FAIL before the UX-A7 implementation exists because:
+ * These tests describe expected behavior:
  *   - The Log History empty state currently has no "Log your first session" button
  *     inside the empty-state region; the only log-activity trigger is the bottom
  *     action bar button ("+ Log Activity"), which is outside the empty state.
@@ -42,7 +41,7 @@ afterEach(() => {
 // AC-1: "Log your first session" button exists in the empty-state region
 // ---------------------------------------------------------------------------
 
-describe('LogHistoryScreen — UX-A7 empty state CTA', () => {
+describe('LogHistoryScreen — empty state CTA', () => {
   it('AC-1: renders a "Log your first session" button inside the empty-state region when there are no logs', () => {
     const engine = createLogHistoryEngine(0);
 

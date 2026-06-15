@@ -1,7 +1,7 @@
 /**
  * Edit Rules compact row behavior.
  *
- * UX-B6: rule rows should compress to one row with switch, label, info,
+ * Rule rows should compress to one row with switch, label, info,
  * controls, and DeleteButton while preserving existing mutations.
  */
 

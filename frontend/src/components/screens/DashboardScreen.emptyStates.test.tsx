@@ -1,8 +1,7 @@
 /**
- * UX-A7 — Actionable empty-state cards (DashboardScreen)
- * (plans/tickets-ux-overhaul-2026-06-12.md)
+ * Actionable empty-state cards (DashboardScreen)
  *
- * These tests FAIL before the UX-A7 implementation exists because:
+ * These tests describe expected behavior:
  *   - The weekly-targets empty branch currently renders a plain muted text node
  *     ("No weekly targets configured."), not an info Card with a CTA.
  *   - The Activity Status section has no empty-state card at all when classStatuses
@@ -23,7 +22,7 @@
  *
  *   AC-9  Copy is product-voiced — no "configured" or "blocks" jargon in empty-state text.
  *
- * Mocking strategy: same pattern as DashboardScreen.uxA1.test.tsx.
+ * Mocking strategy: same pattern as DashboardScreen.checkInCompletionBadge.test.tsx.
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
@@ -36,7 +35,7 @@ import type { TrainingBlock, ActivityClass, ActivityClassStatus } from '../../ty
 import type { WeeklyProgress } from '../../lib/engine';
 
 // ---------------------------------------------------------------------------
-// Shared mocks — same pattern as DashboardScreen.uxA1.test.tsx
+// Shared mocks — same pattern as DashboardScreen.checkInCompletionBadge.test.tsx
 // ---------------------------------------------------------------------------
 
 type DashboardTab = 'today' | 'metrics' | 'safety';
@@ -174,7 +173,7 @@ afterEach(() => {
 // AC-1 – AC-4: Weekly targets empty state
 // ---------------------------------------------------------------------------
 
-describe('DashboardScreen — UX-A7 weekly targets empty state', () => {
+describe('DashboardScreen — weekly targets empty state', () => {
   it('AC-1: shows an info card in the This week section when weeklyProgress is empty', () => {
     setupBase();
     mockEngine.weeklyProgress = [];
@@ -232,7 +231,7 @@ describe('DashboardScreen — UX-A7 weekly targets empty state', () => {
 // AC-5 – AC-8: Activity Status empty state
 // ---------------------------------------------------------------------------
 
-describe('DashboardScreen — UX-A7 activity status empty state', () => {
+describe('DashboardScreen — activity status empty state', () => {
   it('AC-5: shows an info card in the Activity Status section when classStatuses is empty', () => {
     setupBase();
     mockEngine.classStatuses = [];
@@ -286,7 +285,7 @@ describe('DashboardScreen — UX-A7 activity status empty state', () => {
 // AC-9: Copy is product-voiced — no jargon
 // ---------------------------------------------------------------------------
 
-describe('DashboardScreen — UX-A7 empty-state copy quality', () => {
+describe('DashboardScreen — empty-state copy quality', () => {
   it('AC-9a: weekly targets empty state contains no "configured" jargon', () => {
     setupBase();
     mockEngine.weeklyProgress = [];

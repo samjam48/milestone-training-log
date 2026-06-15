@@ -44,10 +44,10 @@ describe('LoadRiskSection — WTL.F5 rule-limit rows grouped by class', () => {
 
     const groups = screen.getAllByTestId(/^load-risk-class-group-/);
     expect(groups).toHaveLength(1);
-    // WTL_F5_CLASS_NAME now appears in both the group header and class-scoped bar labels (UX-A10)
+    // WTL_F5_CLASS_NAME now appears in both the group header and class-scoped bar labels
     expect(within(groups[0]!).getAllByText(WTL_F5_CLASS_NAME).length).toBeGreaterThanOrEqual(1);
 
-    // UX-A10: status rows are suppressed; only bar-mode rows render
+    // Status rows are suppressed; only bar-mode rows render
     const barRowCount = wtlF5FootLoadSummary.ruleLimitRows.filter(
       (r) => r.displayMode !== 'status',
     ).length;
@@ -104,10 +104,10 @@ describe('LoadRiskSection — WTL.F5 fill bars vs rest status copy', () => {
     expect(within(walkRow).getByRole('progressbar')).toBeInTheDocument();
   });
 
-  it('does not render status-mode rows — rest-spacing rows produce no DOM output (UX-A10)', () => {
+  it('does not render status-mode rows — rest-spacing rows produce no DOM output', () => {
     renderLoadRisk(wtlF5FootLoadSummary);
 
-    // UX-A10: status rows render null; the row wrapper must be absent
+    // Status rows render null; the row wrapper must be absent
     expect(
       screen.queryByTestId(`load-risk-rule-row-${wtlF5ClassRestRow.id}`),
     ).not.toBeInTheDocument();

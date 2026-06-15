@@ -1,6 +1,5 @@
 /**
- * UX-A4 — Remove Clean Streak section from Dashboard
- * (plans/tickets-ux-overhaul-2026-06-12.md)
+ * Remove Clean Streak section from Dashboard
  *
  * AC coverage:
  *   1. Dashboard renders with no Clean Streak card / section heading.
@@ -81,7 +80,7 @@ afterEach(() => {
 // AC 1 & 2 — No streak section visible (cleanStreak = 5, non-zero)
 // ---------------------------------------------------------------------------
 
-describe('UX-A4 — Clean Streak section removed from Dashboard', () => {
+describe('Clean Streak section removed from Dashboard', () => {
   it('does not render a "Clean streak" section heading when cleanStreak is non-zero', () => {
     mockEngine.cleanStreak = 5;
     mockEngine.previousBlocks = [];
@@ -141,7 +140,7 @@ describe('UX-A4 — Clean Streak section removed from Dashboard', () => {
 // AC 3 — cleanStreak still exists on the engine result type (compile-time)
 // ---------------------------------------------------------------------------
 
-describe('UX-A4 — cleanStreak field still present on MilestoneEngineResult', () => {
+describe('cleanStreak field still present on MilestoneEngineResult', () => {
   it('cleanStreak is a numeric field on MilestoneEngineResult (type-level check)', () => {
     // This is a compile-time check: if the field is removed from the type,
     // the TypeScript assignment below will fail at `tsc --noEmit`.
@@ -156,7 +155,7 @@ describe('UX-A4 — cleanStreak field still present on MilestoneEngineResult', (
 // AC 4 — Key Dashboard sections still present (no regression)
 // ---------------------------------------------------------------------------
 
-describe('UX-A4 — Remaining Dashboard sections unaffected', () => {
+describe('Remaining Dashboard sections unaffected', () => {
   it('renders the greeting header', () => {
     mockEngine.previousBlocks = [];
     mockEngine.userName = 'Sam';

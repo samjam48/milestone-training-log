@@ -1,5 +1,5 @@
 /**
- * UX-A1 — Check-in completion badge
+ * Check-in completion badge
  *
  * Acceptance criteria:
  *   - hasCheckedInToday === true  → success Card with "Check-in complete" shown;
@@ -11,7 +11,7 @@
  *   - No timestamp string like "Logged at 7:15 AM"; only "Logged today" if any
  *     secondary copy appears at all.
  *
- * These tests FAIL before the UX-A1 implementation exists.
+ * These tests describe expected behavior.
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
@@ -108,10 +108,10 @@ afterEach(() => {
 });
 
 // ---------------------------------------------------------------------------
-// UX-A1 tests
+// Check-in completion badge tests
 // ---------------------------------------------------------------------------
 
-describe('DashboardScreen — UX-A1 check-in completion badge', () => {
+describe('DashboardScreen — check-in completion badge', () => {
   it('shows a success-intent "Check-in complete" card when hasCheckedInToday is true', () => {
     setupBase();
     mockEngine.hasCheckedInToday = true;

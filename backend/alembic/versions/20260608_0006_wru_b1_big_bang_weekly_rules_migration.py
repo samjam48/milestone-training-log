@@ -246,6 +246,7 @@ def _run_big_bang_weekly_rules_migration(connection: Connection) -> None:
         copied_targets = _fetch_weekly_targets(connection, str(legacy_block.id))
 
     _wipe_training_block_graph(connection)
+    _alter_training_blocks_period_default(PERIOD_KIND_WEEKLY_FOCUS)
 
     block_id = f"blk-{uuid4()}"
     focus_series_id = f"fs-{uuid4()}"
@@ -266,22 +267,19 @@ def _run_big_bang_weekly_rules_migration(connection: Connection) -> None:
     )
 
 
+def _alter_training_blocks_period_default(server_default: str) -> None:
+    with op.batch_alter_table("training_blocks") as batch_op:
+        batch_op.alter_column(
+            "period_kind",
+            existing_type=sa.String(),
+            server_default=server_default,
+        )
+
+
 def upgrade() -> None:
     connection = op.get_bind()
     _run_big_bang_weekly_rules_migration(connection)
 
-    with op.batch_alter_table("training_blocks") as batch_op:
-        batch_op.alter_column(
-            "period_kind",
-            existing_type=sa.String(),
-            server_default=PERIOD_KIND_WEEKLY_FOCUS,
-        )
-
 
 def downgrade() -> None:
-    with op.batch_alter_table("training_blocks") as batch_op:
-        batch_op.alter_column(
-            "period_kind",
-            existing_type=sa.String(),
-            server_default="legacy",
-        )
+    _alter_training_blocks_period_default("legacy")

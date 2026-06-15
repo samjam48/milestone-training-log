@@ -1,4 +1,4 @@
-"""Service-level tests for dashboard composition (B5.1)."""
+"""Service-level tests for dashboard composition."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 from fastapi import FastAPI
+from sqlalchemy import text
 from sqlmodel import Session
 
 from app.models.goal import Goal
@@ -400,7 +401,7 @@ def test_get_dashboard_excludes_records_after_as_of(
 
 
 # ---------------------------------------------------------------------------
-# B8.1 — goals field on dashboard
+# Goals field on dashboard
 # ---------------------------------------------------------------------------
 
 
@@ -517,6 +518,14 @@ def test_get_dashboard_skips_recovery_streak_when_activity_missing(
     session: Session,
 ) -> None:
     seed_dashboard_mock_graph(app_with_test_database)
+    seed_activity(
+        app_with_test_database,
+        activity_id="act-does-not-exist",
+        activity_class_id="cls-recovery",
+        name="Deleted recovery activity",
+        activity_type="recovery",
+        is_active=False,
+    )
     seed_recovery_target(
         app_with_test_database,
         target_id="rt-missing-activity",
@@ -526,6 +535,14 @@ def test_get_dashboard_skips_recovery_streak_when_activity_missing(
         frequency_unit="daily",
         current_streak_days=2,
     )
+    for db_session in with_session(app_with_test_database):
+        connection = db_session.connection()
+        connection.execute(text("PRAGMA foreign_keys=OFF"))
+        connection.execute(text("DELETE FROM activities WHERE id = 'act-does-not-exist'"))
+        db_session.commit()
+        connection = db_session.connection()
+        connection.execute(text("PRAGMA foreign_keys=ON"))
+        db_session.commit()
     seed_recovery_target(
         app_with_test_database,
         target_id="rt-stretch",
@@ -543,7 +560,7 @@ def test_get_dashboard_skips_recovery_streak_when_activity_missing(
 
 
 # ---------------------------------------------------------------------------
-# S25.B7 — suggestion_buckets, goal_rows, load_risk_summary in get_dashboard
+# Suggestion buckets, goal rows, and load risk summary in get_dashboard
 # ---------------------------------------------------------------------------
 
 

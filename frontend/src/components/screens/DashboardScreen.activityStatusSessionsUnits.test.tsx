@@ -1,10 +1,10 @@
 /**
- * UX-A3 — Activity status: this-week sessions + units
+ * Activity status: this-week sessions + units
  *
  * Tests that DashboardScreen renders the Activity Status section correctly
- * after the UX-A3 changes.
+ * after the activity status session-summary changes.
  *
- * These tests FAIL before the UX-A3 implementation exists because:
+ * These tests describe expected behavior:
  *   - DashboardScreen still renders `cs.reason` (recency text) as the single
  *     secondary line, not a session-count string.
  *   - No "sessions this week" text is produced.
@@ -25,7 +25,7 @@
  *   AC-G  Singular: "1 session this week" vs plural: "3 sessions this week".
  *   AC-H  StatusDot traffic-light state and nextSafeDate summary unchanged.
  *
- * Mocking strategy: same pattern as DashboardScreen.uxA1.test.tsx.
+ * Mocking strategy: same pattern as DashboardScreen.checkInCompletionBadge.test.tsx.
  * `engine` is provided as a prop; `mockEngine` is mutated per test.
  * `classWeeklySummaries` is the new field the implementer must add to the engine.
  */
@@ -101,7 +101,7 @@ const safeWalkStatus: ActivityClassStatus = {
   state: 'safe',
   label: 'Safe',
   lastDoneDate: '2026-06-10',
-  // reason contains the old recency string; UX-A3 must no longer render it as the secondary line
+  // reason contains the old recency string;  must no longer render it as the secondary line
   reason: 'Last done 2 days ago.',
 };
 
@@ -190,7 +190,7 @@ afterEach(() => {
 // AC-A  No recency strings ("days ago", "Last done today") in Activity Status
 // ---------------------------------------------------------------------------
 
-describe('DashboardScreen — UX-A3 AC-A: no recency strings in Activity Status', () => {
+describe('DashboardScreen — Activity Status AC-A: no recency strings', () => {
   it('does not render "days ago" anywhere in the Activity Status section', () => {
     setupBase();
     mockEngine.classStatuses = [safeWalkStatus];
@@ -219,7 +219,7 @@ describe('DashboardScreen — UX-A3 AC-A: no recency strings in Activity Status'
 // AC-B  Units beside the class title (e.g. "Gentle walk · 5 km")
 // ---------------------------------------------------------------------------
 
-describe('DashboardScreen — UX-A3 AC-B: units beside the class title', () => {
+describe('DashboardScreen — Activity Status AC-B: units beside the class title', () => {
   it('shows units beside the class title when sessions > 0 and single unit', () => {
     setupBase();
     mockEngine.classStatuses = [safeWalkStatus];
@@ -250,7 +250,7 @@ describe('DashboardScreen — UX-A3 AC-B: units beside the class title', () => {
 // AC-C  Safe/clear rows: secondary line is "{n} session(s) this week"
 // ---------------------------------------------------------------------------
 
-describe('DashboardScreen — UX-A3 AC-C: safe row secondary line is session count', () => {
+describe('DashboardScreen — Activity Status AC-C: safe row secondary line is session count', () => {
   it('shows "2 sessions this week" as the secondary line for a safe class', () => {
     setupBase();
     mockEngine.classStatuses = [safeWalkStatus];
@@ -276,7 +276,7 @@ describe('DashboardScreen — UX-A3 AC-C: safe row secondary line is session cou
 // AC-D  Caution/danger rows: show violation reason, not session count
 // ---------------------------------------------------------------------------
 
-describe('DashboardScreen — UX-A3 AC-D: caution/danger rows show violation reason', () => {
+describe('DashboardScreen — Activity Status AC-D: caution/danger rows show violation reason', () => {
   it('shows the violation reason (not session count) for a danger-state row', () => {
     setupBase();
     mockEngine.classStatuses = [dangerWalkStatus];
@@ -307,7 +307,7 @@ describe('DashboardScreen — UX-A3 AC-D: caution/danger rows show violation rea
 // AC-E  Zero sessions: "0 sessions this week"; no "0 km"
 // ---------------------------------------------------------------------------
 
-describe('DashboardScreen — UX-A3 AC-E: zero-session edge case', () => {
+describe('DashboardScreen — Activity Status AC-E: zero-session edge case', () => {
   it('renders "0 sessions this week" for a class with no logs this week', () => {
     setupBase();
     mockEngine.classStatuses = [safeWalkStatus];
@@ -334,7 +334,7 @@ describe('DashboardScreen — UX-A3 AC-E: zero-session edge case', () => {
 // AC-F  Mixed units: session count only, no title unit
 // ---------------------------------------------------------------------------
 
-describe('DashboardScreen — UX-A3 AC-F: mixed-unit class shows session count only', () => {
+describe('DashboardScreen — Activity Status AC-F: mixed-unit class shows session count only', () => {
   it('shows session count but not a volume unit when volumeUnit is null (mixed)', () => {
     setupBase();
     mockEngine.classStatuses = [safeWalkStatus];
@@ -353,7 +353,7 @@ describe('DashboardScreen — UX-A3 AC-F: mixed-unit class shows session count o
 // AC-G  Singular: "1 session this week" vs plural: "3 sessions this week"
 // ---------------------------------------------------------------------------
 
-describe('DashboardScreen — UX-A3 AC-G: singular and plural session strings', () => {
+describe('DashboardScreen — Activity Status AC-G: singular and plural session strings', () => {
   it('renders "1 session this week" (singular) for exactly one session', () => {
     setupBase();
     mockEngine.classStatuses = [safeWalkStatus];
@@ -391,7 +391,7 @@ describe('DashboardScreen — UX-A3 AC-G: singular and plural session strings', 
 // AC-H  StatusDot and nextSafeDate summary are unchanged
 // ---------------------------------------------------------------------------
 
-describe('DashboardScreen — UX-A3 AC-H: StatusDot and nextSafeDate unchanged', () => {
+describe('DashboardScreen — Activity Status AC-H: StatusDot and nextSafeDate unchanged', () => {
   it('still renders the "Safe <date>" chip when nextSafeDate present on a danger row', () => {
     setupBase();
     mockEngine.classStatuses = [dangerWalkStatus]; // has nextSafeDate: '2026-06-14'

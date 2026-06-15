@@ -1,6 +1,5 @@
 /**
- * UX-A8 — Post-incident confirmation cleanup
- * (plans/tickets-ux-overhaul-2026-06-12.md)
+ * Post-incident confirmation cleanup
  *
  * Tests for the `submitted` state branch of LogIncidentScreen:
  * - Headline and body copy present
@@ -35,7 +34,7 @@ async function renderAndSubmit(onComplete = vi.fn()): Promise<void> {
 // Suite
 // ---------------------------------------------------------------------------
 
-describe('LogIncidentScreen — UX-A8 post-incident confirmation cleanup', () => {
+describe('LogIncidentScreen — post-incident confirmation cleanup', () => {
   beforeEach(() => {
     resetMockEngine();
   });

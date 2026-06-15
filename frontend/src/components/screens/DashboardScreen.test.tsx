@@ -520,7 +520,7 @@ describe('DashboardScreen — WTL.F6 remove recovery streaks section', () => {
     expect(screen.queryByText('Recovery streaks')).not.toBeInTheDocument();
   });
 
-  it('does not show clean streak section or recovery streaks when recoveryStreaks has entries (UX-A4)', () => {
+  it('does not show clean streak section or recovery streaks when recoveryStreaks has entries', () => {
     setupDashboardWtlF6({
       recoveryStreaks: [DAILY_RECOVERY_STREAK],
       cleanStreak: 3,

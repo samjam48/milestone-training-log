@@ -1,10 +1,10 @@
 /**
- * UX-A6 — Log Activity: hide volume field when defaultVolumeUnit is 'minutes'
+ * Log Activity: hide volume field when defaultVolumeUnit is 'minutes'
  *
  * Acceptance criteria:
  *   AC1  Volume field hidden for minute-unit activity (create mode)
  *   AC2  Volume field visible for non-minute activity (km) — unaffected
- *   AC3  Submit of minute-unit log sends volumeValue as 0 / omitted (not stale)
+ *   AC3  Submit of minute-unit log sends duration-derived minutes volume
  *   AC4  Edit mode with minute-unit activity: Volume field absent even when
  *         existing log has a non-zero volumeValue
  *   AC5  checkViolations still fires for minute-unit activities (duration-based
@@ -102,7 +102,7 @@ async function fillDuration(
 // AC1 — Volume field hidden for minute-unit activity (create mode)
 // ---------------------------------------------------------------------------
 
-describe('UX-A6 AC1 — Volume field hidden for minute-unit activity (create mode)', () => {
+describe('AC1 — Volume field hidden for minute-unit activity (create mode)', () => {
   afterEach(cleanup);
 
   it('does not render a Volume label after selecting a minute-unit activity', async () => {
@@ -134,7 +134,7 @@ describe('UX-A6 AC1 — Volume field hidden for minute-unit activity (create mod
 // AC2 — Volume field visible for km activity (non-minute)
 // ---------------------------------------------------------------------------
 
-describe('UX-A6 AC2 — Volume field visible for non-minute activity (km)', () => {
+describe('AC2 — Volume field visible for non-minute activity (km)', () => {
   afterEach(cleanup);
 
   it('renders the Volume label after selecting a km activity', async () => {
@@ -161,13 +161,13 @@ describe('UX-A6 AC2 — Volume field visible for non-minute activity (km)', () =
 });
 
 // ---------------------------------------------------------------------------
-// AC3 — Submit of minute-unit log sends volumeValue as 0 / omitted
+// AC3 — Submit of minute-unit log sends duration-derived minutes volume
 // ---------------------------------------------------------------------------
 
-describe('UX-A6 AC3 — Submit minute-unit log does not carry stale volumeValue', () => {
+describe('AC3 — Submit minute-unit log uses duration-derived minutes volume', () => {
   afterEach(cleanup);
 
-  it('submits volumeValue of 0 for a minute-unit activity', async () => {
+  it('submits duration minutes as volumeValue for a minute-unit activity', async () => {
     const user = userEvent.setup();
     const submitLog = vi.fn().mockResolvedValue(undefined);
     renderWithProviders(
@@ -185,11 +185,11 @@ describe('UX-A6 AC3 — Submit minute-unit log does not carry stale volumeValue'
     await waitFor(() => expect(submitLog).toHaveBeenCalledTimes(1));
 
     const draft = submitLog.mock.calls[0]![0];
-    // volumeValue must be 0 or undefined — never a non-zero stale value
-    expect(draft.volumeValue === 0 || draft.volumeValue == null).toBe(true);
+    expect(draft.volumeValue).toBe(30);
+    expect(draft.volumeUnit).toBe('minutes');
   });
 
-  it('does not submit a non-zero volumeValue for a minute-unit activity', async () => {
+  it('keeps durationMinutes and volumeValue aligned for a minute-unit activity', async () => {
     const user = userEvent.setup();
     const submitLog = vi.fn().mockResolvedValue(undefined);
     renderWithProviders(
@@ -207,7 +207,9 @@ describe('UX-A6 AC3 — Submit minute-unit log does not carry stale volumeValue'
     await waitFor(() => expect(submitLog).toHaveBeenCalledTimes(1));
 
     const draft = submitLog.mock.calls[0]![0];
-    expect(draft.volumeValue).not.toBeGreaterThan(0);
+    expect(draft.durationMinutes).toBe(30);
+    expect(draft.volumeValue).toBe(30);
+    expect(draft.volumeUnit).toBe('minutes');
   });
 });
 
@@ -215,7 +217,7 @@ describe('UX-A6 AC3 — Submit minute-unit log does not carry stale volumeValue'
 // AC4 — Edit mode: Volume field absent even when existing log has non-zero volumeValue
 // ---------------------------------------------------------------------------
 
-describe('UX-A6 AC4 — Edit mode: Volume field absent for minute-unit activity', () => {
+describe('AC4 — Edit mode: Volume field absent for minute-unit activity', () => {
   afterEach(cleanup);
 
   const existingMinuteLog: ActivityLog = {
@@ -224,7 +226,7 @@ describe('UX-A6 AC4 — Edit mode: Volume field absent for minute-unit activity'
     activityId: minuteActivity.id,
     loggedDate: TODAY,
     durationMinutes: 30,
-    volumeValue: 30,   // stale non-zero value — must not resurface the field
+    volumeValue: 30,
     volumeUnit: 'minutes' as const,
     rpe: 5 as const,
     postActivityFeel: 'fine' as const,
@@ -258,7 +260,7 @@ describe('UX-A6 AC4 — Edit mode: Volume field absent for minute-unit activity'
     expect(screen.getAllByRole('spinbutton')).toHaveLength(1);
   });
 
-  it('saves volumeValue as 0 (not the stale 30) when saving a minute-unit edit', async () => {
+  it('saves duration minutes as volumeValue when saving a minute-unit edit', async () => {
     const user = userEvent.setup();
     const updateLog = vi.fn().mockResolvedValue(undefined);
 
@@ -276,7 +278,9 @@ describe('UX-A6 AC4 — Edit mode: Volume field absent for minute-unit activity'
     await waitFor(() => expect(updateLog).toHaveBeenCalledTimes(1));
 
     const patch = updateLog.mock.calls[0]![1];
-    expect(patch.volumeValue === 0 || patch.volumeValue == null).toBe(true);
+    expect(patch.durationMinutes).toBe(30);
+    expect(patch.volumeValue).toBe(30);
+    expect(patch.volumeUnit).toBe('minutes');
   });
 });
 
@@ -284,7 +288,7 @@ describe('UX-A6 AC4 — Edit mode: Volume field absent for minute-unit activity'
 // AC5 — checkViolations still fires for minute-unit activities
 // ---------------------------------------------------------------------------
 
-describe('UX-A6 AC5 — checkViolations fires for minute-unit activities', () => {
+describe('AC5 — checkViolations fires for minute-unit activities', () => {
   afterEach(cleanup);
 
   it('calls checkViolations when duration is entered for a minute-unit activity', async () => {
@@ -328,7 +332,7 @@ describe('UX-A6 AC5 — checkViolations fires for minute-unit activities', () =>
     expect(lastCall[3]).toBe(30); // duration
   });
 
-  it('does not pass a non-zero volume to checkViolations for a minute-unit activity', async () => {
+  it('passes duration minutes as volume to checkViolations for a minute-unit activity', async () => {
     const user = userEvent.setup();
     const checkViolations = vi.fn().mockReturnValue([]);
 
@@ -345,8 +349,9 @@ describe('UX-A6 AC5 — checkViolations fires for minute-unit activities', () =>
 
     const calls = checkViolations.mock.calls;
     const lastCall = calls[calls.length - 1]!;
-    // volume arg (index 1) must not be stale non-zero
-    expect(lastCall[1]).toBe(0);
+    // volume arg (index 1) uses duration-derived minutes for minute-unit rules
+    expect(lastCall[1]).toBe(30);
+    expect(lastCall[4]).toBe('minutes');
   });
 });
 
@@ -354,7 +359,7 @@ describe('UX-A6 AC5 — checkViolations fires for minute-unit activities', () =>
 // AC6 — Non-minute activities are completely unaffected
 // ---------------------------------------------------------------------------
 
-describe('UX-A6 AC6 — Non-minute activities unaffected', () => {
+describe('AC6 — Non-minute activities unaffected', () => {
   afterEach(cleanup);
 
   it('shows Volume field for a sessions-unit activity', async () => {

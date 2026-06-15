@@ -1,11 +1,11 @@
 /**
- * UX-A3 — Activity status: this-week sessions + units
+ * Activity status: this-week sessions + units
  *
  * Tests for the derived `computeClassWeeklySummary` engine function that the
  * implementer must add to `lib/engine.ts` (or an equivalent in
  * `useMilestoneEngine`).
  *
- * These tests FAIL before the UX-A3 implementation exists because
+ * These tests describe expected behavior
  * `computeClassWeeklySummary` does not yet exist.
  *
  * Acceptance criteria covered:

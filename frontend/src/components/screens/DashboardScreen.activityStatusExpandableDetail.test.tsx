@@ -1,5 +1,5 @@
 /**
- * UX-B4 — Activity status expandable rule detail
+ * Activity status expandable rule detail
  *
  * These tests describe the ticket acceptance criteria without adding engine or
  * API fields. The detail panel must use ActivityClassStatus.reason and derive
@@ -146,7 +146,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe('DashboardScreen — UX-B4 activity status expandable detail', () => {
+describe('DashboardScreen — activity status expandable detail', () => {
   it('expands a row into an inline detail panel and collapses it when tapped again', async () => {
     const user = userEvent.setup();
     setupBase();

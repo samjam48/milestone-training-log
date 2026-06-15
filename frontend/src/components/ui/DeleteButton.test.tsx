@@ -1,6 +1,5 @@
 /**
- * UX-A5 — Shared DeleteButton (bin icon) for row triggers
- * plans/tickets-ux-overhaul-2026-06-12.md
+ * Shared DeleteButton (bin icon) for row triggers
  *
  * Acceptance criteria (component unit tests — static source analysis):
  *   1. DeleteButton.tsx exists at components/ui/DeleteButton.tsx
@@ -13,10 +12,10 @@
  * Static source analysis is used so the suite can load and produce meaningful
  * failures before the file exists. Vite resolves all imports (including dynamic
  * ones) at transform time, so render tests for this not-yet-created component
- * live in the integration file (DeleteButton.uxA5.test.tsx), which imports only
+ * live in the integration file (DeleteButton.rowTriggerIntegration.test.tsx), which imports only
  * the already-existing screen files.
  *
- * These tests FAIL until the UX-A5 implementation exists.
+ * These tests describe expected behavior.
  */
 
 import { existsSync, readFileSync } from 'node:fs';

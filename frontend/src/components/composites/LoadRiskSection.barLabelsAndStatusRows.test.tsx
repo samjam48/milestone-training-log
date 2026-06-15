@@ -1,6 +1,5 @@
 /**
- * UX-A10 — Load Risk: fix redundant bar-mode label and remove status rows.
- * plans/tickets-ux-overhaul-2026-06-12.md §UX-A10
+ * Load Risk: fix redundant bar-mode label and remove status rows.
  *
  * Acceptance criteria:
  *   AC-1  Class-scoped bar-mode row: ProgressBar label shows row.className, NOT row.label
@@ -94,7 +93,7 @@ function buildSummary(rows: Row[]): LoadRiskSummary {
 // AC-1: Class-scoped bar-mode row uses className as the label, NOT row.label
 // ---------------------------------------------------------------------------
 
-describe('UX-A10 AC-1 — class-scoped bar-mode label shows className', () => {
+describe('AC-1 — class-scoped bar-mode label shows className', () => {
   it('renders row.className as the label for a class-scoped bar-mode row', () => {
     const row = makeClassRow({ id: 'r1' });
     renderWithProviders(<LoadRiskSection loadRiskSummary={buildSummary([row])} />);
@@ -131,7 +130,7 @@ describe('UX-A10 AC-1 — class-scoped bar-mode label shows className', () => {
 // AC-2: Activity-scoped bar-mode row still uses activityName (unchanged)
 // ---------------------------------------------------------------------------
 
-describe('UX-A10 AC-2 — activity-scoped bar-mode label shows activityName', () => {
+describe('AC-2 — activity-scoped bar-mode label shows activityName', () => {
   it('renders row.activityName as the label for an activity-scoped bar-mode row', () => {
     const row = makeActivityRow({ id: 'r2' });
     renderWithProviders(<LoadRiskSection loadRiskSummary={buildSummary([row])} />);
@@ -159,7 +158,7 @@ describe('UX-A10 AC-2 — activity-scoped bar-mode label shows activityName', ()
 // AC-3: displayMode === 'status' rows produce no DOM output
 // ---------------------------------------------------------------------------
 
-describe('UX-A10 AC-3 — status rows are not rendered', () => {
+describe('AC-3 — status rows are not rendered', () => {
   it('renders no DOM node for a status-mode row', () => {
     const row = makeStatusRow({ id: 'r3' });
     renderWithProviders(<LoadRiskSection loadRiskSummary={buildSummary([row])} />);
@@ -191,7 +190,7 @@ describe('UX-A10 AC-3 — status rows are not rendered', () => {
 // AC-4: valueText (right-side) is unchanged for bar-mode rows
 // ---------------------------------------------------------------------------
 
-describe('UX-A10 AC-4 — bar-mode valueText is unchanged', () => {
+describe('AC-4 — bar-mode valueText is unchanged', () => {
   it('shows "Weekly: 1 / 3 sessions" as the right-side valueText on a class-scoped bar row', () => {
     const row = makeClassRow({ id: 'r4' });
     renderWithProviders(<LoadRiskSection loadRiskSummary={buildSummary([row])} />);
@@ -218,7 +217,7 @@ describe('UX-A10 AC-4 — bar-mode valueText is unchanged', () => {
 // AC-5: data-testid, data-display-mode, data-scope, data-activity-id unchanged
 // ---------------------------------------------------------------------------
 
-describe('UX-A10 AC-5 — bar-mode row attributes are unchanged', () => {
+describe('AC-5 — bar-mode row attributes are unchanged', () => {
   it('preserves data-testid and data-display-mode="bar" on a class-scoped bar row', () => {
     const row = makeClassRow({ id: 'r5a' });
     renderWithProviders(<LoadRiskSection loadRiskSummary={buildSummary([row])} />);
@@ -250,7 +249,7 @@ describe('UX-A10 AC-5 — bar-mode row attributes are unchanged', () => {
 // AC-6: A group with ONLY status rows produces no class-group header
 // ---------------------------------------------------------------------------
 
-describe('UX-A10 AC-6 — status-only group suppresses class header', () => {
+describe('AC-6 — status-only group suppresses class header', () => {
   it('does not render a class group header when all rows in that group are status-mode', () => {
     // Two status rows, same class, no bar rows
     const row1 = makeStatusRow({ id: 'r6a', activityClassId: 'cls-status-only' });
@@ -275,7 +274,7 @@ describe('UX-A10 AC-6 — status-only group suppresses class header', () => {
 // AC-7: Mixed group renders bar rows normally; status rows suppressed
 // ---------------------------------------------------------------------------
 
-describe('UX-A10 AC-7 — mixed group: bar rows render, status rows are suppressed', () => {
+describe('AC-7 — mixed group: bar rows render, status rows are suppressed', () => {
   it('renders the bar-mode row and suppresses the status-mode row in the same class group', () => {
     const barRow = makeClassRow({ id: 'r7-bar', activityClassId: 'cls-mixed' });
     const statusRow = makeStatusRow({ id: 'r7-status', activityClassId: 'cls-mixed' });

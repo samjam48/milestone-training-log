@@ -1,5 +1,5 @@
 /**
- * UX-A9 — Block safety map: legend and summary
+ * Block safety map: legend and summary
  *
  * Tests are intentionally failing until production code is updated:
  *   1. Section heading changed from "Block Safety Map" → "Block Progress"
@@ -114,7 +114,7 @@ afterEach(() => {
 // AC1 / AC3 — summary line renders "N / D days without issues"; D = actual day count
 // ---------------------------------------------------------------------------
 
-describe('UX-A9 — summary line', () => {
+describe('summary line', () => {
   it('AC1+AC3: renders "N / D days without issues" where D equals the number of scored days', () => {
     // 8 scored days → D should be 8, N = 5 safe days
     setupActiveBlock(EIGHT_DAY_SCORES);
@@ -141,7 +141,7 @@ describe('UX-A9 — summary line', () => {
 // AC2 — N counts only safe days
 // ---------------------------------------------------------------------------
 
-describe('UX-A9 — N counts only safe days', () => {
+describe('N counts only safe days', () => {
   it('AC2: caution and danger days are not counted as safe', () => {
     // 5 safe, 2 caution, 1 danger → N = 5
     setupActiveBlock(EIGHT_DAY_SCORES);
@@ -159,7 +159,7 @@ describe('UX-A9 — N counts only safe days', () => {
 // AC4 — legend renders 3 items: safe / caution / danger
 // ---------------------------------------------------------------------------
 
-describe('UX-A9 — legend', () => {
+describe('legend', () => {
   it('AC4: renders legend items labelled "safe", "caution", and "danger"', () => {
     setupActiveBlock(EIGHT_DAY_SCORES);
 
@@ -190,7 +190,7 @@ describe('UX-A9 — legend', () => {
 // element carries the expected class substrings that come from those tokens.
 // ---------------------------------------------------------------------------
 
-describe('UX-A9 — legend colour tokens match heatmap cells', () => {
+describe('legend colour tokens match heatmap cells', () => {
   it('AC5: safe legend swatch carries bg-safe class', () => {
     setupActiveBlock(EIGHT_DAY_SCORES);
 
@@ -223,7 +223,7 @@ describe('UX-A9 — legend colour tokens match heatmap cells', () => {
 // AC6 — section heading reads "Block Progress"
 // ---------------------------------------------------------------------------
 
-describe('UX-A9 — section heading', () => {
+describe('section heading', () => {
   it('AC6: section heading text is "Block Progress"', () => {
     setupActiveBlock(EIGHT_DAY_SCORES);
 
@@ -245,7 +245,7 @@ describe('UX-A9 — section heading', () => {
 // AC7 — no active block → summary and legend do NOT render
 // ---------------------------------------------------------------------------
 
-describe('UX-A9 — no active block', () => {
+describe('no active block', () => {
   it('AC7: component returns null when block.id is empty (existing behaviour)', () => {
     // block.id === '' triggers the early return in the existing code
     mockEngine.block = { ...ACTIVE_BLOCK_NO_END, id: '', name: '', startDate: '' };
@@ -282,7 +282,7 @@ describe('UX-A9 — no active block', () => {
 // AC8 — existing heatmap behaviour unchanged
 // ---------------------------------------------------------------------------
 
-describe('UX-A9 — existing heatmap behaviour preserved', () => {
+describe('existing heatmap behaviour preserved', () => {
   it('AC8: CalendarHeatmap still renders with correct startDate, endDate, and scores', () => {
     setupActiveBlock(EIGHT_DAY_SCORES);
 
