@@ -127,7 +127,7 @@ function buildLogDraft(
   notes: string,
   violations: ReturnType<MilestoneEngineResult['checkViolations']>,
 ): LogDraft {
-  const effectiveVolume = selAct?.defaultVolumeUnit === 'minutes' ? 0 : volume;
+  const effectiveVolume = effectiveVolumeValue(selAct?.defaultVolumeUnit, duration, volume);
   return {
     activityId: selectedId,
     loggedDate,
@@ -139,6 +139,14 @@ function buildLogDraft(
     notes: notes || undefined,
     ruleViolationsAtLog: violations.length > 0 ? violations : undefined,
   };
+}
+
+function effectiveVolumeValue(
+  volumeUnit: Activity['defaultVolumeUnit'] | undefined,
+  duration: number,
+  volume: number,
+): number {
+  return volumeUnit === 'minutes' ? duration : volume;
 }
 
 export const LogActivityScreen: React.FC<Props> = ({
@@ -160,6 +168,10 @@ export const LogActivityScreen: React.FC<Props> = ({
   const [selectedId,  setSelectedId]  = React.useState<string>(() => {
     if (editingLog != null) return editingLog.activityId;
     return resolveInitialActivityId(initialActivityId, activities);
+  });
+  const [isPickerCollapsed, setIsPickerCollapsed] = React.useState<boolean>(() => {
+    if (editingLog != null) return true;
+    return resolveInitialActivityId(initialActivityId, activities) !== '';
   });
   const [loggedDate,  setLoggedDate]  = React.useState<ISODate>(
     () => editingLog?.loggedDate ?? todayDate,
@@ -186,10 +198,12 @@ export const LogActivityScreen: React.FC<Props> = ({
   const groups  = React.useMemo(() => groupActivities(activityClasses, activities), [activityClasses, activities]);
   const hasActiveActivities = groups.length > 0;
   const selAct  = activities.find(a => a.id === selectedId);
+  const selClass = activityClasses.find(cls => cls.id === selAct?.activityClassId);
+  const showCollapsedPicker = isPickerCollapsed && selAct != null && selClass != null;
 
   // Live violation check — updates on every relevant input change
   const violations = React.useMemo(() => {
-    const effectiveVolume = selAct?.defaultVolumeUnit === 'minutes' ? 0 : volume;
+    const effectiveVolume = effectiveVolumeValue(selAct?.defaultVolumeUnit, duration, volume);
     if (!selectedId || (effectiveVolume <= 0 && duration <= 0)) return [];
     return checkViolations(
       selectedId,
@@ -267,28 +281,49 @@ export const LogActivityScreen: React.FC<Props> = ({
           <>
         {/* Activity picker */}
         <Card pad="md">
-          <FieldLabel>What did you do?</FieldLabel>
-          <div className="flex flex-col gap-3">
-            {groups.map(({ cls, acts }) => (
-              <div key={cls.id}>
-                <p className="text-label uppercase font-medium text-ink-muted mb-1.5">{cls.name}</p>
-                <div className="flex flex-col divide-y divide-border-subtle rounded-md border border-border overflow-hidden">
-                  {acts.map(act => (
-                    <button key={act.id} type="button" onClick={() => setSelectedId(act.id)}
-                      className={cn('flex items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors duration-snap',
-                        selectedId === act.id ? 'bg-ink/10' : 'bg-bg-sunken hover:bg-bg-overlay')}>
-                      <span className={cn('text-body font-medium', selectedId === act.id ? 'text-ink' : 'text-ink-muted')}>{act.name}</span>
-                      {selectedId === act.id && (
-                        <svg width={16} height={16} viewBox="0 0 16 16" fill="none" className="text-ink shrink-0">
-                          <path d="M3 8l3.5 3.5L13 4" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      )}
-                    </button>
-                  ))}
-                </div>
+          {showCollapsedPicker ? (
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate text-label uppercase font-medium text-ink-muted">{selClass.name}</p>
+                <p className="truncate text-body-lg font-semibold text-ink">{selAct.name}</p>
               </div>
-            ))}
-          </div>
+              <button
+                type="button"
+                onClick={() => setIsPickerCollapsed(false)}
+                className="shrink-0 rounded-md border border-border px-3 py-2 text-body font-semibold text-ink transition-colors duration-snap active:bg-bg-sunken"
+              >
+                Change
+              </button>
+            </div>
+          ) : (
+            <>
+              <FieldLabel>What did you do?</FieldLabel>
+              <div className="flex flex-col gap-3">
+                {groups.map(({ cls, acts }) => (
+                  <div key={cls.id}>
+                    <p className="text-label uppercase font-medium text-ink-muted mb-1.5">{cls.name}</p>
+                    <div className="flex flex-col divide-y divide-border-subtle rounded-md border border-border overflow-hidden">
+                      {acts.map(act => (
+                        <button key={act.id} type="button" onClick={() => {
+                          setSelectedId(act.id);
+                          setIsPickerCollapsed(true);
+                        }}
+                          className={cn('flex items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors duration-snap',
+                            selectedId === act.id ? 'bg-ink/10' : 'bg-bg-sunken hover:bg-bg-overlay')}>
+                          <span className={cn('text-body font-medium', selectedId === act.id ? 'text-ink' : 'text-ink-muted')}>{act.name}</span>
+                          {selectedId === act.id && (
+                            <svg width={16} height={16} viewBox="0 0 16 16" fill="none" className="text-ink shrink-0">
+                              <path d="M3 8l3.5 3.5L13 4" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </Card>
 
         {/* Session details — only show after activity selected */}
