@@ -8,7 +8,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, screen } from '@testing-library/react';
+import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from '../../App';
 import { renderWithProviders } from '../../test/renderWithProviders';
@@ -144,6 +144,93 @@ describe('InlineLogSheet quick-log contract (F9.10)', () => {
     expect(screen.queryByRole('dialog', { name: /quick log/i })).not.toBeInTheDocument();
   });
 
+  it('shows duration without a separate volume stepper for minute-unit quick logs', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(screen.getByRole('button', { name: 'Log stretching' }));
+    const sheet = screen.getByRole('dialog', { name: /quick log — stretching/i });
+
+    expect(within(sheet).getByText('Duration')).toBeInTheDocument();
+    expect(within(sheet).queryByText('Volume')).not.toBeInTheDocument();
+    expect(
+      within(sheet).queryByRole('button', { name: 'Decrease volume' }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(sheet).queryByRole('button', { name: 'Increase volume' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('uses the chosen duration as the submitted minute volume and live-rule volume', async () => {
+    const user = userEvent.setup();
+    const submitLog = vi.mocked(mockEngine.submitLog);
+    const checkViolations = vi.fn().mockReturnValue([]);
+    mockEngine.submitLog = submitLog;
+    mockEngine.checkViolations = checkViolations;
+
+    renderApp();
+
+    await user.click(screen.getByRole('button', { name: 'Log stretching' }));
+    await user.click(screen.getByRole('button', { name: 'Increase' }));
+
+    expect(checkViolations).toHaveBeenLastCalledWith(
+      c63StretchActivity.id,
+      25,
+      5,
+      25,
+      'minutes',
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Log session' }));
+
+    await waitFor(() => expect(submitLog).toHaveBeenCalledTimes(1));
+    expect(submitLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        activityId: c63StretchActivity.id,
+        durationMinutes: 25,
+        volumeValue: 25,
+        volumeUnit: 'minutes',
+      }),
+    );
+  });
+
+  it('resets a minute-unit quick log to the duration default after a previous volume edit', async () => {
+    const user = userEvent.setup();
+    const submitLog = vi.mocked(mockEngine.submitLog);
+    mockEngine.submitLog = submitLog;
+
+    applyC63DashboardFixtures({
+      suggestionBuckets: [c63BandsSuggestion, c63SafeStretchSuggestion],
+      activities: [c63BandsActivity, c63StretchActivity],
+    });
+
+    renderApp();
+
+    await user.click(screen.getByRole('button', { name: 'Log bands' }));
+    await user.click(screen.getByRole('button', { name: 'Increase volume' }));
+    await user.click(screen.getByRole('button', { name: 'Close' }));
+
+    await user.click(screen.getByRole('button', { name: 'Log stretching' }));
+    const sheet = screen.getByRole('dialog', { name: /quick log — stretching/i });
+
+    expect(within(sheet).getAllByText('20')).toHaveLength(1);
+    expect(within(sheet).getByText('min')).toBeInTheDocument();
+    expect(within(sheet).queryByText('Volume')).not.toBeInTheDocument();
+
+    await user.click(within(sheet).getByRole('button', { name: 'Increase' }));
+    await user.click(within(sheet).getByRole('button', { name: 'Log session' }));
+
+    await waitFor(() => expect(submitLog).toHaveBeenCalledTimes(1));
+    expect(submitLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        activityId: c63StretchActivity.id,
+        durationMinutes: 25,
+        volumeValue: 25,
+        volumeUnit: 'minutes',
+      }),
+    );
+  });
+
   it('uses a km default volume of 1 instead of 20 on quick log submit', async () => {
     const user = userEvent.setup();
     const submitLog = vi.mocked(mockEngine.submitLog);
@@ -161,6 +248,43 @@ describe('InlineLogSheet quick-log contract (F9.10)', () => {
 
     await user.click(screen.getByRole('button', { name: 'Log session' }));
 
+    expect(submitLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        activityId: c63WalkActivity.id,
+        volumeValue: 1,
+        volumeUnit: 'km',
+      }),
+    );
+  });
+
+  it('restores the unit-specific volume stepper after switching from minutes to a non-minute quick log', async () => {
+    const user = userEvent.setup();
+    const submitLog = vi.mocked(mockEngine.submitLog);
+    mockEngine.submitLog = submitLog;
+
+    applyC63DashboardFixtures({
+      suggestionBuckets: [c63SafeStretchSuggestion, c63WalkSuggestion],
+      activities: [c63StretchActivity, c63WalkActivity],
+    });
+
+    renderApp();
+
+    await user.click(screen.getByRole('button', { name: 'Log stretching' }));
+    expectQuickLogSheet('Stretching');
+    await user.click(screen.getByRole('button', { name: 'Close' }));
+
+    await user.click(screen.getByRole('button', { name: 'Log walking' }));
+    const sheet = screen.getByRole('dialog', { name: /quick log — walking/i });
+
+    expect(within(sheet).getByText('Volume')).toBeInTheDocument();
+    expect(within(sheet).getByRole('button', { name: 'Decrease volume' })).toBeInTheDocument();
+    expect(within(sheet).getByRole('button', { name: 'Increase volume' })).toBeInTheDocument();
+    expect(within(sheet).getByText('1')).toBeInTheDocument();
+    expect(within(sheet).getByText('km')).toBeInTheDocument();
+
+    await user.click(within(sheet).getByRole('button', { name: 'Log session' }));
+
+    await waitFor(() => expect(submitLog).toHaveBeenCalledTimes(1));
     expect(submitLog).toHaveBeenCalledWith(
       expect.objectContaining({
         activityId: c63WalkActivity.id,
@@ -215,6 +339,42 @@ describe('InlineLogSheet quick-log contract (F9.10)', () => {
     expect(screen.getByRole('alert')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Log anyway' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Log session' })).toBeDisabled();
+  });
+
+  it('resets a danger override when minute-unit duration changes', async () => {
+    const user = userEvent.setup();
+    const dangerViolation: RuleViolationSnapshot = {
+      ruleId: 'rule-minutes-cap',
+      ruleType: 'weekly_volume_cap',
+      severity: 'danger',
+      message: 'Weekly minutes cap exceeded',
+    };
+    const submitLog = vi.mocked(mockEngine.submitLog);
+    const checkViolations = vi.fn().mockReturnValue([dangerViolation]);
+    mockEngine.submitLog = submitLog;
+    mockEngine.checkViolations = checkViolations;
+
+    renderApp();
+
+    await user.click(screen.getByRole('button', { name: 'Log stretching' }));
+    const sheet = screen.getByRole('dialog', { name: /quick log — stretching/i });
+
+    await user.click(within(sheet).getByRole('button', { name: 'Log anyway' }));
+    expect(within(sheet).getByRole('button', { name: 'Log session' })).toBeEnabled();
+
+    await user.click(within(sheet).getByRole('button', { name: 'Increase' }));
+
+    expect(checkViolations).toHaveBeenLastCalledWith(
+      c63StretchActivity.id,
+      25,
+      5,
+      25,
+      'minutes',
+    );
+    expect(within(sheet).getByRole('button', { name: 'Log session' })).toBeDisabled();
+
+    await user.click(within(sheet).getByRole('button', { name: 'Log session' }));
+    expect(submitLog).not.toHaveBeenCalled();
   });
 
   it('does not open the sheet when the suggestion cannot be resolved to an activity', async () => {
