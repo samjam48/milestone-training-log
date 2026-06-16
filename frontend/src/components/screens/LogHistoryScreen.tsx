@@ -76,11 +76,19 @@ const LogRow: React.FC<{
     <div className="flex flex-col gap-2 py-3 px-4">
       <div className="flex items-start justify-between gap-3">
         <span className="min-w-0 flex-1 truncate text-body font-semibold text-ink">{activityName}</span>
-        <div className="flex max-w-[70%] flex-wrap items-center justify-end gap-1.5">
+        <Pill className={feel.color}>{feel.label}</Pill>
+      </div>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-caption text-ink-muted">{log.durationMinutes} min</span>
           {showsVolume && (
             <span className="text-caption text-ink-muted">{log.volumeValue} {log.volumeUnit}</span>
           )}
+          {log.rpe && (
+            <Pill className="bg-bg-sunken text-ink-muted">RPE {log.rpe}</Pill>
+          )}
+        </div>
+        <div className="flex items-center gap-1.5">
           {onEdit != null && (
             <button
               type="button"
@@ -90,10 +98,6 @@ const LogRow: React.FC<{
               Edit
             </button>
           )}
-          {log.rpe && (
-            <Pill className="bg-bg-sunken text-ink-muted">RPE {log.rpe}</Pill>
-          )}
-          <Pill className={feel.color}>{feel.label}</Pill>
           {onDelete != null && (
             <DeleteButton
               aria-label={`Delete ${activityName} log`}

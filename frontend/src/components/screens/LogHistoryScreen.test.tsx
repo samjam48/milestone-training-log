@@ -497,7 +497,7 @@ describe('LogHistoryScreen — row meta layout', () => {
     );
   }
 
-  it('keeps title and the right-side meta/action group on the first row in the documented order', () => {
+  it('puts the title and the status pill together on line 1, right-aligned, with nothing else on that line', () => {
     const log = makeLog({
       id: 'log-layout',
       loggedDate: '2026-05-20',
@@ -511,22 +511,87 @@ describe('LogHistoryScreen — row meta layout', () => {
     renderLogHistoryWithRows({ logs: [log] });
 
     const title = screen.getByText('Morning Walk');
-    const titleRow = title.closest('div');
-    expect(titleRow).not.toBeNull();
+    const statusPill = screen.getByText('Bad');
+    const titleLine = title.closest('div');
+    expect(titleLine).not.toBeNull();
 
-    expect(within(titleRow as HTMLElement).getByText('30 min')).toBeInTheDocument();
-    expect(within(titleRow as HTMLElement).getByText('3 km')).toBeInTheDocument();
+    // Title line contains the title and the status pill...
+    expect(within(titleLine as HTMLElement).getByText('Morning Walk')).toBeInTheDocument();
+    expect(within(titleLine as HTMLElement).getByText('Bad')).toBeInTheDocument();
 
-    const editButton = within(titleRow as HTMLElement).getByRole('button', { name: 'Edit' });
-    const rpePill = within(titleRow as HTMLElement).getByText('RPE 5');
-    const statusPill = within(titleRow as HTMLElement).getByText('Bad');
-    const deleteButton = within(titleRow as HTMLElement).getByRole('button', {
-      name: 'Delete Morning Walk log',
+    // ...and nothing else: duration/volume/RPE/Edit/delete are not on line 1.
+    expect(within(titleLine as HTMLElement).queryByText('30 min')).not.toBeInTheDocument();
+    expect(within(titleLine as HTMLElement).queryByText('3 km')).not.toBeInTheDocument();
+    expect(within(titleLine as HTMLElement).queryByText('RPE 5')).not.toBeInTheDocument();
+    expect(within(titleLine as HTMLElement).queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+    expect(
+      within(titleLine as HTMLElement).queryByRole('button', { name: 'Delete Morning Walk log' }),
+    ).not.toBeInTheDocument();
+
+    expect(title.compareDocumentPosition(statusPill)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
+  it('groups duration/volume/RPE on the left of line 2 and Edit/delete on the right, with delete furthest right overall', () => {
+    const log = makeLog({
+      id: 'log-layout',
+      loggedDate: '2026-05-20',
+      durationMinutes: 30,
+      volumeValue: 3,
+      volumeUnit: 'km',
+      rpe: 5 as RPE,
+      postActivityFeel: 'bad',
     });
 
-    expect(editButton.compareDocumentPosition(rpePill)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(rpePill.compareDocumentPosition(statusPill)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    renderLogHistoryWithRows({ logs: [log] });
+
+    const durationText = screen.getByText('30 min');
+    const volumeText = screen.getByText('3 km');
+    const rpePill = screen.getByText('RPE 5');
+    const editButton = screen.getByRole('button', { name: 'Edit' });
+    const deleteButton = screen.getByRole('button', { name: 'Delete Morning Walk log' });
+    const statusPill = screen.getByText('Bad');
+
+    // Duration/volume/RPE share a left-aligned meta group.
+    const metaGroup = durationText.closest('div');
+    expect(metaGroup).not.toBeNull();
+    expect(within(metaGroup as HTMLElement).getByText('3 km')).toBeInTheDocument();
+    expect(within(metaGroup as HTMLElement).getByText('RPE 5')).toBeInTheDocument();
+    expect(within(metaGroup as HTMLElement).queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+    expect(
+      within(metaGroup as HTMLElement).queryByRole('button', { name: 'Delete Morning Walk log' }),
+    ).not.toBeInTheDocument();
+    expect(within(metaGroup as HTMLElement).queryByText('Bad')).not.toBeInTheDocument();
+
+    // Edit/delete share a right-aligned actions group, distinct from the meta group.
+    const actionsGroup = editButton.closest('div');
+    expect(actionsGroup).not.toBeNull();
+    expect(actionsGroup).not.toBe(metaGroup);
+    expect(within(actionsGroup as HTMLElement).getByRole('button', { name: 'Delete Morning Walk log' })).toBeInTheDocument();
+    expect(within(actionsGroup as HTMLElement).queryByText('30 min')).not.toBeInTheDocument();
+    expect(within(actionsGroup as HTMLElement).queryByText('RPE 5')).not.toBeInTheDocument();
+
+    // Meta group and actions group share a common line-2 parent that is distinct from line 1.
+    const line2 = metaGroup!.parentElement;
+    expect(line2).not.toBeNull();
+    expect(line2!.contains(actionsGroup as HTMLElement)).toBe(true);
+    expect(within(line2 as HTMLElement).queryByText('Morning Walk')).not.toBeInTheDocument();
+    expect(within(line2 as HTMLElement).queryByText('Bad')).not.toBeInTheDocument();
+
+    // Within line 2, the meta group precedes the actions group (left-aligned before right-aligned).
+    expect(metaGroup!.compareDocumentPosition(actionsGroup as HTMLElement)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+
+    // Edit precedes delete within the actions group.
+    expect(editButton.compareDocumentPosition(deleteButton)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+
+    // Delete is the furthest-right / visually last interactive element in the whole row:
+    // it comes after the status pill (line 1) in DOM order, and after every other
+    // meta/action element on line 2.
     expect(statusPill.compareDocumentPosition(deleteButton)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(durationText.compareDocumentPosition(deleteButton)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(volumeText.compareDocumentPosition(deleteButton)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(rpePill.compareDocumentPosition(deleteButton)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
   it('shows duration only for minute-unit logs and for logs without a positive usable volume', () => {
