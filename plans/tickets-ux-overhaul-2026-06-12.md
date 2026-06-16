@@ -539,6 +539,97 @@ Larger changes. Work one area at a time; commit each before the next. Still fron
 
 ---
 
+## Group C — UX Follow-Up Polish
+
+Owner review after completing Group A/B surfaced three small usability corrections. These are part of the same UX overhaul PR and are frontend-only. No API, backend, schema, or shared state changes.
+
+---
+
+### UX-C1: Quick Log — hide minute-unit volume control
+
+**Type:** Frontend
+
+**Problem:** Quick Log still shows a separate Volume control for activities whose volume unit is `minutes`. This duplicates Duration in the same way UX-A6 already fixed on the full Log Activity screen.
+
+**Reuse/Extend:**
+- Reuse the minute-unit behavior from `LogActivityScreen.tsx`: minute-unit activities do not show a separate Volume input, but their submitted `volumeValue` remains derived from `duration`.
+- Edit `InlineLogSheet.tsx`. Do not introduce a new shared form abstraction; this is a local parity fix between the quick-log sheet and the full log form.
+- Stored minute unit token is `minutes`.
+- Keep `checkViolations` fed with the effective volume so minute-based daily/weekly volume rules still evaluate during quick log.
+
+**Acceptance criteria:**
+- When the quick-log activity has `defaultVolumeUnit === 'minutes'`, the sheet shows Duration but no separate Volume stepper.
+- Submitting a minute-unit quick log sends `durationMinutes` equal to the chosen duration.
+- Submitting a minute-unit quick log sends `volumeValue` equal to the chosen duration and `volumeUnit` equal to `minutes`.
+- Live rule-violation checking for minute-unit activities uses the chosen duration as the effective volume.
+- Non-minute units (`km`, `sets`, `reps`, etc.) still show the Volume stepper and keep their current defaults and increments.
+
+**Edge cases:**
+- Opening quick log for a minute-unit activity resets the duration to the existing quick-log default and does not keep a stale hidden volume from a previous activity.
+- Switching from a minute-unit quick log to a non-minute quick log restores the Volume stepper with the existing unit-specific default.
+- Danger override behavior and save-error handling are unchanged.
+
+---
+
+### UX-C2: Log History — single-line row meta and no duplicate minute volume
+
+**Type:** Frontend
+
+**Problem:** Each Log History row currently spreads key details over several lines: activity title on the left, Edit/RPE/status/delete slightly lower on the right, and duration/volume below the title. Minute-unit logs also duplicate the same value as both duration and volume (for example, `20 min · 20 minutes`).
+
+**Reuse/Extend:**
+- Edit the page-local `LogRow` in `LogHistoryScreen.tsx`.
+- Reuse the existing `DeleteButton`, `Pill`, `feelLabel`, violation message rendering, and activity-name lookup.
+- This is a display-only change. Do not change the log data model, API mappers, or stored minute-unit values.
+
+**Acceptance criteria:**
+- A log row's first line contains the activity title on the left and a right-aligned metadata/action group on the same visual line.
+- The right-aligned group includes, in order: duration, optional non-minute volume, Edit action when available, RPE pill when available, status pill, and delete icon.
+- The status pill (`Fine`, `Discomfort`, `Bad`) is on the same line as the title and right aligned with the rest of the metadata/action group.
+- The delete icon is the furthest-right item in the row.
+- Minute-unit logs show duration only (for example, `20 min`) and do not also show `20 minutes`.
+- Non-minute logs still show duration plus volume (for example, `30 min · 3 km`).
+- Existing violation message rendering stays beneath the title/meta line.
+- Incident rows from UX-B1 are unchanged.
+
+**Edge cases:**
+- Long activity titles truncate rather than pushing right-side metadata/actions out of the row.
+- On narrow screens, the right-side group may wrap as a group if needed, but the title, status pill, and delete action must remain visually coherent and the delete icon remains last.
+- Logs with no RPE omit the RPE pill without leaving an awkward gap.
+- Logs with `volumeValue <= 0` or no `volumeUnit` show duration only.
+
+---
+
+### UX-C3: Edit Rules — two-line mobile row layout
+
+**Type:** Frontend
+
+**Problem:** UX-B6 made rule rows compact, but the one-line layout is too dense on mobile. The number input, unit, plus/minus buttons, toggle, title, info, and delete control compete for one row.
+
+**Reuse/Extend:**
+- Edit the existing `RuleRow` in `EditBlockRulesScreen.tsx`; keep the work scoped to the row component.
+- Reuse the existing inline switch markup, `DeleteButton`, helper/info affordance, threshold draft state, unit select, and increment/decrement handlers.
+- Do not introduce a new shared stepper component unless the Implementer finds the same pattern is already shared elsewhere and can be extended cleanly.
+
+**Acceptance criteria:**
+- Each rule row uses two visual lines:
+  - Line 1: rule title and info affordance on the left; enabled/disabled toggle on the far right.
+  - Line 2: threshold controls centered as a group; delete icon on the far right.
+- The threshold control order is `minus button`, `number input`, `plus button`, then unit.
+- For volume-cap rules, the unit select appears to the right of the plus button.
+- For non-volume rules, the static unit label appears to the right of the plus button.
+- The number input is sized for mobile use without reserving unnecessary native spinner/hover space; explicit plus/minus buttons remain the primary adjustment controls.
+- Toggle, threshold edit, unit selection, increment/decrement, helper info, and delete behavior are unchanged.
+- Disabled rules still show the first line and delete control; the threshold controls are hidden or visually inactive consistently with the current disabled behavior.
+
+**Edge cases:**
+- Long class/rule/exercise labels truncate on the first line and do not push the toggle off-screen.
+- The centered threshold group remains centered even when the unit label/select has different widths (`days`, `x/wk`, `minutes`).
+- The delete button remains reachable as a 44px touch target and does not shift the centered threshold group.
+- The helper info affordance remains usable on touch, not hover-only.
+
+---
+
 ## Backlog Additions
 
 To append to `plans/BACKLOG.md` (already drafted in the same commit as this plan):
@@ -552,7 +643,7 @@ To append to `plans/BACKLOG.md` (already drafted in the same commit as this plan
 
 ## Ticket Order (commit sequence) & Rationale
 
-Quick wins first (low risk, immediate user-visible clarity, no cross-ticket coupling), then structural. Within Group B the ordering encodes real dependencies.
+Quick wins first (low risk, immediate user-visible clarity, no cross-ticket coupling), then structural. Group C follows the completed/near-complete Group A/B work because it depends on the resulting screens and shared primitives.
 
 ```
 Group A (independent quick wins):
@@ -577,9 +668,14 @@ UX-B6  edit rules compact row            ← depends on UX-A5
 UX-B7  log activity collapse picker
 UX-B8  load risk guidance strip          ← consumed by UX-B9 Safety tab
 UX-B9  dashboard sub-tabs                ← last; composes A1, A9, B4, B8
+
+Group C (follow-up polish, after A/B):
+UX-C1  quick-log minute-unit parity      ← mirrors UX-A6 for InlineLogSheet
+UX-C2  log-history row meta layout       ← builds on B1/B2 + A5 DeleteButton
+UX-C3  edit-rules two-line row layout    ← refines B6, depends on A5
 ```
 
-**Dependencies:** A5→B6; A9/B4/B8→B9; B1→B2; B3(Part 2)→B5.
+**Dependencies:** A5→B6; A9/B4/B8→B9; B1→B2; B3(Part 2)→B5; A6→C1 conceptually; A5/B1/B2→C2; A5/B6→C3.
 
 ---
 
@@ -589,6 +685,7 @@ UX-B9  dashboard sub-tabs                ← last; composes A1, A9, B4, B8
 2. **UX-B3 Part 1 (production deletion)** → ✅ **Approved.** Owner-run or owner-approved; not executed autonomously.
 3. **UX-B9 vs 4-tile preference** → ✅ **3-tab split approved**, provided the Today tab carries the at-a-glance overview (check-in, suggestions, load-risk indicator).
 4. **UX-A3 secondary line** → ✅ **One line only: "{n} sessions this week"**, plus **units completed this week beside the title** (e.g. "5 km"). Drop the recency phrase. See UX-A3 for the mixed-unit edge case (the one remaining sub-decision: omit title units when a class logged mixed units this week — flag if mixed-unit classes turn out common).
+5. **Group C follow-up polish** → ✅ **Approved 2026-06-15.** Quick Log hides minute-unit volume while submitting duration as effective volume; Log History status pill stays on the title line and right aligned; Edit Rules uses a two-line mobile row with unit after the plus button.
 
 **No open blockers remain.** The plan is ready for Test Writer handoff.
 
@@ -600,6 +697,7 @@ UX-B9  dashboard sub-tabs                ← last; composes A1, A9, B4, B8
 - **Only UX-B3 touches backend/schema/data** (Parts 1 & 3 — both owner-approved: orphan cleanup + `ON DELETE CASCADE` migration). Every other ticket is frontend-only — no `api-map.md` / `database-schema.md` changes. Note UX-A3 adds a derived this-week computation in the engine layer, but no API/schema change.
 - Reuse `SegmentedControl` (tabs) and the existing inline rule switch markup — do not build new toggle/tab primitives.
 - `DeleteButton` (UX-A5) is the one new shared primitive; it is reused by UX-B6.
+- Group C is frontend-only follow-up polish. Keep C1 local to `InlineLogSheet`, C2 local to `LogHistoryScreen`, and C3 local to `EditBlockRulesScreen`.
 - TDD gate applies per `AGENTS.md`: failing test before code; targeted tests green before each ticket commit; `make test` green before handoff.
 - Test names describe behaviour, not ticket IDs (`docs/patterns.md` "Test naming").
 - Out-of-scope findings go to `plans/BACKLOG.md`, not into these tickets.

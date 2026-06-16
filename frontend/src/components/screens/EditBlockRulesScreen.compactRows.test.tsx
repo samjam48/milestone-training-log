@@ -1,8 +1,8 @@
 /**
  * Edit Rules compact row behavior.
  *
- * Rule rows should compress to one row with switch, label, info,
- * controls, and DeleteButton while preserving existing mutations.
+ * Rule rows should use a two-line mobile layout while preserving existing
+ * mutations.
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -105,6 +105,20 @@ function expectBefore(left: Element, right: Element): void {
   expect(left.compareDocumentPosition(right) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
 }
 
+function getRuleShell(labelText: string): HTMLElement {
+  const label = screen.getByText(labelText);
+  const rowShell = label.closest('.px-3');
+  expect(rowShell).toBeInstanceOf(HTMLElement);
+  return rowShell as HTMLElement;
+}
+
+function getFirstLine(rowShell: HTMLElement, labelText: string): HTMLElement {
+  const label = within(rowShell).getByText(labelText);
+  const firstLine = label.parentElement?.parentElement;
+  expect(firstLine).toBeInstanceOf(HTMLElement);
+  return firstLine as HTMLElement;
+}
+
 afterEach(() => {
   cleanup();
   resetMockEngine();
@@ -112,27 +126,134 @@ afterEach(() => {
 });
 
 describe('EditBlockRulesScreen compact rule rows', () => {
-  it('orders each row as switch, label, info, value controls, then delete', () => {
+  it('uses a two-line row: title and info on line 1 with the switch far right, controls and delete on line 2', () => {
     renderRules();
 
-    const label = screen.getByText(P25_6_RULE_LABELS.rest_between_class);
-    const switchControl = screen.getByRole('switch', {
+    const rowShell = getRuleShell(P25_6_RULE_LABELS.rest_between_class);
+    const firstLine = getFirstLine(rowShell, P25_6_RULE_LABELS.rest_between_class);
+    const switchControl = within(rowShell).getByRole('switch', {
       name: `${P25_6_RULE_LABELS.rest_between_class} enabled`,
     });
-    const infoControl = screen.getByRole('button', {
+    const infoControl = within(rowShell).getByRole('button', {
       name: /minimum days between sessions info/i,
     });
-    const thresholdInput = screen.getByRole('spinbutton', {
+    const thresholdInput = within(rowShell).getByRole('spinbutton', {
       name: P25_6_RULE_LABELS.rest_between_class,
     });
-    const deleteControl = screen.getByRole('button', {
+    const deleteControl = within(rowShell).getByRole('button', {
       name: /delete minimum days between sessions rule/i,
     });
 
-    expectBefore(switchControl, label);
-    expectBefore(label, infoControl);
-    expectBefore(infoControl, thresholdInput);
-    expectBefore(thresholdInput, deleteControl);
+    expect(within(firstLine).getByText(P25_6_RULE_LABELS.rest_between_class)).toBeInTheDocument();
+    expect(within(firstLine).getByRole('button', {
+      name: /minimum days between sessions info/i,
+    })).toBe(infoControl);
+    expect(within(firstLine).getByRole('switch', {
+      name: `${P25_6_RULE_LABELS.rest_between_class} enabled`,
+    })).toBe(switchControl);
+    expect(within(firstLine).queryByRole('spinbutton')).not.toBeInTheDocument();
+    expect(within(firstLine).queryByRole('button', {
+      name: /delete minimum days between sessions rule/i,
+    })).not.toBeInTheDocument();
+    expect(firstLine).toHaveClass('justify-between');
+
+    const secondLine = thresholdInput.closest('.w-full');
+    expect(secondLine).toBeInstanceOf(HTMLElement);
+    expect(secondLine).not.toBe(firstLine);
+    expect(within(secondLine as HTMLElement).getByRole('spinbutton', {
+      name: P25_6_RULE_LABELS.rest_between_class,
+    })).toBe(thresholdInput);
+    expect(within(secondLine as HTMLElement).getByRole('button', {
+      name: /delete minimum days between sessions rule/i,
+    })).toBe(deleteControl);
+  });
+
+  it('orders threshold controls as minus, input, plus, then unit for static and volume units', () => {
+    renderRules({
+      rules: [RULE_REST, RULE_WEEKLY_VOLUME],
+    });
+
+    const restShell = getRuleShell(P25_6_RULE_LABELS.rest_between_class);
+    const restMinus = within(restShell).getByRole('button', {
+      name: /decrease minimum days between sessions/i,
+    });
+    const restInput = within(restShell).getByRole('spinbutton', {
+      name: P25_6_RULE_LABELS.rest_between_class,
+    });
+    const restPlus = within(restShell).getByRole('button', {
+      name: /increase minimum days between sessions/i,
+    });
+    const restUnit = within(restShell).getByText('days');
+
+    expectBefore(restMinus, restInput);
+    expectBefore(restInput, restPlus);
+    expectBefore(restPlus, restUnit);
+
+    const volumeShell = getRuleShell(ACTIVITY_LONG_WALK.name);
+    const volumeMinus = within(volumeShell).getByRole('button', {
+      name: /decrease maximum volume per week/i,
+    });
+    const volumeInput = within(volumeShell).getByRole('spinbutton', {
+      name: ACTIVITY_LONG_WALK.name,
+    });
+    const volumePlus = within(volumeShell).getByRole('button', {
+      name: /increase maximum volume per week/i,
+    });
+    const volumeUnit = within(volumeShell).getByRole('combobox', {
+      name: /volume unit/i,
+    });
+
+    expectBefore(volumeMinus, volumeInput);
+    expectBefore(volumeInput, volumePlus);
+    expectBefore(volumePlus, volumeUnit);
+  });
+
+  it('centers the threshold group independently from the delete action and uses mobile-sized numeric input', () => {
+    renderRules({
+      rules: [RULE_REST, RULE_WEEKLY_VOLUME],
+    });
+
+    const restShell = getRuleShell(P25_6_RULE_LABELS.rest_between_class);
+    const restInput = within(restShell).getByRole('spinbutton', {
+      name: P25_6_RULE_LABELS.rest_between_class,
+    });
+    const restDelete = within(restShell).getByRole('button', {
+      name: /delete minimum days between sessions rule/i,
+    });
+    const restControls = restInput.closest('.mx-auto');
+    const restSecondLine = restInput.closest('.grid');
+    expect(restControls).toBeInstanceOf(HTMLElement);
+    expect(restSecondLine).toBeInstanceOf(HTMLElement);
+    expect(restSecondLine).toHaveClass(
+      'grid-cols-[2.75rem_minmax(0,1fr)_2.75rem]',
+    );
+    expect((restSecondLine as HTMLElement).children).toHaveLength(3);
+    expect((restSecondLine as HTMLElement).children[0]).toHaveAttribute('aria-hidden', 'true');
+    expect((restSecondLine as HTMLElement).children[1]).toBe(restControls);
+    expect((restSecondLine as HTMLElement).children[2]).toContainElement(restDelete);
+    expect(restControls).not.toContainElement(restDelete);
+    expect(restInput.className).toMatch(/appearance-none|\[appearance:textfield\]/);
+
+    const volumeShell = getRuleShell(ACTIVITY_LONG_WALK.name);
+    const volumeInput = within(volumeShell).getByRole('spinbutton', {
+      name: ACTIVITY_LONG_WALK.name,
+    });
+    const volumeDelete = within(volumeShell).getByRole('button', {
+      name: /delete very long loaded uphill treadmill walking progression rule/i,
+    });
+    const volumeControls = volumeInput.closest('.mx-auto');
+    const volumeSecondLine = volumeInput.closest('.grid');
+    expect(volumeControls).toBeInstanceOf(HTMLElement);
+    expect(volumeSecondLine).toBeInstanceOf(HTMLElement);
+    expect(volumeSecondLine).toHaveClass(
+      'grid-cols-[2.75rem_minmax(0,1fr)_2.75rem]',
+    );
+    expect((volumeSecondLine as HTMLElement).children).toHaveLength(3);
+    expect((volumeSecondLine as HTMLElement).children[0]).toHaveAttribute('aria-hidden', 'true');
+    expect((volumeSecondLine as HTMLElement).children[1]).toBe(volumeControls);
+    expect((volumeSecondLine as HTMLElement).children[2]).toContainElement(volumeDelete);
+    expect(volumeControls).not.toContainElement(volumeDelete);
+    expect(volumeInput.className).toMatch(/appearance-none|\[appearance:textfield\]/);
   });
 
   it('moves helper copy out of permanent row text and exposes it through a touch-reachable info control', async () => {
@@ -148,6 +269,7 @@ describe('EditBlockRulesScreen compact rule rows', () => {
       name: /minimum days between sessions info/i,
     });
     expect(infoControl).toHaveAttribute('aria-label');
+    expect(infoControl).toHaveClass('h-11', 'w-11');
 
     await user.click(infoControl);
 
@@ -225,12 +347,27 @@ describe('EditBlockRulesScreen compact rule rows', () => {
       rules: [RULE_REST_DISABLED],
     });
 
-    const switchControl = screen.getByRole('switch', {
+    const rowShell = getRuleShell(P25_6_RULE_LABELS.rest_between_class);
+    const firstLine = getFirstLine(rowShell, P25_6_RULE_LABELS.rest_between_class);
+    const switchControl = within(rowShell).getByRole('switch', {
       name: `${P25_6_RULE_LABELS.rest_between_class} enabled`,
+    });
+    const deleteControl = within(rowShell).getByRole('button', {
+      name: /delete minimum days between sessions rule/i,
     });
 
     expect(switchControl).toHaveAttribute('aria-checked', 'false');
     expect(switchControl).toHaveClass('bg-border-strong');
+    expect(within(firstLine).getByRole('switch', {
+      name: `${P25_6_RULE_LABELS.rest_between_class} enabled`,
+    })).toBe(switchControl);
+    expect(within(firstLine).queryByRole('button', {
+      name: /delete minimum days between sessions rule/i,
+    })).not.toBeInTheDocument();
+    expect(deleteControl).toBeInTheDocument();
+    expect(deleteControl.closest('.grid')).toHaveClass(
+      'grid-cols-[2.75rem_minmax(0,1fr)_2.75rem]',
+    );
     expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /increase/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /decrease/i })).not.toBeInTheDocument();
@@ -241,41 +378,44 @@ describe('EditBlockRulesScreen compact rule rows', () => {
       rules: [RULE_WEEKLY_VOLUME],
     });
 
-    const label = screen.getByText(ACTIVITY_LONG_WALK.name);
-    const rowShell = label.closest('.px-3');
-    expect(rowShell).toBeInstanceOf(HTMLElement);
+    const rowShell = getRuleShell(ACTIVITY_LONG_WALK.name);
+    const label = within(rowShell).getByText(ACTIVITY_LONG_WALK.name);
+    const firstLine = getFirstLine(rowShell, ACTIVITY_LONG_WALK.name);
     expect(rowShell).toHaveClass('pl-8');
 
-    const row = within(rowShell as HTMLElement)
-      .getByRole('switch', { name: `${P25_6_RULE_LABELS.weekly_volume_cap} enabled` })
-      .closest('.min-w-0');
-    expect(row).toBeInstanceOf(HTMLElement);
-
-    const controls = within(row as HTMLElement)
+    const controls = within(rowShell)
       .getByRole('spinbutton', { name: ACTIVITY_LONG_WALK.name })
-      .closest('div');
+      .closest('.mx-auto');
     expect(controls).toBeInstanceOf(HTMLElement);
 
-    const deleteControl = within(row as HTMLElement).getByRole('button', {
+    const deleteControl = within(rowShell).getByRole('button', {
       name: /delete very long loaded uphill treadmill walking progression rule/i,
+    });
+    const switchControl = within(rowShell).getByRole('switch', {
+      name: `${P25_6_RULE_LABELS.weekly_volume_cap} enabled`,
     });
 
     expect(label).toHaveClass('truncate');
+    expect(within(firstLine).getByText(ACTIVITY_LONG_WALK.name)).toBe(label);
+    expect(within(firstLine).getByRole('switch', {
+      name: `${P25_6_RULE_LABELS.weekly_volume_cap} enabled`,
+    })).toBe(switchControl);
+    expect(firstLine).toHaveClass('justify-between');
     expect(deleteControl).toHaveClass('min-w-11');
 
-    const rowClasses = (row as HTMLElement).className;
     const controlsClasses = (controls as HTMLElement).className;
 
-    expect(rowClasses).toMatch(/\bmin-w-0\b/);
-    expect(rowClasses).toMatch(/\bflex\b/);
-    expect(rowClasses).toMatch(/\bitems-center\b/);
+    expect(firstLine.className).toMatch(/\bmin-w-0\b/);
+    expect(firstLine.className).toMatch(/\bflex\b/);
+    expect(firstLine.className).toMatch(/\bitems-center\b/);
 
     // jsdom does not calculate the 375px overflow. Instead, this rendered test
     // asserts the narrow-row structure must have a concrete escape hatch for the
-    // indented volume-cap case: responsive wrapping, responsive controls
-    // placement, or a compact controls group that is not always-inline at xs.
-    expect(`${rowClasses} ${controlsClasses}`).toMatch(
-      /\b(?:flex-wrap|flex-col|basis-full|w-full|sm:flex-nowrap|sm:basis-auto|max-sm:|min-\[|xs:)\b/,
+    // indented volume-cap case: a first line where the label may truncate before
+    // the switch, and a centered controls group that is independent of delete.
+    expect(`${firstLine.className} ${controlsClasses}`).toMatch(
+      /\b(?:justify-between|mx-auto|grid|absolute|w-full|sm:)\b/,
     );
+    expect(controls).not.toContainElement(deleteControl);
   });
 });
