@@ -571,7 +571,7 @@ Owner review after completing Group A/B surfaced three small usability correctio
 
 ---
 
-### UX-C2: Log History — single-line row meta and no duplicate minute volume
+### UX-C2: Log History — two-line row meta and no duplicate minute volume
 
 **Type:** Frontend
 
@@ -582,19 +582,18 @@ Owner review after completing Group A/B surfaced three small usability correctio
 - Reuse the existing `DeleteButton`, `Pill`, `feelLabel`, violation message rendering, and activity-name lookup.
 - This is a display-only change. Do not change the log data model, API mappers, or stored minute-unit values.
 
-**Acceptance criteria:**
-- A log row's first line contains the activity title on the left and a right-aligned metadata/action group on the same visual line.
-- The right-aligned group includes, in order: duration, optional non-minute volume, Edit action when available, RPE pill when available, status pill, and delete icon.
-- The status pill (`Fine`, `Discomfort`, `Bad`) is on the same line as the title and right aligned with the rest of the metadata/action group.
-- The delete icon is the furthest-right item in the row.
+**Acceptance criteria (revised 2026-06-16 — owner correction after initial single-line shipment didn't read as intended):**
+- A log row's first line contains the activity title on the left and the status pill (`Fine`, `Discomfort`, `Bad`) right-aligned on the same line — nothing else on that line.
+- A log row's second line contains, left-aligned: duration, optional non-minute volume, and the RPE pill when available, in that order.
+- The same second line contains, right-aligned: the Edit action when available, then the delete icon — delete is the furthest-right item in the row overall.
 - Minute-unit logs show duration only (for example, `20 min`) and do not also show `20 minutes`.
 - Non-minute logs still show duration plus volume (for example, `30 min · 3 km`).
-- Existing violation message rendering stays beneath the title/meta line.
+- Existing violation message rendering stays beneath both lines.
 - Incident rows from UX-B1 are unchanged.
 
 **Edge cases:**
-- Long activity titles truncate rather than pushing right-side metadata/actions out of the row.
-- On narrow screens, the right-side group may wrap as a group if needed, but the title, status pill, and delete action must remain visually coherent and the delete icon remains last.
+- Long activity titles truncate rather than pushing the status pill out of line 1.
+- On narrow screens, the second line's left-aligned meta group and right-aligned actions group may wrap as groups if needed, but the title, status pill, and delete action must remain visually coherent and the delete icon remains last.
 - Logs with no RPE omit the RPE pill without leaving an awkward gap.
 - Logs with `volumeValue <= 0` or no `volumeUnit` show duration only.
 
