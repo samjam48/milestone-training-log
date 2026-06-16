@@ -14,6 +14,7 @@ import {
 import { AppShell } from '../ui/AppShell';
 import type { MilestoneEngineResult } from '../../hooks/useMilestoneEngine';
 import { createLogHistoryEngine, logActivityWalk } from '../../test/fixtures/c62Fixtures';
+import type { Activity, ActivityLog, FlareUpIncident, RPE } from '../../types';
 import { LogHistoryScreen } from './LogHistoryScreen';
 
 interface LogHistoryScreenS27Props {
@@ -419,5 +420,202 @@ describe('LogHistoryScreen — S25.F4 edit log', () => {
     expect(confirmSpy).toHaveBeenCalledTimes(1);
     expect(onDeleteLog).toHaveBeenCalledTimes(1);
     expect(onDeleteLog).toHaveBeenCalledWith(engine.logs[0]!.id);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Log History row meta layout polish
+// ---------------------------------------------------------------------------
+
+const CREATED_AT = '2026-04-07T06:00:00Z';
+const USER_ID = 'user-1';
+
+function makeLog(overrides: Partial<ActivityLog> & Pick<ActivityLog, 'id' | 'loggedDate'>): ActivityLog {
+  return {
+    userId: USER_ID,
+    activityId: logActivityWalk.id,
+    durationMinutes: 30,
+    volumeValue: 3,
+    volumeUnit: 'km',
+    rpe: 4 as RPE,
+    postActivityFeel: 'fine',
+    createdAt: CREATED_AT,
+    ...overrides,
+  };
+}
+
+function makeIncident(
+  overrides: Partial<FlareUpIncident> & Pick<FlareUpIncident, 'id' | 'incidentDate'>,
+): FlareUpIncident {
+  return {
+    userId: USER_ID,
+    bodyPart: 'Left heel',
+    severity: 7,
+    createdAt: CREATED_AT,
+    ...overrides,
+  };
+}
+
+function makeActivity(overrides: Partial<Activity> & Pick<Activity, 'id' | 'name'>): Activity {
+  return {
+    ...logActivityWalk,
+    ...overrides,
+  };
+}
+
+describe('LogHistoryScreen — row meta layout', () => {
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  function renderLogHistoryWithRows({
+    logs,
+    activities,
+    incidents = [],
+    onEditLog = vi.fn(),
+    onDeleteLog = vi.fn(),
+  }: {
+    logs: ActivityLog[];
+    activities?: Activity[];
+    incidents?: FlareUpIncident[];
+    onEditLog?: ReturnType<typeof vi.fn>;
+    onDeleteLog?: ReturnType<typeof vi.fn>;
+  }): void {
+    renderWithProviders(
+      <LogHistoryScreen
+        engine={createLogHistoryEngine(0, {
+          logs,
+          activities: activities ?? [logActivityWalk],
+          incidents,
+        })}
+        onOpenLogActivity={vi.fn()}
+        onOpenLogIncident={vi.fn()}
+        onEditLog={onEditLog}
+        onDeleteLog={onDeleteLog}
+      />,
+    );
+  }
+
+  it('keeps title and the right-side meta/action group on the first row in the documented order', () => {
+    const log = makeLog({
+      id: 'log-layout',
+      loggedDate: '2026-05-20',
+      durationMinutes: 30,
+      volumeValue: 3,
+      volumeUnit: 'km',
+      rpe: 5 as RPE,
+      postActivityFeel: 'bad',
+    });
+
+    renderLogHistoryWithRows({ logs: [log] });
+
+    const title = screen.getByText('Morning Walk');
+    const titleRow = title.closest('div');
+    expect(titleRow).not.toBeNull();
+
+    expect(within(titleRow as HTMLElement).getByText('30 min')).toBeInTheDocument();
+    expect(within(titleRow as HTMLElement).getByText('3 km')).toBeInTheDocument();
+
+    const editButton = within(titleRow as HTMLElement).getByRole('button', { name: 'Edit' });
+    const rpePill = within(titleRow as HTMLElement).getByText('RPE 5');
+    const statusPill = within(titleRow as HTMLElement).getByText('Bad');
+    const deleteButton = within(titleRow as HTMLElement).getByRole('button', {
+      name: 'Delete Morning Walk log',
+    });
+
+    expect(editButton.compareDocumentPosition(rpePill)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(rpePill.compareDocumentPosition(statusPill)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(statusPill.compareDocumentPosition(deleteButton)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
+  it('shows duration only for minute-unit logs and for logs without a positive usable volume', () => {
+    const minuteActivity = makeActivity({
+      id: 'act-stretch',
+      name: 'Stretch Flow',
+      defaultVolumeUnit: 'minutes',
+    });
+    const minuteLog = makeLog({
+      id: 'log-minute',
+      activityId: minuteActivity.id,
+      loggedDate: '2026-05-20',
+      durationMinutes: 20,
+      volumeValue: 20,
+      volumeUnit: 'minutes',
+      rpe: 2 as RPE,
+    });
+    const zeroVolumeLog = makeLog({
+      id: 'log-zero-volume',
+      loggedDate: '2026-05-19',
+      durationMinutes: 25,
+      volumeValue: 0,
+      volumeUnit: 'km',
+      rpe: undefined,
+    });
+    const missingUnitLog = makeLog({
+      id: 'log-missing-unit',
+      loggedDate: '2026-05-18',
+      durationMinutes: 15,
+      volumeValue: 4,
+      volumeUnit: undefined,
+      rpe: undefined,
+    });
+
+    renderLogHistoryWithRows({
+      logs: [minuteLog, zeroVolumeLog, missingUnitLog],
+      activities: [logActivityWalk, minuteActivity],
+    });
+
+    expect(screen.getByText('Stretch Flow')).toBeInTheDocument();
+    expect(screen.getByText('20 min')).toBeInTheDocument();
+    expect(screen.queryByText('20 minutes')).not.toBeInTheDocument();
+
+    expect(screen.getByText('25 min')).toBeInTheDocument();
+    expect(screen.queryByText('0 km')).not.toBeInTheDocument();
+
+    expect(screen.getByText('15 min')).toBeInTheDocument();
+    expect(screen.queryByText('4')).not.toBeInTheDocument();
+  });
+
+  it('keeps violation copy below the title/meta row and leaves incident rows unchanged', () => {
+    const violationMessage = 'Breaks 2-day rest rule for foot-load';
+    const log = makeLog({
+      id: 'log-violation',
+      loggedDate: '2026-05-20',
+      ruleViolationsAtLog: [
+        {
+          ruleId: 'rule-1',
+          ruleType: 'rest_between_class',
+          severity: 'danger',
+          message: violationMessage,
+        },
+      ],
+    });
+    const incident = makeIncident({
+      id: 'incident-1',
+      incidentDate: '2026-05-20',
+      bodyPart: 'Right knee',
+      severity: 6,
+      notes: 'Swelling after stairs.',
+    });
+
+    renderLogHistoryWithRows({
+      logs: [log],
+      incidents: [incident],
+    });
+
+    const title = screen.getByText('Morning Walk');
+    const titleRow = title.closest('div');
+    const violationCopy = screen.getByText(violationMessage);
+    expect(titleRow).not.toBeNull();
+    expect(titleRow!.compareDocumentPosition(violationCopy)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+
+    const incidentRow = screen.getByTestId('log-history-incident-row-incident-1');
+    expect(incidentRow.className).toMatch(/caution|orange/);
+    expect(within(incidentRow).getByText('Right knee')).toBeInTheDocument();
+    expect(within(incidentRow).getByText(/severity 6\/10/i)).toBeInTheDocument();
+    expect(within(incidentRow).getByText('Swelling after stairs.')).toBeInTheDocument();
+    expect(within(incidentRow).queryByRole('button', { name: /edit/i })).not.toBeInTheDocument();
+    expect(within(incidentRow).queryByRole('button', { name: /delete/i })).not.toBeInTheDocument();
   });
 });

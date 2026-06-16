@@ -70,12 +70,17 @@ const LogRow: React.FC<{
   const feel = feelLabel(log.postActivityFeel);
   const hasViolation = (log.ruleViolationsAtLog?.length ?? 0) > 0;
   const worstViolation = log.ruleViolationsAtLog?.[0];
+  const showsVolume = log.volumeValue > 0 && log.volumeUnit != null && log.volumeUnit !== 'minutes';
 
   return (
     <div className="flex flex-col gap-2 py-3 px-4">
-      <div className="flex items-start justify-between gap-2">
-        <span className="text-body font-semibold text-ink">{activityName}</span>
-        <div className="flex gap-1.5 flex-wrap justify-end items-center">
+      <div className="flex items-start justify-between gap-3">
+        <span className="min-w-0 flex-1 truncate text-body font-semibold text-ink">{activityName}</span>
+        <div className="flex max-w-[70%] flex-wrap items-center justify-end gap-1.5">
+          <span className="text-caption text-ink-muted">{log.durationMinutes} min</span>
+          {showsVolume && (
+            <span className="text-caption text-ink-muted">{log.volumeValue} {log.volumeUnit}</span>
+          )}
           {onEdit != null && (
             <button
               type="button"
@@ -85,26 +90,17 @@ const LogRow: React.FC<{
               Edit
             </button>
           )}
+          {log.rpe && (
+            <Pill className="bg-bg-sunken text-ink-muted">RPE {log.rpe}</Pill>
+          )}
+          <Pill className={feel.color}>{feel.label}</Pill>
           {onDelete != null && (
             <DeleteButton
               aria-label={`Delete ${activityName} log`}
               onClick={onDelete}
             />
           )}
-          {log.rpe && (
-            <Pill className="bg-bg-sunken text-ink-muted">RPE {log.rpe}</Pill>
-          )}
-          <Pill className={feel.color}>{feel.label}</Pill>
         </div>
-      </div>
-      <div className="flex items-center gap-3 text-caption text-ink-muted">
-        <span>{log.durationMinutes} min</span>
-        {log.volumeValue > 0 && log.volumeUnit && (
-          <>
-            <span aria-hidden="true">·</span>
-            <span>{log.volumeValue} {log.volumeUnit}</span>
-          </>
-        )}
       </div>
       {hasViolation && worstViolation && (
         <div className={cn(
