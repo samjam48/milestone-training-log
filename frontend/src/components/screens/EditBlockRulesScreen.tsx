@@ -186,43 +186,44 @@ function RuleRow({
   return (
     <div className={cn('px-3 py-2.5', indented && 'pl-8')}>
       <div className="flex min-w-0 items-center justify-between gap-2">
-        <div className="min-w-0 flex-1 basis-0">
+        <div className="relative flex min-w-0 flex-1 basis-0 flex-wrap items-center gap-1">
           <label
             htmlFor={inputId}
             className={cn(
-              'block truncate text-body font-medium',
+              'block min-w-0 flex-1 truncate text-body font-medium',
               rule.enabled ? 'text-ink' : 'text-ink-muted',
             )}
           >
             {rowLabel}
           </label>
           {activityName != null ? (
-            <p className="truncate text-caption text-ink-muted">{definition.label}</p>
+            <p className="order-last w-full truncate text-caption text-ink-muted">
+              {definition.label}
+            </p>
           ) : null}
-        </div>
 
-        {helperText != null ? (
-          <div className="relative shrink-0">
+          {helperText != null ? (
             <button
               type="button"
               aria-label={`${definition.label} info`}
               aria-describedby={isHelperOpen ? helperId : undefined}
               title={helperText}
               onClick={() => setIsHelperOpen((current) => !current)}
-              className="flex h-11 w-11 items-center justify-center rounded-full text-caption font-semibold text-ink-muted transition-colors hover:bg-bg-overlay hover:text-ink"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-caption font-semibold text-ink-muted transition-colors hover:bg-bg-overlay hover:text-ink"
             >
               i
             </button>
-            {isHelperOpen ? (
-              <p
-                id={helperId}
-                className="absolute right-0 top-9 z-10 w-56 rounded-md border border-border bg-bg-raised px-3 py-2 text-caption text-ink-muted shadow-card"
-              >
-                {helperText}
-              </p>
-            ) : null}
-          </div>
-        ) : null}
+          ) : null}
+
+          {isHelperOpen ? (
+            <p
+              id={helperId}
+              className="absolute left-0 top-9 z-10 w-56 rounded-md border border-border bg-bg-raised px-3 py-2 text-caption text-ink-muted shadow-card"
+            >
+              {helperText}
+            </p>
+          ) : null}
+        </div>
 
         <button
           type="button"

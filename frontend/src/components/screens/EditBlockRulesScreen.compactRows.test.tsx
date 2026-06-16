@@ -256,6 +256,42 @@ describe('EditBlockRulesScreen compact rule rows', () => {
     expect(volumeInput.className).toMatch(/appearance-none|\[appearance:textfield\]/);
   });
 
+  it('groups the info affordance with the title on line 1, separate from the far-right toggle', () => {
+    renderRules();
+
+    const rowShell = getRuleShell(P25_6_RULE_LABELS.rest_between_class);
+    const firstLine = getFirstLine(rowShell, P25_6_RULE_LABELS.rest_between_class);
+    const titleLabel = within(firstLine).getByText(P25_6_RULE_LABELS.rest_between_class);
+    const infoControl = within(firstLine).getByRole('button', {
+      name: /minimum days between sessions info/i,
+    });
+    const switchControl = within(firstLine).getByRole('switch', {
+      name: `${P25_6_RULE_LABELS.rest_between_class} enabled`,
+    });
+
+    // The title and the info button must share an immediate group container,
+    // left-aligned together, distinct from the toggle's container.
+    const titleGroup = titleLabel.closest('div');
+    const infoGroup = infoControl.closest('div');
+    const toggleGroup = switchControl.parentElement;
+
+    expect(titleGroup).toBeInstanceOf(HTMLElement);
+    expect(infoGroup).toBeInstanceOf(HTMLElement);
+    expect(titleGroup).toBe(infoGroup);
+    expect(titleGroup).not.toBe(toggleGroup);
+
+    // Within that shared group, the title must come before the info button
+    // (title text immediately followed by the info icon, not the other way
+    // around), and the toggle must not be inside that group at all.
+    expectBefore(titleLabel, infoControl);
+    expect(within(titleGroup as HTMLElement).queryByRole('switch')).not.toBeInTheDocument();
+
+    // The toggle must remain the last element on line 1, on the far right,
+    // not grouped with the title/info pairing.
+    expect(firstLine.lastElementChild).toBe(switchControl);
+    expect((titleGroup as HTMLElement).contains(switchControl)).toBe(false);
+  });
+
   it('moves helper copy out of permanent row text and exposes it through a touch-reachable info control', async () => {
     const user = userEvent.setup();
     const helperText = getRuleHelper('rest_between_class');
