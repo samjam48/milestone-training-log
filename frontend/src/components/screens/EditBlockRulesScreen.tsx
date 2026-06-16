@@ -190,7 +190,7 @@ function RuleRow({
           <label
             htmlFor={inputId}
             className={cn(
-              'block min-w-0 flex-1 truncate text-body font-medium',
+              'block min-w-0 truncate text-body font-medium',
               rule.enabled ? 'text-ink' : 'text-ink-muted',
             )}
           >

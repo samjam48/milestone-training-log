@@ -292,6 +292,26 @@ describe('EditBlockRulesScreen compact rule rows', () => {
     expect((titleGroup as HTMLElement).contains(switchControl)).toBe(false);
   });
 
+  it('sizes the title label to its own content instead of growing to fill the title/info group, so the info icon sits next to the visible text', () => {
+    renderRules();
+
+    const rowShell = getRuleShell(P25_6_RULE_LABELS.rest_between_class);
+    const firstLine = getFirstLine(rowShell, P25_6_RULE_LABELS.rest_between_class);
+    const titleLabel = within(firstLine).getByText(P25_6_RULE_LABELS.rest_between_class);
+
+    // A flex-grow class here would let the label consume the entire width of
+    // the title/info group, shoving the info button away from the visible
+    // text toward the far edge of the row. The label must size to its own
+    // (possibly truncated) content instead.
+    expect(titleLabel.className).not.toMatch(/\bflex-1\b/);
+    expect(titleLabel.className).not.toMatch(/\bgrow\b/);
+
+    // Truncation safety must survive without flex-1: long titles still need
+    // to shrink and ellipsize rather than overflow the row.
+    expect(titleLabel.className).toMatch(/\btruncate\b/);
+    expect(titleLabel.className).toMatch(/\bmin-w-0\b/);
+  });
+
   it('moves helper copy out of permanent row text and exposes it through a touch-reachable info control', async () => {
     const user = userEvent.setup();
     const helperText = getRuleHelper('rest_between_class');
