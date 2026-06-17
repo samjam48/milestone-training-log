@@ -12,7 +12,7 @@ interface DashboardMetricsTabProps {
 
 function formatShort(iso: string): string {
   const dt = new Date(`${iso}T00:00:00Z`);
-  return dt.toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
+  return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 }
 
 function progressLabel(value: number, unit: string): string {

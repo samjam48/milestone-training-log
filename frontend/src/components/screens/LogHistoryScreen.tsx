@@ -27,11 +27,11 @@ function monthLabel(iso: string): string {
 }
 
 function dayLabel(iso: string): string {
-  return new Date(iso + 'T00:00:00Z').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
+  return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
 }
 
 function weekLabel(iso: string): string {
-  return new Date(iso + 'T00:00:00Z').toLocaleDateString(undefined, { month: 'long', day: 'numeric', timeZone: 'UTC' });
+  return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' });
 }
 
 function mondayForWeek(iso: string): string {
