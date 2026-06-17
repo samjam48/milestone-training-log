@@ -5,12 +5,13 @@
 import * as React from 'react';
 import { cn } from '../../lib/cn';
 import { Card } from '../ui/Card';
+import { DeleteButton } from '../ui/DeleteButton';
 import type { MilestoneEngineResult } from '../../hooks/useMilestoneEngine';
-import type { ActivityLog } from '../../types';
+import type { ActivityLog, FlareUpIncident } from '../../types';
 
 interface Props {
   engine: MilestoneEngineResult;
-  onOpenLogActivity: () => void;
+  onOpenLogActivity?: () => void;
   onOpenLogIncident: () => void;
   onOpenNewActivity?: () => void;
   onEditLog?: (logId: string) => void;
@@ -26,7 +27,22 @@ function monthLabel(iso: string): string {
 }
 
 function dayLabel(iso: string): string {
-  return new Date(iso + 'T00:00:00Z').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
+  return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
+}
+
+function weekLabel(iso: string): string {
+  return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' });
+}
+
+function mondayForWeek(iso: string): string {
+  const date = new Date(iso + 'T00:00:00Z');
+  const mondayOffset = (date.getUTCDay() + 6) % 7;
+  date.setUTCDate(date.getUTCDate() - mondayOffset);
+  return date.toISOString().substring(0, 10);
+}
+
+function startsWeek(iso: string): boolean {
+  return iso === mondayForWeek(iso);
 }
 
 function feelLabel(feel?: string): { label: string; color: string } {
@@ -54,12 +70,25 @@ const LogRow: React.FC<{
   const feel = feelLabel(log.postActivityFeel);
   const hasViolation = (log.ruleViolationsAtLog?.length ?? 0) > 0;
   const worstViolation = log.ruleViolationsAtLog?.[0];
+  const showsVolume = log.volumeValue > 0 && log.volumeUnit != null && log.volumeUnit !== 'minutes';
 
   return (
     <div className="flex flex-col gap-2 py-3 px-4">
-      <div className="flex items-start justify-between gap-2">
-        <span className="text-body font-semibold text-ink">{activityName}</span>
-        <div className="flex gap-1.5 flex-wrap justify-end items-center">
+      <div className="flex items-start justify-between gap-3">
+        <span className="min-w-0 flex-1 truncate text-body font-semibold text-ink">{activityName}</span>
+        <Pill className={feel.color}>{feel.label}</Pill>
+      </div>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-caption text-ink-muted">{log.durationMinutes} min</span>
+          {showsVolume && (
+            <span className="text-caption text-ink-muted">{log.volumeValue} {log.volumeUnit}</span>
+          )}
+          {log.rpe && (
+            <Pill className="bg-bg-sunken text-ink-muted">RPE {log.rpe}</Pill>
+          )}
+        </div>
+        <div className="flex items-center gap-1.5">
           {onEdit != null && (
             <button
               type="button"
@@ -70,28 +99,12 @@ const LogRow: React.FC<{
             </button>
           )}
           {onDelete != null && (
-            <button
-              type="button"
+            <DeleteButton
+              aria-label={`Delete ${activityName} log`}
               onClick={onDelete}
-              className="text-caption font-semibold text-danger-fg hover:bg-danger/10 rounded-sm px-1 transition-colors duration-snap"
-            >
-              Delete
-            </button>
+            />
           )}
-          {log.rpe && (
-            <Pill className="bg-bg-sunken text-ink-muted">RPE {log.rpe}</Pill>
-          )}
-          <Pill className={feel.color}>{feel.label}</Pill>
         </div>
-      </div>
-      <div className="flex items-center gap-3 text-caption text-ink-muted">
-        <span>{log.durationMinutes} min</span>
-        {log.volumeValue > 0 && log.volumeUnit && (
-          <>
-            <span aria-hidden="true">·</span>
-            <span>{log.volumeValue} {log.volumeUnit}</span>
-          </>
-        )}
       </div>
       {hasViolation && worstViolation && (
         <div className={cn(
@@ -106,21 +119,67 @@ const LogRow: React.FC<{
   );
 };
 
+const IncidentRow: React.FC<{ incident: FlareUpIncident }> = ({ incident }) => (
+  <div
+    data-testid={`log-history-incident-row-${incident.id}`}
+    className="flex flex-col gap-2 py-3 px-4 bg-caution/10 text-caution-fg"
+  >
+    <div className="flex items-start justify-between gap-2">
+      <div className="flex items-center gap-2">
+        <span aria-hidden="true">⚠</span>
+        <span className="text-body font-semibold">{incident.bodyPart}</span>
+      </div>
+      <Pill className="bg-caution/15 text-caution-fg">
+        Severity {incident.severity}/10
+      </Pill>
+    </div>
+    {incident.notes && (
+      <p className="text-caption text-ink-muted">{incident.notes}</p>
+    )}
+  </div>
+);
+
 // ---------------------------------------------------------------------------
 // Grouping logic
 // ---------------------------------------------------------------------------
 
-type ByDay = Record<string, ActivityLog[]>;
+type TimelineItem =
+  | { kind: 'incident'; incident: FlareUpIncident; sortIndex: number }
+  | { kind: 'log'; log: ActivityLog; sortIndex: number };
+
+type ByDay = Record<string, TimelineItem[]>;
 type ByMonth = Record<string, ByDay>;
 
-function groupLogs(logs: ActivityLog[]): { monthKeys: string[]; byMonth: ByMonth } {
+function timelineItemDate(item: TimelineItem): string {
+  return item.kind === 'incident' ? item.incident.incidentDate : item.log.loggedDate;
+}
+
+function timelineItemKindRank(item: TimelineItem): number {
+  return item.kind === 'incident' ? 0 : 1;
+}
+
+function groupTimeline(
+  logs: ActivityLog[],
+  incidents: FlareUpIncident[],
+): { monthKeys: string[]; byMonth: ByMonth } {
   const byMonth: ByMonth = {};
-  for (const log of [...logs].sort((a, b) => b.loggedDate.localeCompare(a.loggedDate))) {
-    const month = log.loggedDate.substring(0, 7);
-    const day = log.loggedDate;
+  const timelineItems: TimelineItem[] = [
+    ...incidents.map((incident, sortIndex) => ({ kind: 'incident' as const, incident, sortIndex })),
+    ...logs.map((log, sortIndex) => ({ kind: 'log' as const, log, sortIndex })),
+  ].sort((a, b) => {
+    const dateComparison = timelineItemDate(b).localeCompare(timelineItemDate(a));
+    if (dateComparison !== 0) return dateComparison;
+    const kindComparison = timelineItemKindRank(a) - timelineItemKindRank(b);
+    if (kindComparison !== 0) return kindComparison;
+    return a.sortIndex - b.sortIndex;
+  });
+
+  for (const item of timelineItems) {
+    const day = timelineItemDate(item);
+    const month = day.substring(0, 7);
     if (!byMonth[month]) byMonth[month] = {};
     if (!byMonth[month][day]) byMonth[month][day] = [];
-    byMonth[month][day].push(log);
+    byMonth[month][day].push(item);
   }
   const monthKeys = Object.keys(byMonth).sort((a, b) => b.localeCompare(a));
   return { monthKeys, byMonth };
@@ -138,12 +197,15 @@ export const LogHistoryScreen: React.FC<Props> = ({
   onEditLog,
   onDeleteLog,
 }) => {
-  const { logs, activities } = engine;
+  const { logs, activities, incidents } = engine;
   const activityMap = React.useMemo(
     () => new Map(activities.map(a => [a.id, a.name])),
     [activities],
   );
-  const { monthKeys, byMonth } = React.useMemo(() => groupLogs(logs), [logs]);
+  const { monthKeys, byMonth } = React.useMemo(
+    () => groupTimeline(logs, incidents),
+    [incidents, logs],
+  );
   const handleDeleteLog = React.useCallback((log: ActivityLog) => {
     if (onDeleteLog == null) return;
     const confirmed = window.confirm('Delete this activity log?');
@@ -178,6 +240,15 @@ export const LogHistoryScreen: React.FC<Props> = ({
             </div>
             <p className="text-body text-ink-muted">No sessions logged yet.</p>
             <p className="text-body text-ink-muted">Create an activity to start logging.</p>
+            {onOpenLogActivity != null && (
+              <button
+                type="button"
+                onClick={onOpenLogActivity}
+                className="mt-1 text-caption font-semibold text-ink underline hover:opacity-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink rounded"
+              >
+                Log your first session
+              </button>
+            )}
           </div>
         ) : (
           <div className="flex flex-col gap-4">
@@ -185,6 +256,7 @@ export const LogHistoryScreen: React.FC<Props> = ({
               const monthData = byMonth[month];
               if (!monthData) return null;
               const dayKeys = Object.keys(monthData).sort((a, b) => b.localeCompare(a));
+              const weekCount = new Set(dayKeys.map(mondayForWeek)).size;
               return (
                 <section key={month}>
                   {/* Month header */}
@@ -192,34 +264,63 @@ export const LogHistoryScreen: React.FC<Props> = ({
                     {monthLabel(month + '-01')}
                   </p>
                   <Card pad="none">
-                    <div className="divide-y divide-border-subtle">
-                      {dayKeys.map(day => (
-                        <div key={day}>
-                          {/* Day sub-header */}
-                          <div className="px-4 pt-2.5 pb-1">
-                            <span className="text-caption font-medium text-ink-muted">
-                              {dayLabel(day)}
-                            </span>
-                          </div>
-                          {(monthData[day] ?? []).map(log => (
-                            <LogRow
-                              key={log.id}
-                              log={log}
-                              activityName={activityMap.get(log.activityId) ?? 'Unknown'}
-                              onEdit={
-                                onEditLog != null
-                                  ? () => onEditLog(log.id)
-                                  : undefined
-                              }
-                              onDelete={
-                                onDeleteLog != null
-                                  ? () => handleDeleteLog(log)
-                                  : undefined
-                              }
-                            />
-                          ))}
-                        </div>
-                      ))}
+                    <div className="flex flex-col gap-2 p-2">
+                      {dayKeys.map((day, index) => {
+                        const previousDay = dayKeys[index - 1];
+                        const startsNewVisibleWeek =
+                          previousDay != null && mondayForWeek(day) !== mondayForWeek(previousDay);
+
+                        return (
+                          <React.Fragment key={day}>
+                            {weekCount > 1 && index > 0 && (startsWeek(day) || startsNewVisibleWeek) && (
+                              <div className="px-1 pt-1 text-caption font-semibold text-ink-muted">
+                                Week of {weekLabel(mondayForWeek(day))}
+                              </div>
+                            )}
+                            <div
+                              data-testid={`log-history-day-group-${day}`}
+                              className="rounded-md border border-border-subtle bg-bg-sunken p-2"
+                            >
+                              {/* Day sub-header */}
+                              <div className="px-2 pt-0.5 pb-1">
+                                <span className="text-caption font-medium text-ink-muted">
+                                  {dayLabel(day)}
+                                </span>
+                              </div>
+                              <div className="divide-y divide-border-subtle overflow-hidden rounded-sm bg-bg-raised">
+                                {(monthData[day] ?? []).map(item => {
+                                  if (item.kind === 'incident') {
+                                    return (
+                                      <IncidentRow
+                                        key={`incident-${item.incident.id}`}
+                                        incident={item.incident}
+                                      />
+                                    );
+                                  }
+
+                                  return (
+                                    <LogRow
+                                      key={`log-${item.log.id}`}
+                                      log={item.log}
+                                      activityName={activityMap.get(item.log.activityId) ?? 'Unknown'}
+                                      onEdit={
+                                        onEditLog != null
+                                          ? () => onEditLog(item.log.id)
+                                          : undefined
+                                      }
+                                      onDelete={
+                                        onDeleteLog != null
+                                          ? () => handleDeleteLog(item.log)
+                                          : undefined
+                                      }
+                                    />
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </React.Fragment>
+                        );
+                      })}
                     </div>
                   </Card>
                 </section>

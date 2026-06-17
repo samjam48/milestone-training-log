@@ -2,6 +2,7 @@ import * as React from 'react';
 import { cn } from '../../lib/cn';
 import { BackButton } from '../ui/BackButton';
 import { Card } from '../ui/Card';
+import { DeleteButton } from '../ui/DeleteButton';
 import { StackScreenEngineBody } from '../ui/StackScreenEngineBody';
 import type { MilestoneEngineResult, RuleDraft } from '../../hooks/useMilestoneEngine';
 import type {
@@ -172,76 +173,97 @@ function RuleRow({
 }: RuleRowProps): React.ReactElement {
   const definition = RULE_DEFINITIONS[rule.ruleType];
   const inputId = `rule-threshold-${rule.id}`;
+  const helperId = `rule-helper-${rule.id}`;
   const thresholdValue = draftThresholds[rule.id] ?? formatThreshold(rule.thresholdValue);
   const helperText = getRuleHelper(rule.ruleType);
   const showVolumeUnit = isVolumeCapRule(rule.ruleType);
   const displayUnit = showVolumeUnit
     ? (rule.limitUnit ?? defaultLimitUnitForRule(rule.ruleType))
     : definition.unit;
+  const rowLabel = activityName ?? definition.label;
+  const [isHelperOpen, setIsHelperOpen] = React.useState(false);
 
   return (
-    <div className={cn('px-4 py-3.5', indented && 'pl-8')}>
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
+    <div className={cn('px-3 py-2.5', indented && 'pl-8')}>
+      <div className="flex min-w-0 items-center justify-between gap-2">
+        <div className="relative flex min-w-0 flex-1 basis-0 flex-wrap items-center gap-1">
           <label
             htmlFor={inputId}
-            className="text-body font-medium text-ink"
-          >
-            {activityName ?? definition.label}
-          </label>
-          {activityName != null ? (
-            <p className="mt-0.5 text-caption text-ink-muted">{definition.label}</p>
-          ) : null}
-          {helperText != null ? (
-            <p className="mt-1 text-caption text-ink-muted">{helperText}</p>
-          ) : null}
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <button
-            type="button"
-            onClick={() => onDelete(rule.id)}
-            className="text-caption font-medium text-danger-fg hover:underline"
-          >
-            Delete
-          </button>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={rule.enabled}
-            aria-label={`${definition.label} enabled`}
-            onClick={() => onToggleEnabled(rule)}
             className={cn(
-              'relative mt-0.5 inline-flex h-6 w-10 shrink-0 items-center overflow-hidden rounded-full transition-colors duration-snap',
-              rule.enabled ? 'bg-safe-fg' : 'bg-border-strong',
+              'block min-w-0 truncate text-body font-medium',
+              rule.enabled ? 'text-ink' : 'text-ink-muted',
             )}
           >
-            <span
-              className={cn(
-                'absolute top-1/2 h-4 w-4 -translate-y-1/2 rounded-full bg-white shadow-sm transition-transform duration-snap',
-                rule.enabled ? 'translate-x-5' : 'translate-x-1',
-              )}
-              aria-hidden="true"
-            />
-          </button>
+            {rowLabel}
+          </label>
+          {activityName != null ? (
+            <p className="order-last w-full truncate text-caption text-ink-muted">
+              {definition.label}
+            </p>
+          ) : null}
+
+          {helperText != null ? (
+            <button
+              type="button"
+              aria-label={`${definition.label} info`}
+              aria-describedby={isHelperOpen ? helperId : undefined}
+              title={helperText}
+              onClick={() => setIsHelperOpen((current) => !current)}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-caption font-semibold text-ink-muted transition-colors hover:bg-bg-overlay hover:text-ink"
+            >
+              i
+            </button>
+          ) : null}
+
+          {isHelperOpen ? (
+            <p
+              id={helperId}
+              className="absolute left-0 top-9 z-10 w-56 rounded-md border border-border bg-bg-raised px-3 py-2 text-caption text-ink-muted shadow-card"
+            >
+              {helperText}
+            </p>
+          ) : null}
         </div>
+
+        <button
+          type="button"
+          role="switch"
+          aria-checked={rule.enabled}
+          aria-label={`${definition.label} enabled`}
+          onClick={() => onToggleEnabled(rule)}
+          className={cn(
+            'relative inline-flex h-6 w-10 shrink-0 items-center overflow-hidden rounded-full transition-colors duration-snap',
+            rule.enabled ? 'bg-safe-fg' : 'bg-border-strong',
+          )}
+        >
+          <span
+            className={cn(
+              'absolute top-1/2 h-4 w-4 -translate-y-1/2 rounded-full bg-white shadow-sm transition-transform duration-snap',
+              rule.enabled ? 'translate-x-5' : 'translate-x-1',
+            )}
+            aria-hidden="true"
+          />
+        </button>
       </div>
 
-      {rule.enabled ? (
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            aria-label={`Decrease ${definition.label}`}
-            onClick={() =>
-              onCommitThreshold(
-                rule,
-                parseDisplayedThreshold(thresholdValue, rule.thresholdValue) - definition.step,
-              )
-            }
-            className="flex h-9 w-9 items-center justify-center rounded-md border border-border bg-bg-sunken text-body-lg font-medium text-ink-muted transition-colors hover:bg-bg-overlay hover:text-ink"
-          >
-            -
-          </button>
-          <div className="flex flex-1 items-center justify-center gap-2">
+      <div className="mt-2 grid w-full min-w-0 grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center gap-1">
+        <span aria-hidden="true" className="min-h-11 min-w-11" />
+
+        {rule.enabled ? (
+          <div className="mx-auto flex min-w-0 items-center justify-center gap-1">
+            <button
+              type="button"
+              aria-label={`Decrease ${definition.label}`}
+              onClick={() =>
+                onCommitThreshold(
+                  rule,
+                  parseDisplayedThreshold(thresholdValue, rule.thresholdValue) - definition.step,
+                )
+              }
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-bg-sunken text-body font-medium text-ink-muted transition-colors hover:bg-bg-overlay hover:text-ink"
+            >
+              -
+            </button>
             <input
               id={inputId}
               type="number"
@@ -250,8 +272,21 @@ function RuleRow({
               value={thresholdValue}
               onChange={(event) => onDraftChange(rule.id, event.target.value)}
               onBlur={() => onCommitDraft(rule)}
-              className="w-16 rounded-md border border-border bg-bg-sunken px-2 py-1.5 text-center text-body-lg font-semibold tabular-nums text-ink outline-none"
+              className="w-12 appearance-none rounded-md border border-border bg-bg-sunken px-1.5 py-1 text-center text-body font-semibold tabular-nums text-ink outline-none"
             />
+            <button
+              type="button"
+              aria-label={`Increase ${definition.label}`}
+              onClick={() =>
+                onCommitThreshold(
+                  rule,
+                  parseDisplayedThreshold(thresholdValue, rule.thresholdValue) + definition.step,
+                )
+              }
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-bg-sunken text-body font-medium text-ink-muted transition-colors hover:bg-bg-overlay hover:text-ink"
+            >
+              +
+            </button>
             {showVolumeUnit ? (
               <select
                 value={rule.limitUnit ?? defaultLimitUnitForRule(rule.ruleType)}
@@ -259,7 +294,7 @@ function RuleRow({
                 onChange={(event) =>
                   onLimitUnitChange(rule, event.target.value as VolumeCapUnit)
                 }
-                className="rounded-md border border-border bg-bg-sunken px-2 py-1.5 text-caption text-ink"
+                className="max-w-20 rounded-md border border-border bg-bg-sunken px-1.5 py-1 text-caption text-ink"
               >
                 {VOLUME_CAP_UNITS.map((unit) => (
                   <option key={unit} value={unit}>
@@ -273,21 +308,16 @@ function RuleRow({
               </span>
             )}
           </div>
-          <button
-            type="button"
-            aria-label={`Increase ${definition.label}`}
-            onClick={() =>
-              onCommitThreshold(
-                rule,
-                parseDisplayedThreshold(thresholdValue, rule.thresholdValue) + definition.step,
-              )
-            }
-            className="flex h-9 w-9 items-center justify-center rounded-md border border-border bg-bg-sunken text-body-lg font-medium text-ink-muted transition-colors hover:bg-bg-overlay hover:text-ink"
-          >
-            +
-          </button>
-        </div>
-      ) : null}
+        ) : (
+          <span aria-hidden="true" />
+        )}
+
+        <DeleteButton
+          aria-label={`Delete ${rowLabel} rule`}
+          onClick={() => onDelete(rule.id)}
+          className="shrink-0 justify-self-end"
+        />
+      </div>
     </div>
   );
 }

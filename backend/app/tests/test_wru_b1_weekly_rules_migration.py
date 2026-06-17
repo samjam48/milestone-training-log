@@ -1,4 +1,4 @@
-"""WRU.B1 — Big-bang weekly rules migration, seed, and legacy cleanup."""
+"""Big-bang weekly rules migration, seed, and legacy cleanup."""
 
 from __future__ import annotations
 
@@ -107,7 +107,7 @@ def _seed_legacy_active_and_completed(connection: Connection) -> None:
     seed_completed_legacy_block(connection)
 
 
-def test_wru_b1_migration_wipes_legacy_history_and_preserves_enabled_rules(
+def test_weekly_rules_migration_wipes_legacy_history_and_preserves_enabled_rules(
     tmp_path: Path,
 ) -> None:
     engine = _run_wru_b1_migration_on_seeded_db(

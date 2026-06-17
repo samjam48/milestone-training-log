@@ -325,7 +325,7 @@ describe('GoalsScreen — WTL.F2 weekly targets section', () => {
 
     const section = getWeeklyTargetsSection();
     const editButtons = within(section).getAllByRole('button', { name: /^edit$/i });
-    const deleteButtons = within(section).getAllByRole('button', { name: /^delete$/i });
+    const deleteButtons = within(section).getAllByRole('button', { name: /^delete\b/i });
 
     expect(editButtons.length).toBeGreaterThanOrEqual(2);
     expect(deleteButtons.length).toBeGreaterThanOrEqual(2);
@@ -599,7 +599,7 @@ describe('GoalsScreen — WTL.F2 delete weekly target confirmation', () => {
     );
 
     const section = getWeeklyTargetsSection();
-    const deleteButtons = within(section).getAllByRole('button', { name: /^delete$/i });
+    const deleteButtons = within(section).getAllByRole('button', { name: /^delete\b/i });
     await user.click(deleteButtons[0]!);
 
     expect(deleteWeeklyTarget).not.toHaveBeenCalled();
@@ -621,7 +621,7 @@ describe('GoalsScreen — WTL.F2 delete weekly target confirmation', () => {
     const walkCard = within(section)
       .getByText(WTL_F2_ACTIVITY_WALK.name)
       .closest('[data-testid^="weekly-target-card-"]');
-    await user.click(within(walkCard as HTMLElement).getByRole('button', { name: /^delete$/i }));
+    await user.click(within(walkCard as HTMLElement).getByRole('button', { name: /^delete\b/i }));
     await user.click(screen.getByRole('button', { name: /^confirm$/i }));
 
     expect(deleteWeeklyTarget).toHaveBeenCalledTimes(1);
@@ -640,7 +640,7 @@ describe('GoalsScreen — WTL.F2 delete weekly target confirmation', () => {
     );
 
     const section = getWeeklyTargetsSection();
-    const deleteButtons = within(section).getAllByRole('button', { name: /^delete$/i });
+    const deleteButtons = within(section).getAllByRole('button', { name: /^delete\b/i });
     await user.click(deleteButtons[0]!);
     await user.click(screen.getByRole('button', { name: /cancel/i }));
 

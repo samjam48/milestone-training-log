@@ -3,253 +3,116 @@
 // =============================================================================
 
 import * as React from 'react';
-import { cn } from '../../lib/cn';
-import { Card } from '../ui/Card';
-import { ProgressBar } from '../ui/ProgressBar';
-import { StatusDot } from '../ui/StatusDot';
-import { SuggestedActivityCard } from '../composites/SuggestedActivityCard';
-import { WeeklyLoadGraph, LOAD_GRAPH_SUBTITLE, LOAD_GRAPH_WINDOW_DAYS } from '../composites/WeeklyLoadGraph';
-import { addDays } from '../../lib/load';
-import { BlockSafetyMapSection } from '../composites/BlockSafetyMapSection';
-import { LoadRiskSection } from '../composites/LoadRiskSection';
-import { GoalsCard } from '../composites/GoalsCard';
-import { allWeeklyTargetsComplete } from '../../lib/engine';
+import { SegmentedControl, type SegmentedOption } from '../ui/SegmentedControl';
+import { DashboardTodayTab } from './DashboardTodayTab';
+import { DashboardMetricsTab } from './DashboardMetricsTab';
+import { DashboardSafetyTab } from './DashboardSafetyTab';
 import type { MilestoneEngineResult } from '../../hooks/useMilestoneEngine';
-import type { Activity, ActivityClass, SafetyState } from '../../types';
+import type { Activity } from '../../types';
+
+const DASHBOARD_TAB_STORAGE_KEY = 'milestone.dashboard.activeTab';
+
+type DashboardTab = 'today' | 'metrics' | 'safety';
 
 interface Props {
   engine: MilestoneEngineResult;
   onOpenCheckIn: () => void;
   onOpenLogActivity: (activityId?: string) => void;
   onQuickLog?: (activity: Activity) => void;
+  onViewGoals?: () => void;
+  onViewSettings?: () => void;
 }
 
-// ---------------------------------------------------------------------------
-// Inline helpers
-// ---------------------------------------------------------------------------
+const DASHBOARD_TAB_OPTIONS: SegmentedOption<DashboardTab>[] = [
+  { value: 'today', label: 'Today' },
+  { value: 'metrics', label: 'Metrics' },
+  { value: 'safety', label: 'Safety' },
+];
 
-function formatDay(iso: string): string {
-  const dt = new Date(iso + 'T00:00:00Z');
-  return dt.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' });
+function isDashboardTab(value: string | null): value is DashboardTab {
+  return value === 'today' || value === 'metrics' || value === 'safety';
 }
 
-function formatShort(iso: string): string {
-  const dt = new Date(iso + 'T00:00:00Z');
-  return dt.toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
-}
-
-function progressLabel(value: number, unit: string): string {
-  if (unit === 'sessions') return `${value} session${value === 1 ? '' : 's'}`;
-  return `${value} ${unit}`;
-}
-
-function weeklyProgressRowLabel(
-  activityName: string | null | undefined,
-  className: string,
-): string {
-  return activityName ?? className;
-}
-
-function weeklyProgressDisplayState(
-  value: number,
-  target: number,
-  state: SafetyState | 'neutral',
-): SafetyState | 'neutral' {
-  if (target > 0 && value >= target) {
-    return 'safe';
+function readStoredDashboardTab(): DashboardTab {
+  if (typeof window === 'undefined') {
+    return 'today';
   }
-  return state;
-}
 
-function formatWeekPeriod(start: string, end: string): string {
-  return `${formatShort(start)} – ${formatShort(end)}`;
-}
-
-function loadGraphTitle(
-  graphClassId: string | null,
-  activityClasses: ActivityClass[],
-): string {
-  if (graphClassId === null) {
-    return 'Weekly load';
+  try {
+    const storage = window.localStorage;
+    const storedValue =
+      typeof storage.getItem === 'function'
+        ? storage.getItem(DASHBOARD_TAB_STORAGE_KEY)
+        : (storage as Storage & Record<string, string | undefined>)[DASHBOARD_TAB_STORAGE_KEY] ?? null;
+    return isDashboardTab(storedValue) ? storedValue : 'today';
+  } catch {
+    return 'today';
   }
-  return activityClasses.find((c) => c.id === graphClassId)?.name ?? 'Unknown class';
 }
 
-function classStatusLabel(
-  activityClassId: string,
-  activityClasses: ActivityClass[],
-): string {
-  return activityClasses.find((c) => c.id === activityClassId)?.name ?? 'Unknown class';
+function storeDashboardTab(tab: DashboardTab): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    const storage = window.localStorage;
+    if (typeof storage.setItem === 'function') {
+      storage.setItem(DASHBOARD_TAB_STORAGE_KEY, tab);
+    } else {
+      (storage as Storage & Record<string, string>)[DASHBOARD_TAB_STORAGE_KEY] = tab;
+    }
+  } catch {
+    // View preference persistence should never block rendering.
+  }
 }
-
-// ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
-
-const SectionLabel: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className }) => (
-  <p className={cn('text-label uppercase font-medium text-ink-muted mb-2', className)}>{children}</p>
-);
-
-const CheckInCTA: React.FC<{ onPress: () => void }> = ({ onPress }) => (
-  <Card
-    intent="info"
-    pad="md"
-    interactive
-    onClick={onPress}
-    role="button"
-    aria-label="Complete morning check-in"
-  >
-    <div className="flex items-center justify-between gap-3">
-      <div>
-        <p className="text-body-lg font-semibold text-info-fg">Morning check-in</p>
-        <p className="text-caption text-ink-muted mt-0.5">Log pain, readiness and stiffness to update your traffic lights.</p>
-      </div>
-      <ChevronRight className="shrink-0 text-info-fg" />
-    </div>
-  </Card>
-);
-
-const ChevronRight: React.FC<{ className?: string }> = ({ className }) => (
-  <svg width={20} height={20} viewBox="0 0 20 20" fill="none" className={className} aria-hidden="true">
-    <path d="M7.5 5l5 5-5 5" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
-
-const StreakRow: React.FC<{ count: number }> = ({ count }) => (
-  <div className="flex items-center gap-3 py-2.5">
-    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-safe/15">
-      <svg width={14} height={14} viewBox="0 0 14 14" fill="none" aria-hidden="true">
-        <path d="M2 7l3.5 3.5L12 3" stroke="#3DD68C" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    </span>
-    <div>
-      <p className="text-body font-medium text-ink">{count} clean session{count === 1 ? '' : 's'} in a row</p>
-      <p className="text-caption text-ink-muted">No rule violations or reported bad sessions</p>
-    </div>
-  </div>
-);
-
-// ---------------------------------------------------------------------------
-// Screen
-// ---------------------------------------------------------------------------
 
 export const DashboardScreen: React.FC<Props> = ({
   engine,
   onOpenCheckIn,
   onOpenLogActivity,
   onQuickLog,
+  onViewGoals,
+  onViewSettings,
 }) => {
-  const {
-    todayDate, userName, hasCheckedInToday,
-    suggestionBuckets, weeklyProgress, classStatuses,
-    loadSeries, graphClassId, flareUpDates, weekLoadThreshold, cleanStreak,
-    activityClasses, activities, loadRiskSummary,
-    goalRows,
-  } = engine;
+  const [activeTab, setActiveTab] = React.useState<DashboardTab>(() => readStoredDashboardTab());
 
-  const weeklyLoadGraphTitle = loadGraphTitle(graphClassId, activityClasses);
-  const loadGraphStartDate = addDays(todayDate, -(LOAD_GRAPH_WINDOW_DAYS - 1));
+  const handleTabChange = React.useCallback((nextTab: DashboardTab) => {
+    setActiveTab(nextTab);
+    storeDashboardTab(nextTab);
+  }, []);
 
   return (
     <div className="flex flex-col gap-5 px-4 pt-5 pb-4">
-      {/* ── Greeting header ── */}
-      <div>
-        <h1 className="text-heading font-bold text-ink">Good morning, {userName}.</h1>
-        <p className="text-body text-ink-muted mt-0.5">{formatDay(todayDate)}</p>
-      </div>
-
-      {/* ── Check-in CTA ── */}
-      {!hasCheckedInToday && <CheckInCTA onPress={onOpenCheckIn} />}
-
-      {/* ── Suggested activities ── */}
-      <SuggestedActivityCard
-        suggestionBuckets={suggestionBuckets}
-        allWeeklyTargetsComplete={allWeeklyTargetsComplete(weeklyProgress)}
-        onPick={(s) => {
-          const activity = activities.find((candidate) => candidate.id === s.id);
-          if (activity != null && onQuickLog != null) {
-            onQuickLog(activity);
-          } else if (onQuickLog == null) {
-            onOpenLogActivity(s.id);
-          }
-        }}
-        asOf="Today"
+      <SegmentedControl
+        value={activeTab}
+        onChange={handleTabChange}
+        options={DASHBOARD_TAB_OPTIONS}
+        ariaLabel="Dashboard tabs"
       />
 
-      {/* ── This week: weekly targets ── */}
-      <div>
-        <SectionLabel>This week</SectionLabel>
-        {weeklyProgress[0]?.periodStart != null && weeklyProgress[0]?.periodEnd != null ? (
-          <p className="text-caption text-ink-muted -mt-1 mb-2">
-            {formatWeekPeriod(weeklyProgress[0].periodStart, weeklyProgress[0].periodEnd)}
-          </p>
-        ) : null}
-        <Card pad="md">
-          {weeklyProgress.length === 0 ? (
-            <p className="text-caption text-ink-muted">No weekly targets configured.</p>
-          ) : (
-            <div className="flex flex-col gap-4">
-              {weeklyProgress.map((wp) => (
-                <ProgressBar
-                  key={wp.weeklyTargetId}
-                  value={wp.value}
-                  target={wp.target}
-                  state={weeklyProgressDisplayState(wp.value, wp.target, wp.state)}
-                  label={weeklyProgressRowLabel(wp.activityName, wp.className)}
-                  valueText={`${progressLabel(wp.value, wp.unit)} / ${progressLabel(wp.target, wp.unit)}`}
-                />
-              ))}
-            </div>
-          )}
-        </Card>
-      </div>
+      {activeTab === 'today' && (
+        <DashboardTodayTab
+          engine={engine}
+          onOpenCheckIn={onOpenCheckIn}
+          onOpenLogActivity={onOpenLogActivity}
+          onQuickLog={onQuickLog}
+        />
+      )}
 
-      <GoalsCard goalRows={goalRows} />
+      {activeTab === 'metrics' && (
+        <DashboardMetricsTab
+          engine={engine}
+          onViewGoals={onViewGoals}
+        />
+      )}
 
-      {/* ── Load graph ── */}
-      <WeeklyLoadGraph
-        startDate={loadGraphStartDate}
-        endDate={todayDate}
-        series={loadSeries}
-        threshold={weekLoadThreshold}
-        flareUpDates={flareUpDates}
-        title={weeklyLoadGraphTitle}
-        subtitle={LOAD_GRAPH_SUBTITLE}
-      />
-
-      <LoadRiskSection loadRiskSummary={loadRiskSummary} />
-
-      {/* ── Block safety map ── */}
-      <BlockSafetyMapSection engine={engine} />
-
-      {/* ── Activity class status ── */}
-      <div>
-        <SectionLabel>Activity status</SectionLabel>
-        <Card pad="none">
-          <ul className="divide-y divide-border-subtle">
-            {classStatuses.map(cs => (
-              <li key={cs.activityClassId} className="flex items-center justify-between gap-3 px-4 py-3">
-                <StatusDot
-                  state={cs.state}
-                  label={classStatusLabel(cs.activityClassId, activityClasses)}
-                  meta={cs.reason}
-                />
-                {cs.nextSafeDate && (
-                  <span className="text-caption text-ink-faint shrink-0">Safe {formatShort(cs.nextSafeDate)}</span>
-                )}
-              </li>
-            ))}
-          </ul>
-        </Card>
-      </div>
-
-      {/* ── Clean streak ── */}
-      <div>
-        <SectionLabel>Clean streak</SectionLabel>
-        <Card pad="sm">
-          <StreakRow count={cleanStreak} />
-        </Card>
-      </div>
+      {activeTab === 'safety' && (
+        <DashboardSafetyTab
+          engine={engine}
+          onViewSettings={onViewSettings}
+        />
+      )}
     </div>
   );
 };

@@ -287,6 +287,52 @@ export function computeWeeklyProgress(
 }
 
 // ---------------------------------------------------------------------------
+// computeClassWeeklySummary
+// ---------------------------------------------------------------------------
+
+export interface ClassWeeklySummary {
+  activityClassId: string;
+  sessionCount: number;
+  totalVolume: number | null;
+  volumeUnit: string | null;
+}
+
+export function computeClassWeeklySummary(
+  activityClasses: ActivityClass[],
+  activities: Activity[],
+  logs: ActivityLog[],
+  periodStart: ISODate,
+  periodEnd: ISODate,
+): ClassWeeklySummary[] {
+  return activityClasses.map(cls => {
+    const activeIds = new Set(
+      activities
+        .filter(a => a.activityClassId === cls.id && a.isActive)
+        .map(a => a.id),
+    );
+
+    const weekLogs = logs.filter(
+      l => activeIds.has(l.activityId) && l.loggedDate >= periodStart && l.loggedDate <= periodEnd,
+    );
+
+    if (weekLogs.length === 0) {
+      return { activityClassId: cls.id, sessionCount: 0, totalVolume: null, volumeUnit: null };
+    }
+
+    const units = new Set(weekLogs.map(l => l.volumeUnit).filter(Boolean));
+    if (units.size !== 1) {
+      return { activityClassId: cls.id, sessionCount: weekLogs.length, totalVolume: null, volumeUnit: null };
+    }
+
+    const unit = [...units][0] as VolumeUnit;
+    const raw = weekLogs.reduce((sum, l) => sum + l.volumeValue, 0);
+    const total = Math.round(raw * 10) / 10;
+
+    return { activityClassId: cls.id, sessionCount: weekLogs.length, totalVolume: total, volumeUnit: unit };
+  });
+}
+
+// ---------------------------------------------------------------------------
 // computeCleanStreak — consecutive sessions with no danger violation or bad feel
 // ---------------------------------------------------------------------------
 

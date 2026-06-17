@@ -58,6 +58,14 @@ function volumeStep(unit: VolumeUnit | undefined): number {
   return 1;
 }
 
+function effectiveVolumeValue(
+  volumeUnit: VolumeUnit | undefined,
+  duration: number,
+  volume: number,
+): number {
+  return volumeUnit === 'minutes' ? duration : volume;
+}
+
 interface StepperProps {
   label: string;
   value: number;
@@ -135,25 +143,31 @@ export function InlineLogSheet({
     }
   }, [open, activity?.id, activity?.defaultVolumeUnit]);
 
+  const effectiveVolume = React.useMemo(
+    () => effectiveVolumeValue(activity?.defaultVolumeUnit, duration, volume),
+    [activity?.defaultVolumeUnit, duration, volume],
+  );
+
   const violations = React.useMemo(() => {
     if (!open || activity == null) return [];
     return engine.checkViolations(
       activity.id,
-      volume,
+      effectiveVolume,
       rpe,
       duration > 0 ? duration : undefined,
       activity.defaultVolumeUnit,
     );
-  }, [activity, engine, open, volume, rpe, duration]);
+  }, [activity, duration, effectiveVolume, engine, open, rpe]);
 
   React.useEffect(() => {
     setDangerOverridden(false);
-  }, [activity?.id, volume, rpe]);
+  }, [activity?.id, effectiveVolume, rpe]);
 
   if (!open || activity == null) return null;
 
   const volumeUnit = activity.defaultVolumeUnit;
   const volumeStepValue = volumeStep(volumeUnit);
+  const showVolumeStepper = volumeUnit !== 'minutes';
 
   const dangerBlocked = hasDangerViolation(violations) && !dangerOverridden;
 
@@ -165,7 +179,7 @@ export function InlineLogSheet({
       activityId: activity.id,
       loggedDate: engine.todayDate,
       durationMinutes: duration,
-      volumeValue: volume,
+      volumeValue: effectiveVolume,
       volumeUnit: activity.defaultVolumeUnit,
       rpe,
       postActivityFeel: feel,
@@ -242,13 +256,15 @@ export function InlineLogSheet({
                 onChange={setDuration}
                 primaryControls
               />
-              <Stepper
-                label="Volume"
-                value={volume}
-                unit={volumeUnit ?? 'units'}
-                onChange={setVolume}
-                step={volumeStepValue}
-              />
+              {showVolumeStepper && (
+                <Stepper
+                  label="Volume"
+                  value={volume}
+                  unit={volumeUnit ?? 'units'}
+                  onChange={setVolume}
+                  step={volumeStepValue}
+                />
+              )}
             </div>
           </Card>
 

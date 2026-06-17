@@ -278,6 +278,21 @@ function withinPreviousWeekRow(block: Pick<TrainingBlock, 'startDate' | 'endDate
 
 const REVIEW_MILESTONE_BADGE = /review milestone reached/i;
 
+function expectDocumentOrder(...elements: HTMLElement[]): void {
+  for (let index = 0; index < elements.length - 1; index += 1) {
+    const element = elements[index];
+    const nextElement = elements[index + 1];
+
+    if (element == null || nextElement == null) {
+      throw new Error('Expected document-order comparison elements to exist.');
+    }
+
+    expect(element.compareDocumentPosition(nextElement)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  }
+}
+
 function renderStatefulSettingsScreen(options: {
   activities?: Activity[];
   activityClasses?: ActivityClass[];
@@ -517,26 +532,61 @@ describe('SettingsScreen — Recovery Rules', () => {
     ).toBeInTheDocument();
   });
 
-  it('renders "All classes" label for rules with null activityClassId', () => {
-    const crossClassRestRule: Rule = {
+  it('filters orphaned recovery rules instead of rendering an all-classes fallback', () => {
+    const orphanedClassRule: Rule = {
       ...RULE_REST,
-      id: 'rule-cross-rest',
-      activityClassId: null,
+      id: 'rule-orphaned-class',
+      activityClassId: 'cls-deleted',
+      activityId: undefined,
     };
 
     const engine = makeEngine({
       block: ACTIVE_BLOCK,
-      rules: [crossClassRestRule],
+      rules: [orphanedClassRule],
       weeklyTargets: [],
       activityClasses: [],
     });
 
     renderWithProviders(<SettingsScreen engine={engine} />);
 
-    expect(screen.getByText(/all classes/i)).toBeInTheDocument();
+    expect(screen.queryByText(/all classes/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/recovery rules/i)).not.toBeInTheDocument();
   });
 
-  it('labels exercise-specific rules with the exercise name', () => {
+  it('keeps valid class and exercise scoped rules when filtering orphaned rules', () => {
+    const orphanedActivityRule: Rule = {
+      ...RULE_FREQ,
+      id: 'rule-orphaned-activity',
+      activityClassId: 'cls-running',
+      activityId: 'act-deleted',
+    };
+    const exerciseRule: Rule = {
+      ...RULE_REST,
+      id: 'rule-valid-exercise',
+      activityId: ACTIVITY_RUNNING.id,
+    };
+
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      rules: [RULE_REST, orphanedActivityRule, exerciseRule],
+      weeklyTargets: [],
+      activityClasses: [CLASS_RUNNING],
+      activities: [ACTIVITY_RUNNING],
+    });
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    const recoveryRules = screen.getByText(/recovery rules/i).parentElement;
+    expect(recoveryRules).not.toBeNull();
+    expect(within(recoveryRules!).getAllByText(CLASS_RUNNING.name)).toHaveLength(1);
+    expect(within(recoveryRules!).getByText(ACTIVITY_RUNNING.name)).toBeInTheDocument();
+    expect(within(recoveryRules!).queryByText(/all classes/i)).not.toBeInTheDocument();
+    expect(
+      within(recoveryRules!).queryByText(new RegExp(P25_6_RULE_LABELS.frequency_limit, 'i')),
+    ).not.toBeInTheDocument();
+  });
+
+  it('labels exercise-specific rules with the class and exercise name', () => {
     const exerciseRule: Rule = {
       ...RULE_FREQ,
       id: 'rule-run-frequency',
@@ -555,8 +605,14 @@ describe('SettingsScreen — Recovery Rules', () => {
 
     const recoveryRules = screen.getByText(/recovery rules/i).parentElement;
     expect(recoveryRules).not.toBeNull();
-    expect(within(recoveryRules!).getByText(ACTIVITY_RUNNING.name)).toBeInTheDocument();
-    expect(within(recoveryRules!).queryByText(CLASS_RUNNING.name)).not.toBeInTheDocument();
+    const recoveryScope = within(recoveryRules!);
+
+    expect(
+      recoveryScope.getByRole('heading', { name: CLASS_RUNNING.name }),
+    ).toBeInTheDocument();
+    expect(
+      recoveryScope.getByRole('heading', { name: ACTIVITY_RUNNING.name }),
+    ).toBeInTheDocument();
   });
 
   it('falls back to raw ruleType when rule type is not in taxonomy map', () => {
@@ -577,6 +633,164 @@ describe('SettingsScreen — Recovery Rules', () => {
     renderWithProviders(<SettingsScreen engine={engine} />);
 
     expect(screen.getByText('some_future_rule_type')).toBeInTheDocument();
+  });
+
+  it('groups same-class rules under one class sub-header and keeps class rule order', () => {
+    const restRule: Rule = {
+      ...RULE_REST,
+      id: 'rule-running-rest',
+      thresholdValue: 2,
+      createdAt: '2026-05-01T08:00:00Z',
+    };
+    const frequencyRule: Rule = {
+      ...RULE_FREQ,
+      id: 'rule-running-frequency',
+      thresholdValue: 3,
+      createdAt: '2026-05-01T09:00:00Z',
+    };
+
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      rules: [restRule, frequencyRule],
+      weeklyTargets: [],
+      activityClasses: [CLASS_RUNNING],
+    });
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    const recoveryRules = screen.getByText(/recovery rules/i).parentElement;
+    expect(recoveryRules).not.toBeNull();
+    const recoveryScope = within(recoveryRules!);
+    const runningHeader = recoveryScope.getByRole('heading', {
+      name: CLASS_RUNNING.name,
+    });
+    const restSummary = recoveryScope.getByText(
+      `${P25_6_RULE_LABELS.rest_between_class} · 2`,
+    );
+    const frequencySummary = recoveryScope.getByText(
+      `${P25_6_RULE_LABELS.frequency_limit} · 3`,
+    );
+
+    expect(recoveryScope.getAllByText(CLASS_RUNNING.name)).toHaveLength(1);
+    expectDocumentOrder(runningHeader, restSummary, frequencySummary);
+  });
+
+  it('nests exercise rules under the same class group after class-level rules', () => {
+    const runRestRule: Rule = {
+      ...RULE_REST,
+      id: 'rule-running-rest',
+      thresholdValue: 2,
+    };
+    const runWeeklyVolumeRule: Rule = {
+      ...RULE_REST,
+      id: 'rule-run-weekly-volume',
+      activityId: ACTIVITY_RUNNING.id,
+      ruleType: 'weekly_volume_cap',
+      thresholdValue: 12,
+      limitUnit: 'km',
+      createdAt: '2026-05-01T09:00:00Z',
+    };
+    const runDailyVolumeRule: Rule = {
+      ...RULE_REST,
+      id: 'rule-run-daily-volume',
+      activityId: ACTIVITY_RUNNING.id,
+      ruleType: 'daily_volume_cap',
+      thresholdValue: 5,
+      limitUnit: 'km',
+      createdAt: '2026-05-01T10:00:00Z',
+    };
+    const orphanedRunRule: Rule = {
+      ...runDailyVolumeRule,
+      id: 'rule-run-orphaned-activity',
+      activityId: 'act-deleted',
+      thresholdValue: 99,
+    };
+
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      rules: [runWeeklyVolumeRule, orphanedRunRule, runRestRule, runDailyVolumeRule],
+      weeklyTargets: [],
+      activityClasses: [CLASS_RUNNING],
+      activities: [ACTIVITY_RUNNING],
+    });
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    const recoveryRules = screen.getByText(/recovery rules/i).parentElement;
+    expect(recoveryRules).not.toBeNull();
+    const recoveryScope = within(recoveryRules!);
+    const runningHeader = recoveryScope.getByRole('heading', {
+      name: CLASS_RUNNING.name,
+    });
+    const activityHeader = recoveryScope.getByRole('heading', {
+      name: ACTIVITY_RUNNING.name,
+    });
+    const classRuleSummary = recoveryScope.getByText(
+      `${P25_6_RULE_LABELS.rest_between_class} · 2`,
+    );
+    const weeklyVolumeSummary = recoveryScope.getByText(
+      `${P25_6_RULE_LABELS.weekly_volume_cap} · 12`,
+    );
+    const dailyVolumeSummary = recoveryScope.getByText(
+      `${P25_6_RULE_LABELS.daily_volume_cap} · 5`,
+    );
+
+    expect(recoveryScope.getAllByText(CLASS_RUNNING.name)).toHaveLength(1);
+    expect(recoveryScope.getAllByText(ACTIVITY_RUNNING.name)).toHaveLength(1);
+    expect(recoveryScope.queryByText(/99/)).not.toBeInTheDocument();
+    expectDocumentOrder(
+      runningHeader,
+      classRuleSummary,
+      activityHeader,
+      weeklyVolumeSummary,
+      dailyVolumeSummary,
+    );
+  });
+
+  it('orders class groups deterministically by class creation time instead of rule order', () => {
+    const earlyClass: ActivityClass = {
+      ...CLASS_RUNNING,
+      id: 'cls-created-first',
+      name: 'Created First',
+      createdAt: '2026-01-01T00:00:00Z',
+    };
+    const laterClass: ActivityClass = {
+      ...CLASS_STRENGTH,
+      id: 'cls-created-second',
+      name: 'Created Second',
+      createdAt: '2026-02-01T00:00:00Z',
+    };
+    const earlyClassRule: Rule = {
+      ...RULE_REST,
+      id: 'rule-created-first',
+      activityClassId: earlyClass.id,
+    };
+    const laterClassRule: Rule = {
+      ...RULE_REST,
+      id: 'rule-created-second',
+      activityClassId: laterClass.id,
+    };
+
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      rules: [laterClassRule, earlyClassRule],
+      weeklyTargets: [],
+      activityClasses: [laterClass, earlyClass],
+    });
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    const recoveryRules = screen.getByText(/recovery rules/i).parentElement;
+    expect(recoveryRules).not.toBeNull();
+    const recoveryScope = within(recoveryRules!);
+    const earlyClassHeader = recoveryScope.getByRole('heading', {
+      name: earlyClass.name,
+    });
+    const laterClassHeader = recoveryScope.getByRole('heading', {
+      name: laterClass.name,
+    });
+
+    expectDocumentOrder(earlyClassHeader, laterClassHeader);
   });
 });
 

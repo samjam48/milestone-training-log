@@ -191,6 +191,10 @@ Purpose:
 - `created_at`
 - `updated_at`
 
+Constraints:
+- `activity_class_id` references `activity_classes.id` with `ON DELETE CASCADE`
+- `activity_id` references `activities.id` with `ON DELETE CASCADE`
+
 Purpose:
 - Recovery constraints such as rest windows, frequency caps, weekly load caps,
   consecutive-day limits, or per-exercise volume caps

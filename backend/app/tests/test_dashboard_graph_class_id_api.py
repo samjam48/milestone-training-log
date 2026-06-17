@@ -1,4 +1,4 @@
-"""B10.2 — GET /api/dashboard top-level graph_class_id integration tests."""
+"""GET /api/dashboard top-level graph_class_id integration tests."""
 
 from __future__ import annotations
 
@@ -136,16 +136,6 @@ async def test_get_dashboard_graph_class_id_null_without_weekly_load_cap_on_acti
         activity_class_id="cls-foot",
         name="Walk",
     )
-    seed_rule(
-        app_with_test_database,
-        rule_id="rule-cap-orphan",
-        training_block_id="blk-completed",
-        rule_type="weekly_load_cap",
-        threshold_value=100.0,
-        window_days=7,
-        activity_class_id="cls-foot",
-        enabled=True,
-    )
     seed_training_block(
         app_with_test_database,
         block_id="blk-completed",
@@ -153,6 +143,16 @@ async def test_get_dashboard_graph_class_id_null_without_weekly_load_cap_on_acti
         start_date=date(2026, 1, 1),
         end_date=date(2026, 3, 1),
         status="completed",
+    )
+    seed_rule(
+        app_with_test_database,
+        rule_id="rule-cap-completed",
+        training_block_id="blk-completed",
+        rule_type="weekly_load_cap",
+        threshold_value=100.0,
+        window_days=7,
+        activity_class_id="cls-foot",
+        enabled=True,
     )
 
     response = await client.get(DASHBOARD_URL, params={"as_of": AS_OF})

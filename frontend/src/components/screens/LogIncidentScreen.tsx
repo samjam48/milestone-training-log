@@ -13,7 +13,6 @@ import { buildBodyPartSuggestions } from '../../lib/bodyPartSuggestions';
 import { BackButton } from '../ui/BackButton';
 import { Card } from '../ui/Card';
 import { Slider } from '../ui/Slider';
-import { DelayedTaxAttributionSection } from '../composites/DelayedTaxAttributionSection';
 import type { MilestoneEngineResult, IncidentDraft } from '../../hooks/useMilestoneEngine';
 import type { FlareUpIncident, Score0to10 } from '../../types';
 
@@ -39,8 +38,6 @@ function severityState(v: number) {
 export const LogIncidentScreen: React.FC<Props> = ({ engine, onBack, onComplete }) => {
   const {
     todayDate,
-    delayedTax,
-    delayedTaxError,
     activityClasses,
     incidents,
     checkIns,
@@ -84,15 +81,10 @@ export const LogIncidentScreen: React.FC<Props> = ({ engine, onBack, onComplete 
       </span>
       <p className="text-title font-semibold text-danger-fg">Incident recorded.</p>
       <p className="text-body text-ink-muted">Rest up. The heatmap and dashboard reflect today's status.</p>
-      <DelayedTaxAttributionSection
-        delayedTax={delayedTax}
-        delayedTaxError={delayedTaxError}
-        activityClasses={activityClasses}
-      />
       <button
         type="button"
         onClick={onComplete}
-        className="mt-2 h-12 w-full max-w-md rounded-md bg-danger text-body-lg font-semibold text-ink-inverse active:brightness-90"
+        className="mt-2 h-12 w-full max-w-md rounded-md bg-ink text-body-lg font-semibold text-ink-inverse active:brightness-90"
       >
         Done
       </button>

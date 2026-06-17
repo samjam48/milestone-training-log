@@ -29,6 +29,9 @@ import {
   eachDay,
   parseISODate,
 } from '../../lib/load';
+import { SAFETY_CELL_CLASSES } from './safetyCellClasses';
+
+export { SAFETY_CELL_CLASSES } from './safetyCellClasses';
 
 export interface CalendarHeatmapProps {
   /** Block start (inclusive). */
@@ -54,9 +57,7 @@ export interface CalendarHeatmapProps {
 const cellState: Record<SafetyState | 'neutral', string> = {
   // `bg-*` is the tinted dark surface, ring adds a thin same-hue border so the
   // cell still reads as a discrete tile on the bg-raised card.
-  safe:    'bg-safe/70    ring-1 ring-inset ring-safe-border',
-  caution: 'bg-caution/70 ring-1 ring-inset ring-caution-border',
-  danger:  'bg-danger/70  ring-1 ring-inset ring-danger-border',
+  ...SAFETY_CELL_CLASSES,
   neutral: 'bg-bg-sunken  ring-1 ring-inset ring-border-subtle',
 };
 

@@ -9,6 +9,7 @@ import * as React from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '../../lib/cn';
 import { Card, CardHeader, CardTitle } from '../ui/Card';
+import { DeleteButton } from '../ui/DeleteButton';
 import { CenteredModal } from '../ui/CenteredModal';
 import { ReviewMilestoneBadge } from '../ui/ReviewMilestoneBadge';
 import { apiFetch, ApiError } from '../../lib/api/client';
@@ -61,6 +62,89 @@ function formatCalendarWeekRange(startDate: string, endDate: string): string {
   return `${formatShortDate(startDate)} – ${formatShortDate(endDate)}`;
 }
 
+type VisibleRecoveryRule = {
+  rule: Rule;
+  cls: ActivityClass;
+  activity: Activity | null;
+  summary: string;
+};
+
+type RecoveryRuleActivityGroup = {
+  activity: Activity;
+  rules: VisibleRecoveryRule[];
+};
+
+type RecoveryRuleClassGroup = {
+  cls: ActivityClass;
+  classRules: VisibleRecoveryRule[];
+  activityGroups: RecoveryRuleActivityGroup[];
+};
+
+function compareByCreatedAtThenName(
+  a: ActivityClass,
+  b: ActivityClass,
+): number {
+  const createdAtComparison = a.createdAt.localeCompare(b.createdAt);
+
+  if (createdAtComparison !== 0) {
+    return createdAtComparison;
+  }
+
+  const nameComparison = a.name.localeCompare(b.name);
+
+  if (nameComparison !== 0) {
+    return nameComparison;
+  }
+
+  return a.id.localeCompare(b.id);
+}
+
+function groupVisibleRecoveryRules(
+  visibleRecoveryRules: VisibleRecoveryRule[],
+  activityClasses: ActivityClass[],
+): RecoveryRuleClassGroup[] {
+  return [...activityClasses]
+    .sort(compareByCreatedAtThenName)
+    .map((cls) => {
+      const classRules: VisibleRecoveryRule[] = [];
+      const activityGroups: RecoveryRuleActivityGroup[] = [];
+
+      for (const entry of visibleRecoveryRules) {
+        if (entry.cls.id !== cls.id) {
+          continue;
+        }
+
+        if (entry.activity == null) {
+          classRules.push(entry);
+          continue;
+        }
+
+        const existingGroup = activityGroups.find(
+          (group) => group.activity.id === entry.activity?.id,
+        );
+
+        if (existingGroup != null) {
+          existingGroup.rules.push(entry);
+        } else {
+          activityGroups.push({
+            activity: entry.activity,
+            rules: [entry],
+          });
+        }
+      }
+
+      return {
+        cls,
+        classRules,
+        activityGroups,
+      };
+    })
+    .filter(
+      (group) =>
+        group.classRules.length > 0 || group.activityGroups.length > 0,
+    );
+}
+
 // ---------------------------------------------------------------------------
 // WeeklyRulesSummaryCard
 // ---------------------------------------------------------------------------
@@ -89,11 +173,30 @@ function WeeklyRulesSummaryCard({
   const activityMap = new Map(activities.map((activity) => [activity.id, activity]));
   const activeRules = rules.filter((r) => r.enabled);
   const visibleRecoveryRules = activeRules
-    .map((rule) => ({
-      rule,
-      summary: formatSettingsRuleSummary(rule.ruleType, rule.thresholdValue),
-    }))
-    .filter((entry): entry is { rule: Rule; summary: string } => entry.summary != null);
+    .map((rule) => {
+      const cls = rule.activityClassId ? classMap.get(rule.activityClassId) : null;
+      const activity = rule.activityId ? activityMap.get(rule.activityId) : null;
+      const hasResolvableScope =
+        cls != null && (rule.activityId == null || activity != null);
+
+      return {
+        rule,
+        cls,
+        activity,
+        summary: hasResolvableScope
+          ? formatSettingsRuleSummary(rule.ruleType, rule.thresholdValue)
+          : null,
+      };
+    })
+    .filter(
+      (
+        entry,
+      ): entry is VisibleRecoveryRule => entry.summary != null,
+    );
+  const recoveryRuleGroups = groupVisibleRecoveryRules(
+    visibleRecoveryRules,
+    activityClasses,
+  );
 
   return (
     <Card pad="md">
@@ -119,26 +222,50 @@ function WeeklyRulesSummaryCard({
       </CardHeader>
 
       {/* Recovery rules */}
-      {visibleRecoveryRules.length > 0 && (
+      {recoveryRuleGroups.length > 0 && (
         <div className="mb-4 pt-3 border-t border-border-subtle">
           <p className="text-label uppercase font-medium text-ink-faint mb-2">Recovery Rules</p>
-          <ul className="flex flex-col divide-y divide-border-subtle">
-            {visibleRecoveryRules.map(({ rule, summary }) => {
-              const cls = rule.activityClassId ? classMap.get(rule.activityClassId) : null;
-              const activity = rule.activityId ? activityMap.get(rule.activityId) : null;
-              return (
-                <li
-                  key={rule.id}
-                  className="flex items-center justify-between gap-3 py-2 text-body"
+          <div className="flex flex-col gap-3">
+            {recoveryRuleGroups.map((group) => (
+              <section key={group.cls.id} aria-labelledby={`recovery-rules-${group.cls.id}`}>
+                <h3
+                  id={`recovery-rules-${group.cls.id}`}
+                  className="text-body font-medium text-ink"
                 >
-                  <span className="text-ink-muted truncate">
-                    {activity ? activity.name : cls ? cls.name : 'All classes'}
-                  </span>
-                  <span className="text-ink shrink-0">{summary}</span>
-                </li>
-              );
-            })}
-          </ul>
+                  {group.cls.name}
+                </h3>
+                {group.classRules.length > 0 && (
+                  <ul className="mt-1 flex flex-col divide-y divide-border-subtle">
+                    {group.classRules.map(({ rule, summary }) => (
+                      <li
+                        key={rule.id}
+                        className="flex items-center justify-end py-2 text-body"
+                      >
+                        <span className="text-ink shrink-0">{summary}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {group.activityGroups.map((activityGroup) => (
+                  <div key={activityGroup.activity.id} className="mt-2">
+                    <h4 className="text-label font-medium text-ink-muted">
+                      {activityGroup.activity.name}
+                    </h4>
+                    <ul className="mt-1 flex flex-col divide-y divide-border-subtle">
+                      {activityGroup.rules.map(({ rule, summary }) => (
+                        <li
+                          key={rule.id}
+                          className="flex items-center justify-end py-2 text-body"
+                        >
+                          <span className="text-ink shrink-0">{summary}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </section>
+            ))}
+          </div>
         </div>
       )}
 
@@ -1286,18 +1413,14 @@ export function SettingsScreen({
                       >
                         Edit
                       </button>
-                      <button
-                        type="button"
+                      <DeleteButton
                         aria-label={`Delete ${cls.name}`}
                         onClick={() => {
                           setDeleteTarget(cls);
                           setDeleteStep(1);
                           setDeleteError(null);
                         }}
-                        className="h-8 px-2.5 rounded-md text-caption font-medium text-danger-fg hover:bg-danger/10 transition-colors duration-snap"
-                      >
-                        Delete
-                      </button>
+                      />
                     </div>
                   </li>
                 ))}

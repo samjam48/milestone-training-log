@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from sqlmodel import Session, col, select
 
 from app.models.activity import Activity, ActivityClass
-from app.models.block import Rule, WeeklyTarget
+from app.models.block import WeeklyTarget
 from app.models.goal import Goal
 from app.models.log import ActivityLog
 from app.schemas.activity_classes import ActivityClassCreate, ActivityClassPatch
@@ -91,11 +91,6 @@ def delete_activity_class(session: Session, class_id: str) -> None:
             "Cannot delete activity class while goals reference it"
         )
 
-    if _has_rules_referencing_class(session, class_id, activity_ids):
-        raise ActivityClassDeleteBlockedError(
-            "Cannot delete activity class while rules reference it"
-        )
-
     if _has_weekly_targets_referencing_class(session, class_id):
         raise ActivityClassDeleteBlockedError(
             "Cannot delete activity class while weekly targets reference it"
@@ -151,24 +146,6 @@ def _has_goals_referencing_class(
             col(Goal.activity_id).in_(activity_ids),
         )
         .limit(1)
-    )
-    return session.exec(activity_statement).first() is not None
-
-
-def _has_rules_referencing_class(
-    session: Session,
-    class_id: str,
-    activity_ids: list[str],
-) -> bool:
-    class_statement = select(Rule.id).where(Rule.activity_class_id == class_id).limit(1)
-    if session.exec(class_statement).first() is not None:
-        return True
-
-    if not activity_ids:
-        return False
-
-    activity_statement = (
-        select(Rule.id).where(col(Rule.activity_id).in_(activity_ids)).limit(1)
     )
     return session.exec(activity_statement).first() is not None
 

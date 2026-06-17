@@ -2,19 +2,22 @@
  * C6.2 — Log form decimal volume acceptance tests.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { screen, within, cleanup, waitFor } from '@testing-library/react';
+import { screen, within, cleanup, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders';
 import {
   createLogActivityEngine,
+  logActivityClass,
   logActivityWalk,
 } from '../../test/fixtures/c62Fixtures';
 import type { MilestoneEngineResult } from '../../hooks/useMilestoneEngine';
+import type { Activity } from '../../types';
 import { LogActivityScreen } from './LogActivityScreen';
 
 interface LogActivityScreenS28Props {
   engine: MilestoneEngineResult;
   initialActivityId?: string;
+  logId?: string;
   onBack: () => void;
   onComplete: () => void;
   onCreateActivity?: () => void;
@@ -416,5 +419,370 @@ describe('LogActivityScreen — D3 async save', () => {
     });
     expect(screen.getByRole('heading', { name: 'Log Activity' })).toBeInTheDocument();
     expect(onComplete).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Log Activity picker collapse after selection
+// ---------------------------------------------------------------------------
+
+describe('LogActivityScreen — activity picker collapse', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  const bikeActivity: Activity = {
+    ...logActivityWalk,
+    id: 'act-bike',
+    name: 'Stationary Bike',
+    defaultVolumeUnit: 'minutes',
+  };
+
+  function renderLogActivity(
+    engine: MilestoneEngineResult = createLogActivityEngine(),
+    props: Partial<LogActivityScreenS28Props> = {},
+  ): void {
+    renderWithProviders(
+      <LogActivityScreenS28
+        engine={engine}
+        onBack={vi.fn()}
+        onComplete={vi.fn()}
+        {...props}
+      />,
+    );
+  }
+
+  function expectCollapsedActivitySummary(activity: Activity): void {
+    expect(screen.getByText(logActivityClass.name)).toBeInTheDocument();
+    expect(screen.getByText(activity.name)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^change$/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: activity.name })).not.toBeInTheDocument();
+  }
+
+  function expectSessionDetailsVisible(): void {
+    expect(screen.getByText('Date')).toBeInTheDocument();
+    expect(screen.getByText('Session details')).toBeInTheDocument();
+    expect(screen.getByText('Effort (RPE)')).toBeInTheDocument();
+    expect(screen.getByText('How did it go?')).toBeInTheDocument();
+  }
+
+  function getLastViolationCheck(
+    checkViolations: ReturnType<typeof vi.fn>,
+  ): unknown[] {
+    expect(checkViolations).toHaveBeenCalled();
+    const lastCall = checkViolations.mock.calls.at(-1);
+    expect(lastCall).toBeDefined();
+    return lastCall!;
+  }
+
+  it('collapses the full picker to class and exercise summary after selecting an exercise', async () => {
+    const user = userEvent.setup();
+    renderLogActivity();
+
+    await user.click(screen.getByRole('button', { name: 'Morning Walk' }));
+
+    expectCollapsedActivitySummary(logActivityWalk);
+    expectSessionDetailsVisible();
+  });
+
+  it('re-expands the grouped picker when Change is activated', async () => {
+    const user = userEvent.setup();
+    renderLogActivity();
+
+    await user.click(screen.getByRole('button', { name: 'Morning Walk' }));
+    await user.click(screen.getByRole('button', { name: /^change$/i }));
+
+    expect(screen.getByText('What did you do?')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Morning Walk' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^change$/i })).not.toBeInTheDocument();
+  });
+
+  it('starts collapsed when initialActivityId points to an active activity', () => {
+    renderLogActivity(createLogActivityEngine(), {
+      initialActivityId: logActivityWalk.id,
+    });
+
+    expectCollapsedActivitySummary(logActivityWalk);
+    expectSessionDetailsVisible();
+  });
+
+  it('starts collapsed in edit mode for an existing log', () => {
+    const existingLog = {
+      id: 'log-edit-collapse',
+      userId: 'user-1',
+      activityId: logActivityWalk.id,
+      loggedDate: '2026-05-28',
+      durationMinutes: 25,
+      volumeValue: 2,
+      volumeUnit: 'km' as const,
+      rpe: 4 as const,
+      postActivityFeel: 'fine' as const,
+      notes: 'Easy',
+      createdAt: '2026-04-07T06:00:00Z',
+    };
+
+    renderLogActivity(createLogActivityEngine({ logs: [existingLog] }), {
+      logId: existingLog.id,
+    });
+
+    expectCollapsedActivitySummary(logActivityWalk);
+    expectSessionDetailsVisible();
+  });
+
+  it('checks live violations with duration as volume for a minute-unit activity', async () => {
+    const user = userEvent.setup();
+    const checkViolations = vi.fn().mockReturnValue([]);
+
+    renderLogActivity(
+      createLogActivityEngine({
+        activities: [logActivityWalk, bikeActivity],
+        checkViolations,
+      }),
+      { initialActivityId: bikeActivity.id },
+    );
+
+    const durationInput = screen.getByPlaceholderText('20');
+    await user.clear(durationInput);
+    await user.type(durationInput, '45');
+
+    expect(screen.queryByText('Volume')).not.toBeInTheDocument();
+    expect(getLastViolationCheck(checkViolations)).toEqual([
+      bikeActivity.id,
+      45,
+      5,
+      45,
+      'minutes',
+      '2026-05-28',
+    ]);
+  });
+
+  it('submits duration as minutes volume for a minute-unit activity', async () => {
+    const user = userEvent.setup();
+    const submitLog = vi.fn().mockResolvedValue(undefined);
+
+    renderLogActivity(
+      createLogActivityEngine({
+        activities: [logActivityWalk, bikeActivity],
+        submitLog,
+      }),
+      { initialActivityId: bikeActivity.id },
+    );
+
+    const durationInput = screen.getByPlaceholderText('20');
+    await user.clear(durationInput);
+    await user.type(durationInput, '45');
+
+    expect(screen.queryByText('Volume')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Log session' }));
+
+    await waitFor(() => expect(submitLog).toHaveBeenCalledTimes(1));
+    expect(submitLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        activityId: bikeActivity.id,
+        durationMinutes: 45,
+        volumeValue: 45,
+        volumeUnit: 'minutes',
+      }),
+    );
+  });
+
+  it('checks live violations with duration as volume when editing a minute-unit log', async () => {
+    const checkViolations = vi.fn().mockReturnValue([]);
+    const existingLog = {
+      id: 'log-edit-minute-collapse',
+      userId: 'user-1',
+      activityId: bikeActivity.id,
+      loggedDate: '2026-05-28',
+      durationMinutes: 25,
+      volumeValue: 25,
+      volumeUnit: 'minutes' as const,
+      rpe: 4 as const,
+      postActivityFeel: 'fine' as const,
+      notes: 'Easy',
+      createdAt: '2026-04-07T06:00:00Z',
+    };
+
+    renderLogActivity(
+      createLogActivityEngine({
+        activities: [logActivityWalk, bikeActivity],
+        logs: [existingLog],
+        checkViolations,
+      }),
+      { logId: existingLog.id },
+    );
+
+    const durationInput = screen.getByPlaceholderText('20');
+    fireEvent.change(durationInput, { target: { value: '30' } });
+
+    expect(getLastViolationCheck(checkViolations)).toEqual([
+      bikeActivity.id,
+      30,
+      4,
+      30,
+      'minutes',
+      '2026-05-28',
+    ]);
+  });
+
+  it('saves duration as minutes volume when editing a minute-unit log', async () => {
+    const updateLog = vi.fn().mockResolvedValue(undefined);
+    const existingLog = {
+      id: 'log-edit-minute-collapse',
+      userId: 'user-1',
+      activityId: bikeActivity.id,
+      loggedDate: '2026-05-28',
+      durationMinutes: 25,
+      volumeValue: 25,
+      volumeUnit: 'minutes' as const,
+      rpe: 4 as const,
+      postActivityFeel: 'fine' as const,
+      notes: 'Easy',
+      createdAt: '2026-04-07T06:00:00Z',
+    };
+
+    renderLogActivity(
+      createLogActivityEngine({
+        activities: [logActivityWalk, bikeActivity],
+        logs: [existingLog],
+        updateLog,
+      }),
+      { logId: existingLog.id },
+    );
+
+    const durationInput = screen.getByPlaceholderText('20');
+    fireEvent.change(durationInput, { target: { value: '30' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => expect(updateLog).toHaveBeenCalledTimes(1));
+    expect(updateLog).toHaveBeenCalledWith(
+      existingLog.id,
+      expect.objectContaining({
+        activityId: bikeActivity.id,
+        durationMinutes: 30,
+        volumeValue: 30,
+        volumeUnit: 'minutes',
+      }),
+    );
+  });
+
+  it('keeps the picker expanded when initialActivityId is missing or inactive', () => {
+    renderLogActivity(createLogActivityEngine(), {
+      initialActivityId: 'act-missing',
+    });
+
+    expect(screen.getByText('What did you do?')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Morning Walk' })).toBeInTheDocument();
+    expect(screen.queryByText('Session details')).not.toBeInTheDocument();
+
+    cleanup();
+
+    renderLogActivity(
+      createLogActivityEngine({
+        activities: [
+          { ...logActivityWalk, isActive: false },
+          bikeActivity,
+        ],
+      }),
+      { initialActivityId: logActivityWalk.id },
+    );
+
+    expect(screen.getByText('What did you do?')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Morning Walk' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Stationary Bike' })).toBeInTheDocument();
+    expect(screen.queryByText('Session details')).not.toBeInTheDocument();
+  });
+
+  it('keeps entered session details and checks live violations with derived minute volume after changing to a minute-unit exercise', async () => {
+    const user = userEvent.setup();
+    const checkViolations = vi.fn().mockReturnValue([]);
+
+    renderLogActivity(
+      createLogActivityEngine({
+        activities: [logActivityWalk, bikeActivity],
+        checkViolations,
+      }),
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Morning Walk' }));
+
+    const durationInput = screen.getByPlaceholderText('20');
+    await user.clear(durationInput);
+    await user.type(durationInput, '35');
+
+    const rpeSlider = screen.getByRole('slider');
+    fireEvent.change(rpeSlider, { target: { value: '8' } });
+
+    await user.click(screen.getByRole('radio', { name: 'Bad' }));
+    await user.click(screen.getByRole('button', { name: /^change$/i }));
+    await user.click(screen.getByRole('button', { name: 'Stationary Bike' }));
+
+    expectCollapsedActivitySummary(bikeActivity);
+    expect(screen.getByPlaceholderText('20')).toHaveValue(35);
+    expect(screen.getByRole('slider')).toHaveAttribute('aria-valuenow', '8');
+    expect(screen.getByRole('radio', { name: 'Bad' })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.queryByText('Volume')).not.toBeInTheDocument();
+    expect(getLastViolationCheck(checkViolations)).toEqual([
+      bikeActivity.id,
+      35,
+      8,
+      35,
+      'minutes',
+      '2026-05-28',
+    ]);
+  });
+
+  it('keeps entered session details and submits derived minute volume after changing to a minute-unit exercise', async () => {
+    const user = userEvent.setup();
+    const submitLog = vi.fn().mockResolvedValue(undefined);
+
+    renderLogActivity(
+      createLogActivityEngine({
+        activities: [logActivityWalk, bikeActivity],
+        submitLog,
+      }),
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Morning Walk' }));
+
+    const durationInput = screen.getByPlaceholderText('20');
+    await user.clear(durationInput);
+    await user.type(durationInput, '35');
+
+    const rpeSlider = screen.getByRole('slider');
+    fireEvent.change(rpeSlider, { target: { value: '8' } });
+
+    await user.click(screen.getByRole('radio', { name: 'Bad' }));
+    await user.click(screen.getByRole('button', { name: /^change$/i }));
+    await user.click(screen.getByRole('button', { name: 'Stationary Bike' }));
+
+    expectCollapsedActivitySummary(bikeActivity);
+    expect(screen.getByPlaceholderText('20')).toHaveValue(35);
+    expect(screen.getByRole('slider')).toHaveAttribute('aria-valuenow', '8');
+    expect(screen.getByRole('radio', { name: 'Bad' })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.queryByText('Volume')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Log session' }));
+
+    await waitFor(() => expect(submitLog).toHaveBeenCalledTimes(1));
+    expect(submitLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        activityId: bikeActivity.id,
+        durationMinutes: 35,
+        volumeValue: 35,
+        volumeUnit: 'minutes',
+        rpe: 8,
+        postActivityFeel: 'bad',
+      }),
+    );
+  });
+
+  it('leaves the existing no-active-activities empty state path unchanged', () => {
+    renderLogActivity(createLogActivityEngine({ activities: [] }));
+
+    expect(screen.getByTestId('log-activity-empty-state')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^change$/i })).not.toBeInTheDocument();
+    expect(screen.queryByText('Session details')).not.toBeInTheDocument();
   });
 });

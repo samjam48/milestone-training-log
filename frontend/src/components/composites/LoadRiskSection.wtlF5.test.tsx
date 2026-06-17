@@ -44,10 +44,15 @@ describe('LoadRiskSection — WTL.F5 rule-limit rows grouped by class', () => {
 
     const groups = screen.getAllByTestId(/^load-risk-class-group-/);
     expect(groups).toHaveLength(1);
-    expect(within(groups[0]!).getByText(WTL_F5_CLASS_NAME)).toBeInTheDocument();
+    // WTL_F5_CLASS_NAME now appears in both the group header and class-scoped bar labels
+    expect(within(groups[0]!).getAllByText(WTL_F5_CLASS_NAME).length).toBeGreaterThanOrEqual(1);
 
+    // Status rows are suppressed; only bar-mode rows render
+    const barRowCount = wtlF5FootLoadSummary.ruleLimitRows.filter(
+      (r) => r.displayMode !== 'status',
+    ).length;
     const ruleRows = within(groups[0]!).getAllByTestId(/^load-risk-rule-row-/);
-    expect(ruleRows).toHaveLength(wtlF5FootLoadSummary.ruleLimitRows.length);
+    expect(ruleRows).toHaveLength(barRowCount);
   });
 
   it('does not collapse exercise caps into a single class-wide bar', () => {
@@ -55,9 +60,9 @@ describe('LoadRiskSection — WTL.F5 rule-limit rows grouped by class', () => {
 
     expect(screen.queryByTestId('load-risk-class-bars')).not.toBeInTheDocument();
     expect(screen.getByTestId('load-risk-rule-rows')).toBeInTheDocument();
-    expect(screen.getByText('4 / 3 sessions')).toBeInTheDocument();
-    expect(screen.getByText('7 / 8 km')).toBeInTheDocument();
-    expect(screen.getByText('20 / 45 minutes')).toBeInTheDocument();
+    expect(screen.getByText('Weekly: 4 / 3 sessions')).toBeInTheDocument();
+    expect(screen.getByText('Weekly: 7 / 8 km')).toBeInTheDocument();
+    expect(screen.getByText('Daily: 20 / 45 minutes')).toBeInTheDocument();
     expect(screen.queryByText(/0 \/ 8 km/i)).not.toBeInTheDocument();
   });
 });
@@ -92,20 +97,22 @@ describe('LoadRiskSection — WTL.F5 fill bars vs rest status copy', () => {
     const freqRow = screen.getByTestId(`load-risk-rule-row-${wtlF5ClassFrequencyRow.id}`);
     expect(freqRow).toHaveAttribute('data-display-mode', 'bar');
     expect(within(freqRow).getByRole('progressbar')).toBeInTheDocument();
-    expect(within(freqRow).getByText('4 / 3 sessions')).toBeInTheDocument();
+    expect(within(freqRow).getByText('Weekly: 4 / 3 sessions')).toBeInTheDocument();
 
     const walkRow = screen.getByTestId(`load-risk-rule-row-${wtlF5WalkWeeklyVolumeRow.id}`);
     expect(walkRow).toHaveAttribute('data-display-mode', 'bar');
     expect(within(walkRow).getByRole('progressbar')).toBeInTheDocument();
   });
 
-  it('renders status copy for rest-spacing rows without a fill bar', () => {
+  it('does not render status-mode rows — rest-spacing rows produce no DOM output', () => {
     renderLoadRisk(wtlF5FootLoadSummary);
 
-    const restRow = screen.getByTestId(`load-risk-rule-row-${wtlF5ClassRestRow.id}`);
-    expect(restRow).toHaveAttribute('data-display-mode', 'status');
-    expect(within(restRow).queryByRole('progressbar')).not.toBeInTheDocument();
-    expect(within(restRow).getByText(wtlF5ClassRestRow.label)).toBeInTheDocument();
+    // Status rows render null; the row wrapper must be absent
+    expect(
+      screen.queryByTestId(`load-risk-rule-row-${wtlF5ClassRestRow.id}`),
+    ).not.toBeInTheDocument();
+    // Label text must also be absent
+    expect(screen.queryByText(wtlF5ClassRestRow.label)).not.toBeInTheDocument();
   });
 
   it('applies danger styling on over-limit fill rows', () => {

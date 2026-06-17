@@ -3,30 +3,6 @@
 Follow-up items outside the current sprint (`AGENTS.md`). Phase 0–10 tickets
 are archived in `plans/archive/phase-0-10/`.
 
-**Small UX updates**
-- Log:
-  - Log page - Day and week have cleaner visible breaks.
-  - Logging - Exercises whose unit is minutes do not show an input unit as it is just minutes, value is just a copy
-- Dashboard
-    - Load risk section - for daily or weekly limits - put the work before the progress bar
-    - Activity status - Today instead of 0 days ago
-    - Clean streak - doesn't flag rule violations
-- Rules block:
-  - What is 'All classes'?
-  - Preview Items grouping:
-    - Same property have one title and then drop down.
-    - Exercises matched to their class
-  - Edit rules:
-    - 'i' icon for info
-    - settings in line and smaller
-    - Delete is a bin rather than a word
-- Log incident:
-  - Where are incidents ever shown? - Maybe in log history??
-  - Viewing old logs before confirming, no real functionality.
-  - Confim button is squished
-
-
-
 
 ## Stage 2 polish — complete (2026-06)
 
@@ -193,3 +169,10 @@ Supersedes WTL.B7 lazy cutover, WTL.F7 focus-title/setup/reset UX, and month-sty
 ## Product gaps still open (not in the list above)
 
 - **Settings preference toggles** — Notifications and Metric units are local React state only (prototype; no backend).
+
+## UX — Future (post-overhaul sprint, 2026-06)
+
+- **True streak counter** — consecutive-week (or session) streak derived from weekly target history. Replace the retired `cleanStreak` UI with a well-designed streaks section. Distinct from the retired F10.1 recovery streaks and the `cleanStreak` field (engine field stays; UI re-added when product model is clear).
+- **Load breakdown screen** — tap-through from `LoadRiskSection` to a per-class breakdown showing what percentage of weekly budget each class is consuming. Helps power users tune volume caps.
+- **Block safety map interactivity** — tap a heatmap cell to see which rules applied that day (rest window, frequency, consecutive days). Adds context to the calendar view.
+- **Activity status → link to Edit Rules** — in the expanded rule detail panel (UX-B4), add a "Adjust rules for this class →" navigation shortcut.

@@ -165,7 +165,7 @@ describe('SettingsScreen — WRU.F1 remove legacy create and focus flows', () =>
 });
 
 describe('SettingsScreen — WRU.F1 edit rules and review unchanged', () => {
-  it('still renders Edit rules for the active weekly rules card', () => {
+  it('still renders Edit rules for the active weekly rules card without unresolved rule summaries', () => {
     renderSettings({
       engine: makeEngine({
         block: WRU_F1_ACTIVE_WEEK,
@@ -176,9 +176,10 @@ describe('SettingsScreen — WRU.F1 edit rules and review unchanged', () => {
     });
 
     expect(screen.getByRole('button', { name: /edit rules/i })).toBeInTheDocument();
+    expect(screen.getByText(WRU_F1_ACTIVE_WEEK_LABEL)).toBeInTheDocument();
     expect(
-      screen.getByText(new RegExp(P25_6_RULE_LABELS.rest_between_class, 'i')),
-    ).toBeInTheDocument();
+      screen.queryByText(new RegExp(P25_6_RULE_LABELS.rest_between_class, 'i')),
+    ).not.toBeInTheDocument();
   });
 
   it('calls onEditRules when Edit rules is clicked', async () => {

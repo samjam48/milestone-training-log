@@ -168,7 +168,8 @@ describe('EditBlockRulesScreen — P25.6 user-facing rule labels', () => {
 // ---------------------------------------------------------------------------
 
 describe('EditBlockRulesScreen — P25.6 rule helper copy', () => {
-  it('shows helper text under each spacing rule type on existing rule rows', () => {
+  it('reveals helper text from each spacing rule info control', async () => {
+    const user = userEvent.setup();
     const engine = makeEngine({
       block: ACTIVE_BLOCK,
       activityClasses: [CLASS_RUNNING],
@@ -182,11 +183,37 @@ describe('EditBlockRulesScreen — P25.6 rule helper copy', () => {
     const runningSection = screen.getByTestId(`class-rules-${CLASS_RUNNING.id}`);
 
     expect(
+      within(runningSection).queryByText(P25_6_RULE_HELPERS.rest_between_class),
+    ).not.toBeInTheDocument();
+    await user.click(
+      within(runningSection).getByRole('button', {
+        name: /minimum days between sessions info/i,
+      }),
+    );
+    expect(
       within(runningSection).getByText(P25_6_RULE_HELPERS.rest_between_class),
     ).toBeInTheDocument();
+
+    expect(
+      within(runningSection).queryByText(P25_6_RULE_HELPERS.frequency_limit),
+    ).not.toBeInTheDocument();
+    await user.click(
+      within(runningSection).getByRole('button', {
+        name: /maximum sessions per week info/i,
+      }),
+    );
     expect(
       within(runningSection).getByText(P25_6_RULE_HELPERS.frequency_limit),
     ).toBeInTheDocument();
+
+    expect(
+      within(runningSection).queryByText(P25_6_RULE_HELPERS.consecutive_day_limit),
+    ).not.toBeInTheDocument();
+    await user.click(
+      within(runningSection).getByRole('button', {
+        name: /maximum consecutive days info/i,
+      }),
+    );
     expect(
       within(runningSection).getByText(P25_6_RULE_HELPERS.consecutive_day_limit),
     ).toBeInTheDocument();

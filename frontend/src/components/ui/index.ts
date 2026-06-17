@@ -35,6 +35,8 @@ export type { ActivityLogRowProps } from './ActivityLogRow';
 export { ReviewMilestoneBadge, REVIEW_MILESTONE_LABEL } from './ReviewMilestoneBadge';
 export type { ReviewMilestoneBadgeProps } from './ReviewMilestoneBadge';
 
+export { DeleteButton } from './DeleteButton';
+
 export {
   StackScreenEngineBody,
   stackScreenEngineBlocked,

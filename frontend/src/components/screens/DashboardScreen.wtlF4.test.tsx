@@ -6,7 +6,7 @@
  * and performance-class graph title.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { renderWithProviders } from '../../test/renderWithProviders';
 import { mockEngine, resetMockEngine } from '../../test/mockEngine';
 import type { TrainingBlock } from '../../types';
@@ -81,6 +81,18 @@ function setupDashboardLoadGraph(
     options.weekLoadThreshold === undefined ? null : options.weekLoadThreshold;
 }
 
+function renderDashboardLoadGraph(): ReturnType<typeof renderWithProviders> {
+  const view = renderWithProviders(
+    <DashboardScreen
+      engine={mockEngine}
+      onOpenCheckIn={vi.fn()}
+      onOpenLogActivity={vi.fn()}
+    />,
+  );
+  fireEvent.click(screen.getByRole('radio', { name: 'Safety' }));
+  return view;
+}
+
 function loadGraphCard(): HTMLElement {
   const title = screen.getByRole('heading', { name: 'Foot load' });
   const card = title.closest('.rounded-lg') as HTMLElement | null;
@@ -104,13 +116,7 @@ describe('DashboardScreen — WTL.F4 load-tax graph', () => {
   it('plots the last 30 days ending on today, not the full block start date', () => {
     setupDashboardLoadGraph();
 
-    renderWithProviders(
-      <DashboardScreen
-        engine={mockEngine}
-        onOpenCheckIn={vi.fn()}
-        onOpenLogActivity={vi.fn()}
-      />,
-    );
+    renderDashboardLoadGraph();
 
     expect(
       screen.getByRole('img', {
@@ -130,13 +136,7 @@ describe('DashboardScreen — WTL.F4 load-tax graph', () => {
   it('renders the rolling effort-load subtitle for the dashboard graph', () => {
     setupDashboardLoadGraph();
 
-    renderWithProviders(
-      <DashboardScreen
-        engine={mockEngine}
-        onOpenCheckIn={vi.fn()}
-        onOpenLogActivity={vi.fn()}
-      />,
-    );
+    renderDashboardLoadGraph();
 
     expect(screen.getByText(WTL_F4_SUBTITLE)).toBeInTheDocument();
     expect(screen.queryByText('Rolling 7-day · full block')).not.toBeInTheDocument();
@@ -145,13 +145,7 @@ describe('DashboardScreen — WTL.F4 load-tax graph', () => {
   it('shows the latest load-tax metric without a / 0 cap suffix when threshold is null', () => {
     setupDashboardLoadGraph({ weekLoadThreshold: null });
 
-    renderWithProviders(
-      <DashboardScreen
-        engine={mockEngine}
-        onOpenCheckIn={vi.fn()}
-        onOpenLogActivity={vi.fn()}
-      />,
-    );
+    renderDashboardLoadGraph();
 
     const card = loadGraphCard();
     expect(within(card).getByText(String(WTL_F4_LATEST_LOAD))).toBeInTheDocument();
@@ -161,13 +155,7 @@ describe('DashboardScreen — WTL.F4 load-tax graph', () => {
   it('keeps the performance class name as the graph title', () => {
     setupDashboardLoadGraph({ graphClassId: WTL_F4_CLASS_FOOT.id });
 
-    renderWithProviders(
-      <DashboardScreen
-        engine={mockEngine}
-        onOpenCheckIn={vi.fn()}
-        onOpenLogActivity={vi.fn()}
-      />,
-    );
+    renderDashboardLoadGraph();
 
     expect(screen.getByText('Foot load')).toBeInTheDocument();
   });

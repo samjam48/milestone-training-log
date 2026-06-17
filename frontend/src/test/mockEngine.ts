@@ -47,6 +47,7 @@ function createBaseline(): MilestoneEngineResult {
     rules: [],
     weeklyTargets: [],
     previousBlocks: [],
+    classWeeklySummaries: [],
     // F2.0 mutations
     submitNewActivity: () => undefined,
     submitNewActivityClass: async (draft: NewActivityClassDraft) => {

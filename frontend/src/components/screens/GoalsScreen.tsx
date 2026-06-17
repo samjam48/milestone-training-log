@@ -9,6 +9,7 @@
 import * as React from 'react';
 import { cn } from '../../lib/cn';
 import { Card } from '../ui/Card';
+import { DeleteButton } from '../ui/DeleteButton';
 import { ProgressBar } from '../ui/ProgressBar';
 import type { MilestoneEngineResult } from '../../hooks/useMilestoneEngine';
 import type { Activity, Goal, SafetyState, VolumeUnit, WeeklyTarget } from '../../types';
@@ -436,13 +437,10 @@ function WeeklyTargetCard({
               >
                 Edit
               </button>
-              <button
-                type="button"
+              <DeleteButton
+                aria-label={`Delete ${activityName} target`}
                 onClick={onDeleteRequest}
-                className="h-8 px-3 rounded-md text-caption font-medium text-ink-faint hover:text-ink-muted transition-colors duration-snap"
-              >
-                Delete
-              </button>
+              />
             </>
           )}
         </div>

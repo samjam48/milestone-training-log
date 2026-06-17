@@ -1,4 +1,4 @@
-"""WTL.B1 — Weekly target schema consolidation (failing tests until implemented).
+"""Weekly target schema consolidation.
 
 Covers Alembic schema extensions, recovery-target data migration, model shape,
 relationships, docs contract, and SQLite/Postgres migration gates.
@@ -587,7 +587,7 @@ def test_wtl_b1_migration_keeps_existing_weekly_target_on_recovery_conflict(
     assert rows[0]["target_unit"] == "sessions"
 
 
-def test_wtl_b1_migration_leaves_orphan_weekly_recovery_targets_unconverted(
+def test_weekly_target_migration_leaves_orphan_recovery_targets_unconverted(
     tmp_path: Path,
 ) -> None:
     database_url = f"sqlite:///{tmp_path / 'wtl-b1-recovery-orphan.db'}"
@@ -618,8 +618,13 @@ def test_wtl_b1_migration_leaves_orphan_weekly_recovery_targets_unconverted(
             activity_id="act-missing",
             target_frequency=2,
         )
+
+    with engine.connect() as connection:
         connection.execute(text("PRAGMA foreign_keys=OFF"))
         connection.execute(text("DELETE FROM activities WHERE id = 'act-missing'"))
+        connection.commit()
+        connection.execute(text("PRAGMA foreign_keys=ON"))
+        connection.commit()
 
     command.upgrade(config, WTL_B1_HEAD_REVISION)
     _require_wtl_b1_weekly_target_schema(engine)

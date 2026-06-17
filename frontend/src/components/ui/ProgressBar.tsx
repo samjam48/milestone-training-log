@@ -79,7 +79,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
           {label && (
             <span className="text-body text-ink font-medium">{label}</span>
           )}
-          <span className="text-caption font-metric tabular-nums text-ink-muted">
+          <span className="text-caption font-metric tabular-nums text-ink-muted ml-auto">
             {valueText ?? `${value}/${target}`}
           </span>
         </div>
