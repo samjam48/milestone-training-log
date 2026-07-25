@@ -557,6 +557,30 @@ describe('mapActivityLogPatchBody', () => {
       notes: 'Updated',
     });
   });
+
+  it('maps nested ruleViolationsAtLog entries to snake_case rule violation fields', () => {
+    expect(
+      mapActivityLogPatchBody({
+        ruleViolationsAtLog: [
+          {
+            ruleId: 'rule-rest-foot',
+            ruleType: 'rest_between_class',
+            message: 'Breaks rest rule',
+            severity: 'caution',
+          },
+        ],
+      }),
+    ).toEqual({
+      rule_violations_at_log: [
+        {
+          rule_id: 'rule-rest-foot',
+          rule_type: 'rest_between_class',
+          message: 'Breaks rest rule',
+          severity: 'caution',
+        },
+      ],
+    });
+  });
 });
 
 describe('mapFlareUpIncidentFromApi', () => {
