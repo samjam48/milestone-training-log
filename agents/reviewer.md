@@ -40,22 +40,20 @@ Review the current branch against `main` and report code quality, architecture, 
 - Produce findings only; do not make code changes.
 - Prefer concrete, actionable comments tied to a specific file or path.
 
-## Output Format
-- Use a flat findings list.
-- For each finding include:
-  - Severity
-  - File or path reference
-  - Issue
-  - Suggested fix
-
 ## Stop And Report
 - Stop after the review comments are ready.
 - Do not edit code.
 - Do not rewrite tests.
 - Do not run fixes yourself.
 
-## Output Checklist
-- Findings list
-- Any notable clean areas worth preserving
-- Residual risks if the owner decides to proceed without changes
-- Final status line: `SIGNED OFF`, `BLOCKED`, or `NEEDS OWNER`
+## Output Format
+```
+1. Summary: What was reviewed and overall assessment
+2. Critical Issues: Security, data integrity, logic errors — must fix
+3. Major Issues: Architecture violations, significant quality problems
+4. Minor Issues: Style, naming, documentation gaps
+5. Clean Areas: Patterns worth preserving
+6. Residual Risks: What breaks if owner proceeds without addressing issues
+7. Obstacles Encountered: Environment quirks, git diff problems, commands needing flags
+8. Status: SIGNED OFF | BLOCKED | NEEDS OWNER
+```

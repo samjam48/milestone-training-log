@@ -38,8 +38,11 @@ Run the full project quality gate sequence and report pass or fail for each gate
 - Do not attempt to fix failures, report them
 - Do not commit or push
 
-## Output Checklist
-- Pass, fail, or not applicable for each gate
-- Exact failure reason for any failing gate
-- Final summary stating whether the branch is ready for owner review
-- Final status line: `SIGNED OFF` (all applicable gates pass) or `BLOCKED` (one or more applicable gates failed)
+## Output Format
+```
+1. Gate Results: [gate name] — PASS / FAIL / NOT APPLICABLE + reason for non-pass
+2. Failure Details: Exact command output for any failing gate
+3. Merge Readiness: Overall statement — ready or blocked
+4. Obstacles Encountered: Commands needing special flags, environment issues
+5. Status: SIGNED OFF (all applicable gates pass) | BLOCKED (any gate failed)
+```

@@ -57,9 +57,13 @@ Do not hide questionable design choices behind "it works".
 - Stop and report if the failing output is too ambiguous to implement safely without seeing the tests.
 - Stop and report if the only safe path forward would violate `AGENTS.md`, `docs/architecture.md`, `plans/milestone-architecture.md`, or the approved ticket.
 
-## Output Checklist
-- Production files changed
-- Tests run
-- Lint and type checks run
-- Any remaining risks or follow-up notes
-- Final status line: `SIGNED OFF`, `BLOCKED`, or `NEEDS OWNER`
+## Output Format
+```
+1. Files Changed: Production files modified (paths only)
+2. Test Results: Command run + pass/fail for targeted tests
+3. Lint / Type Checks: Commands run and outcome
+4. Scope Notes: Anything touched outside the approved ticket (should be none)
+5. Residual Risks: Follow-up concerns or known debt introduced
+6. Obstacles Encountered: Workarounds, dependency issues, commands needing special flags
+7. Status: SIGNED OFF | BLOCKED | NEEDS OWNER
+```

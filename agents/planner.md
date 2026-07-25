@@ -52,9 +52,13 @@ Turn an approved phase or feature into implementation-ready tickets without writ
 - Do not continue into implementation or review.
 - Once output is reviewed and agreed by the developer, stop and hand off for the next workflow step.
 
-## Output Checklist
-- Ticket file path
-- Ticket ordering rationale
-- Any unresolved assumptions or dependencies
-- Confirmation that `AGENTS.md` was updated only if the sprint overview actually changed
-- Final status line: `SIGNED OFF`, `BLOCKED`, or `NEEDS OWNER`
+## Output Format
+```
+1. Ticket File: [path written]
+2. Ticket Summary: [count, IDs, and titles in dependency order]
+3. Ordering Rationale: Why tickets are sequenced this way
+4. Dependency Notes: Cross-ticket dependencies or blocking relationships
+5. Unresolved Assumptions: Anything that required guessing
+6. Obstacles Encountered: Unclear scope, missing info, deviations taken
+7. Status: SIGNED OFF | BLOCKED | NEEDS OWNER
+```

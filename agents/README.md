@@ -9,6 +9,12 @@ Shared hooks and rules live in `docs/ai/rules.md`.
 For a major feature or full phase build, use `orchestrator.md` as the workflow controller.
 Run one role at a time and one ticket at a time. Do not parallelize the flow.
 
+## Claude Code Subagent Registration
+
+Registered Claude Code subagents live in `.claude/agents/`. Each file contains YAML frontmatter (name, description, tools, model, color) followed by a concise system prompt that points back to the full role doc here.
+
+Invoke them with `@agent-name` in Claude Code (e.g. `@orchestrator`, `@test-writer`). The orchestrator uses the `Agent` tool to spawn the other roles automatically — no human relay needed between pipeline steps.
+
 Role prompts:
 
 - `orchestrator.md` controls the gated sequence: planning once per feature, then per-ticket Test Writer -> Implementer -> Reviewer -> commit, followed by developer verification and PR Checker.

@@ -49,9 +49,12 @@ Do not add elaborate tests for trivial cosmetic changes unless there is real ris
 - Stop and report if passing the ticket would obviously require an unapproved architecture-breaking API or schema change.
 - Do not write production code.
 
-## Output Checklist
-- Test files created or updated
-- Acceptance criteria coverage summary
-- Commands run
-- Failure summary showing the tests fail for feature reasons, not harness reasons
-- Final status line: `SIGNED OFF`, `BLOCKED`, or `NEEDS OWNER`
+## Output Format
+```
+1. Ticket Coverage: Which acceptance criteria → which test(s)
+2. Test Files: Paths created or updated
+3. Failure Confirmation: Command run + failure output (must fail for feature reasons, not harness)
+4. Manual Verification Notes: Criteria that require manual testing
+5. Obstacles Encountered: Fixture setup issues, harness quirks, imports that caused problems
+6. Status: SIGNED OFF | BLOCKED | NEEDS OWNER
+```
