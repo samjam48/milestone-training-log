@@ -22,7 +22,7 @@ If there is no approved ticket file, stop and ask the developer for one.
 
 ## Hard Rules
 - **One active role and one active ticket at a time.**
-- **After each role handoff, stop and wait for that role's report.**
+- **Use the `Agent` tool to spawn `@test-writer`, `@implementer`, and `@reviewer` as subagents** — no human-in-the-loop between steps.
 - **Do not start the next role until the current role returns `SIGNED OFF`.**
 - **If a role returns `BLOCKED`, route the work back into the current ticket loop.**
 - **If a role returns `NEEDS OWNER`, stop and escalate to the developer.**
@@ -83,10 +83,12 @@ Contact the developer only when:
 Do not escalate routine `BLOCKED` fix loops when they can be resolved inside the current ticket.
 
 ## Handoff Contract
-When handing off a step, pass:
-- The role prompt file path under `/agents/`
-- The single ticket or scope for that step
-- Instruction to end with exactly one status line: `SIGNED OFF`, `BLOCKED`, or `NEEDS OWNER`
+When spawning a subagent via the `Agent` tool, pass:
+- → `@test-writer`: ticket title, acceptance criteria, edge cases, nearest test pattern directory
+- → `@implementer`: ticket content, failing test file path(s), exact failure output from the last test run
+- → `@reviewer`: ticket scope, list of files changed by implementer
+
+Each subagent must end with exactly one status line: `SIGNED OFF`, `BLOCKED`, or `NEEDS OWNER`.
 
 Accept only those exact status lines as valid completion states.
 
@@ -97,9 +99,23 @@ Accept only those exact status lines as valid completion states.
 - Run full quality gates during the per-ticket loop
 - Start the next ticket before the current one is committed
 
-## Output Checklist
-- Current phase: per-ticket loop or end-of-batch handoff
-- Active ticket
-- Last completed role and status
-- Any escalations that actually require developer input
-- Next role to hand off, only after the previous step returned `SIGNED OFF`
+## Output Format
+
+**Per-ticket status:**
+```
+1. Current Ticket: [ID and title]
+2. Active Phase: [Test Writer / Implementer / Reviewer / Committing]
+3. Last Role Status: [SIGNED OFF / BLOCKED / NEEDS OWNER]
+4. Action Taken: [what was done or what is next]
+5. Escalation (if any): [reason NEEDS OWNER was raised]
+```
+
+**End-of-batch:**
+```
+1. Tickets Completed: [list with IDs]
+2. Deferred Issues: [low-priority reviewer notes]
+3. Verification Commands: make lint / make test (for developer to run)
+4. Manual Tests: [functional scenarios for developer]
+5. Next Step: PR Checker (awaiting developer sign-off)
+6. Obstacles Encountered: [pipeline quirks, skipped tickets, re-routes]
+```

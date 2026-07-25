@@ -1053,3 +1053,62 @@ async def test_get_dashboard_load_risk_summary_empty_rows_without_enabled_limits
     assert summary is not None
     assert len(summary["week_days"]) == 7
     assert summary["rule_limit_rows"] == []
+
+
+async def test_get_dashboard_tolerates_legacy_camel_case_rule_violations_on_logs(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    """Production logs may store camelCase violation snapshots from older PATCH payloads."""
+    from datetime import date
+
+    from app.tests.helpers.seed import seed_activity, seed_activity_class, seed_activity_log, seed_training_block
+
+    seed_activity_class(
+        app_with_test_database,
+        class_id="cls-foot",
+        name="Foot Load",
+        class_type="performance",
+    )
+    seed_activity(
+        app_with_test_database,
+        activity_id="act-walk",
+        activity_class_id="cls-foot",
+        name="Walk",
+    )
+    seed_training_block(
+        app_with_test_database,
+        block_id="blk-camel-violations",
+        name="Camel Violations",
+        start_date=date(2026, 4, 7),
+        status="active",
+    )
+    seed_activity_log(
+        app_with_test_database,
+        log_id="log-camel-violations",
+        activity_id="act-walk",
+        logged_date=date(2026, 5, 20),
+        rule_violations_at_log=[
+            {
+                "ruleId": "rule-d60e80ed",
+                "ruleType": "rest_between_class",
+                "message": "Breaks rest rule",
+                "severity": "caution",
+            }
+        ],
+    )
+
+    response = await client.get(DASHBOARD_URL, params={"as_of": "2026-05-25"})
+
+    assert response.status_code == 200
+    daily_scores = response.json()["daily_scores"]
+    score_for_day = next(score for score in daily_scores if score["date"] == "2026-05-20")
+    assert score_for_day["state"] == "caution"
+    assert score_for_day["violations"] == [
+        {
+            "rule_id": "rule-d60e80ed",
+            "rule_type": "rest_between_class",
+            "message": "Breaks rest rule",
+            "severity": "caution",
+        }
+    ]

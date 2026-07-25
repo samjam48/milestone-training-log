@@ -6,6 +6,7 @@ from sqlmodel import Session, col, select
 from app.models.activity import Activity
 from app.models.log import ActivityLog
 from app.schemas.activity_logs import ActivityLogCreate, ActivityLogPatch
+from app.schemas.load import normalize_rule_violation_dict
 from app.services.local_scope import LOCAL_USER_ID, next_updated_at
 from app.services.recovery_targets import recalculate_recovery_streaks_for_activity
 
@@ -163,7 +164,7 @@ def recompute_derived_state(
 def _copy_rule_violations(value: Any) -> list[dict[str, Any]] | None:
     if value is None:
         return None
-    return [dict(item) for item in value]
+    return [normalize_rule_violation_dict(dict(item)) for item in value]
 
 
 def _ensure_local_activity_exists(session: Session, activity_id: str) -> Activity:

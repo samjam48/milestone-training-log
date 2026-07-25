@@ -73,14 +73,17 @@ Read the current design, architecture, schema, and API docs before making recomm
 - Do not write tests
 - Do not write production code
 
-## Output Checklist
-- Feature summary
-- User outcomes
-- Scope and out-of-scope
-- Affected backend, frontend, and data areas
-- API impact
-- Data model impact
-- UX flows and open questions for the owner
-- Decision record references or a note that none were needed
-- Explicit note on whether architecture boundaries are preserved
-- Final status line: `SIGNED OFF`, `BLOCKED`, or `NEEDS OWNER`
+## Output Format
+```
+1. Feature Summary: What this is and why
+2. User Outcomes: What changes for the user
+3. Scope: In-scope / explicitly out-of-scope
+4. Architecture Impact: Backend, frontend, data areas affected
+5. API Impact: Endpoints added, changed, or removed
+6. Data Model Impact: Schema changes, new entities, migrations needed
+7. UX Flows: Key flows and open questions for the owner
+8. Boundary Check: Whether docs/architecture.md boundaries are preserved
+9. Open Questions / Risks: Assumptions and dependencies
+10. Obstacles Encountered: Anything that blocked analysis or required deviation
+11. Status: SIGNED OFF | BLOCKED | NEEDS OWNER
+```

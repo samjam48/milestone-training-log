@@ -1,5 +1,5 @@
 from datetime import date
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -63,6 +63,18 @@ class RuleViolationRead(BaseModel):
     rule_type: str
     message: str
     severity: Literal["caution", "danger"]
+
+
+def normalize_rule_violation_dict(violation: dict[str, Any]) -> dict[str, Any]:
+    """Accept legacy camelCase snapshots stored in activity log JSON."""
+    rule_id = violation.get("rule_id", violation.get("ruleId"))
+    rule_type = violation.get("rule_type", violation.get("ruleType"))
+    return {
+        "rule_id": rule_id,
+        "rule_type": rule_type,
+        "message": violation.get("message", ""),
+        "severity": violation["severity"],
+    }
 
 
 class CheckViolationsResponse(BaseModel):

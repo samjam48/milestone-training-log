@@ -95,8 +95,8 @@ function readTimestamped(raw: Record<string, unknown>): {
 
 export function mapRuleViolationFromApi(raw: Record<string, unknown>): RuleViolationSnapshot {
   return {
-    ruleId: String(raw.rule_id),
-    ruleType: raw.rule_type as RuleType,
+    ruleId: String(raw.rule_id ?? raw.ruleId),
+    ruleType: (raw.rule_type ?? raw.ruleType) as RuleType,
     message: String(raw.message),
     severity: raw.severity as SafetyState,
   };
@@ -167,7 +167,18 @@ export function mapActivityLogCreateBody(
 export function mapActivityLogPatchBody(
   draft: Record<string, unknown>,
 ): Record<string, unknown> {
-  return mapKeysToSnake(draft, { omitUndefined: true });
+  const { ruleViolationsAtLog, ...rest } = draft;
+  const body = mapKeysToSnake(rest, { omitUndefined: true });
+
+  if (ruleViolationsAtLog !== undefined) {
+    body.rule_violations_at_log = Array.isArray(ruleViolationsAtLog)
+      ? ruleViolationsAtLog.map((item) =>
+          mapRuleViolationForApi(item as RuleViolationSnapshot),
+        )
+      : ruleViolationsAtLog;
+  }
+
+  return body;
 }
 
 // ---------------------------------------------------------------------------

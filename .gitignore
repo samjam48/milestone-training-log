@@ -13,3 +13,6 @@ frontend/coverage/
 backend/.venv/
 frontend/node_modules/
 frontend/dist/
+nimbalyst-local/
+.claude/settings.local.json
+.agents/skills/.nimbalyst-generated/

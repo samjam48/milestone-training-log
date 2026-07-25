@@ -13,6 +13,7 @@ from app.schemas.load import (
     RuleViolationRead,
     SuggestionRead,
     WeeklyProgressRead,
+    normalize_rule_violation_dict,
 )
 from app.schemas.load_engine import LoadRiskSummary
 from app.schemas.training_blocks import TrainingBlockRead
@@ -121,7 +122,10 @@ def daily_safety_score_from_dict(score: dict[str, Any]) -> DailySafetyScoreRead:
     return DailySafetyScoreRead(
         date=date.fromisoformat(score["date"]),
         state=score["state"],
-        violations=[RuleViolationRead.model_validate(v) for v in score["violations"]],
+        violations=[
+            RuleViolationRead.model_validate(normalize_rule_violation_dict(v))
+            for v in score["violations"]
+        ],
         had_flare_up=bool(score["had_flare_up"]),
         pain_level=score.get("pain_level"),
     )
