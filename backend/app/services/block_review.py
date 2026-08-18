@@ -19,8 +19,8 @@ from app.services.activity_logs import list_activity_logs
 from app.services.daily_check_ins import list_daily_check_ins
 from app.services.flare_up_incidents import list_flare_up_incidents
 from app.services.load_engine import (
+    compute_combined_load_series,
     compute_daily_safety_scores,
-    compute_load_series,
     format_iso_date,
 )
 from app.services.load_queries import (
@@ -29,7 +29,6 @@ from app.services.load_queries import (
     check_in_dict,
     incident_dict,
     log_dict,
-    resolve_graph_class_id,
     rule_dict,
 )
 from app.services.local_scope import LOCAL_USER_ID
@@ -73,17 +72,13 @@ def get_block_review(session: Session, block_id: str) -> BlockReviewRead:
     class_dicts = [activity_class_dict(cls) for cls in activity_classes]
     activity_dicts = [activity_dict(activity) for activity in activities]
     rule_dicts = [rule_dict(rule) for rule in rules]
-    graph_class_id = resolve_graph_class_id(rule_dicts, class_dicts)
-    load_series = (
-        compute_load_series(
-            graph_class_id,
-            activity_dicts,
-            log_dicts,
-            block_start_str,
-            block_end_str,
-        )
-        if graph_class_id is not None
-        else []
+    load_series = compute_combined_load_series(
+        activity_dicts,
+        log_dicts,
+        block_start_str,
+        block_end_str,
+        activity_classes=class_dicts,
+        rules=rule_dicts,
     )
 
     flare_up_dates = sorted({format_iso_date(incident.incident_date) for incident in incidents})

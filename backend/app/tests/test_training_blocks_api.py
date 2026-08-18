@@ -544,16 +544,18 @@ async def test_get_training_block_review_supports_open_block_and_defaults_end_da
     assert payload["flare_up_dates"]
 
 
-async def test_get_training_block_review_empty_load_series_without_graph_class(
+async def test_get_training_block_review_all_zero_load_series_without_performance_classes(
     app_with_test_database: FastAPI,
     client: AsyncClient,
 ) -> None:
+    """No performance classes → combined series is all-zero points over the block range."""
     seed_training_block(
         app_with_test_database,
         block_id="blk-review-empty",
         name="Review Block Empty",
         start_date=date(2026, 5, 1),
-        status="active",
+        end_date=date(2026, 5, 3),
+        status="completed",
     )
 
     response = await client.get("/api/training-blocks/blk-review-empty/review")
@@ -561,8 +563,103 @@ async def test_get_training_block_review_empty_load_series_without_graph_class(
     assert response.status_code == 200
     payload = response.json()
     assert payload["block"]["id"] == "blk-review-empty"
-    assert payload["load_series"] == []
+    assert [point["date"] for point in payload["load_series"]] == [
+        "2026-05-01",
+        "2026-05-02",
+        "2026-05-03",
+    ]
+    assert all(point["daily_load"] == pytest.approx(0.0) for point in payload["load_series"])
+    assert all(point["load"] == pytest.approx(0.0) for point in payload["load_series"])
     assert payload["daily_scores"] == []
+
+
+async def test_get_training_block_review_load_series_uses_combined_load_tax(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    """Block review series is combined load tax, not a single-class volume×rpe graph."""
+    seed_training_block(
+        app_with_test_database,
+        block_id="blk-review-combined",
+        name="Review Combined",
+        start_date=date(2026, 4, 7),
+        end_date=date(2026, 4, 10),
+        status="completed",
+    )
+    seed_activity_class(
+        app_with_test_database,
+        class_id="cls-arm-review",
+        name="Arm Load",
+        class_type="performance",
+    )
+    seed_activity_class(
+        app_with_test_database,
+        class_id="cls-foot-review",
+        name="Foot Load",
+        class_type="performance",
+        load_weight=1.0,
+    )
+    seed_activity(
+        app_with_test_database,
+        activity_id="act-arm-review",
+        activity_class_id="cls-arm-review",
+        name="Arm work",
+        default_volume_unit="km",
+    )
+    seed_activity(
+        app_with_test_database,
+        activity_id="act-walk-review-combined",
+        activity_class_id="cls-foot-review",
+        name="Walk",
+        default_volume_unit="km",
+    )
+    seed_rule(
+        app_with_test_database,
+        rule_id="rule-cap-arm-review",
+        training_block_id="blk-review-combined",
+        rule_type="weekly_load_cap",
+        threshold_value=120,
+        window_days=7,
+        activity_class_id="cls-arm-review",
+        enabled=True,
+    )
+    seed_activity_log(
+        app_with_test_database,
+        log_id="log-arm-review-combined",
+        activity_id="act-arm-review",
+        logged_date=date(2026, 4, 8),
+        volume_value=2.0,
+        volume_unit="km",
+        rpe=5,
+    )
+    seed_activity_log(
+        app_with_test_database,
+        log_id="log-foot-review-combined",
+        activity_id="act-walk-review-combined",
+        logged_date=date(2026, 4, 8),
+        volume_value=2.0,
+        volume_unit="km",
+        rpe=5,
+    )
+
+    response = await client.get("/api/training-blocks/blk-review-combined/review")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert [point["date"] for point in payload["load_series"]] == [
+        "2026-04-07",
+        "2026-04-08",
+        "2026-04-09",
+        "2026-04-10",
+    ]
+    day_point = next(point for point in payload["load_series"] if point["date"] == "2026-04-08")
+    # Two performance classes, each 2km @ RPE 5 → load tax 1.5 each, combined 3.0.
+    assert day_point["daily_load"] == pytest.approx(3.0)
+    assert day_point["daily_load"] != pytest.approx(10.0)
+    assert day_point["daily_load"] != pytest.approx(1.5)
+    later_point = next(point for point in payload["load_series"] if point["date"] == "2026-04-10")
+    assert later_point["load"] > 0
+    assert later_point["daily_load"] == pytest.approx(0.0)
 
 
 async def test_get_training_block_review_completed_block_with_no_data_returns_empty_daily_scores(
