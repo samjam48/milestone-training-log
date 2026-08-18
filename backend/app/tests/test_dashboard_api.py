@@ -24,6 +24,7 @@ from app.tests.helpers.load_engine_fixtures import AS_OF, WEEKLY_TARGETS
 from app.tests.helpers.seed import (
     seed_activity,
     seed_activity_class,
+    seed_activity_log,
     seed_goal,
     seed_recovery_target,
     seed_training_block,
@@ -1103,10 +1104,6 @@ async def test_get_dashboard_tolerates_legacy_camel_case_rule_violations_on_logs
     client: AsyncClient,
 ) -> None:
     """Production logs may store camelCase violation snapshots from older PATCH payloads."""
-    from datetime import date
-
-    from app.tests.helpers.seed import seed_activity, seed_activity_class, seed_activity_log, seed_training_block
-
     seed_activity_class(
         app_with_test_database,
         class_id="cls-foot",

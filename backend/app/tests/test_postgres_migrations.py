@@ -84,11 +84,16 @@ def test_makefile_or_ci_exposes_postgres_migration_gate() -> None:
 
 
 def test_pull_request_workflow_defines_migration_safety_gate_without_prod_secrets() -> None:
-    workflow_files = sorted(WORKFLOWS_DIR.glob("*.yml")) + sorted(
-        WORKFLOWS_DIR.glob("*.yaml")
+    migration_workflow_paths = [
+        path
+        for path in sorted(WORKFLOWS_DIR.glob("*.yml")) + sorted(WORKFLOWS_DIR.glob("*.yaml"))
+        if "migration" in path.name.lower() or "postgres" in path.name.lower()
+    ]
+    assert migration_workflow_paths, (
+        "PDH.CI1 requires a dedicated Postgres migration safety workflow file."
     )
     workflow_text = "\n\n".join(
-        workflow_path.read_text(encoding="utf-8") for workflow_path in workflow_files
+        workflow_path.read_text(encoding="utf-8") for workflow_path in migration_workflow_paths
     )
     lowered = workflow_text.lower()
 

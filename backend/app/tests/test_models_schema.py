@@ -921,7 +921,7 @@ def test_activity_class_model_defaults_load_weight_to_one() -> None:
         type="performance",
         created_at=_utc_now(),
     )
-    assert activity_class.load_weight == 1.0
+    assert getattr(activity_class, "load_weight") == 1.0
 
     with Session(engine) as session:
         session.add(activity_class)
@@ -929,7 +929,7 @@ def test_activity_class_model_defaults_load_weight_to_one() -> None:
         persisted = session.get(activity_class_model, "class-weight-default")
 
     assert persisted is not None
-    assert persisted.load_weight == 1.0
+    assert getattr(persisted, "load_weight") == 1.0
 
 
 def test_activity_class_model_persists_explicit_load_weight() -> None:
@@ -953,4 +953,4 @@ def test_activity_class_model_persists_explicit_load_weight() -> None:
         persisted = session.get(activity_class_model, "class-weight-explicit")
 
     assert persisted is not None
-    assert persisted.load_weight == 2.0
+    assert getattr(persisted, "load_weight") == 2.0

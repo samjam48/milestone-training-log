@@ -61,6 +61,9 @@ function renderDashboard(tab: DashboardTab = 'today') {
       onOpenLogActivity={vi.fn()}
     />,
   );
+  if (tab === 'today') {
+    fireEvent.click(screen.getByRole('radio', { name: 'Today' }));
+  }
   if (tab === 'metrics') {
     fireEvent.click(screen.getByRole('radio', { name: 'Metrics' }));
   }

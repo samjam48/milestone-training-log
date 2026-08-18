@@ -12,7 +12,7 @@ from typing import Any, cast
 
 import pytest
 
-from app.schemas.load_engine import Suggestion
+from app.schemas.load_engine import LoadPoint, Suggestion
 from app.services import load_engine
 from app.services.load_engine import (
     DEFAULT_RPE,
@@ -3317,7 +3317,7 @@ def _single_class_point(
     start_date: str | None = None,
     end_date: str | None = None,
     rules: list[dict[str, Any]] | None = None,
-) -> dict[str, Any]:
+) -> LoadPoint:
     series = compute_load_series(
         class_id,
         activities,
