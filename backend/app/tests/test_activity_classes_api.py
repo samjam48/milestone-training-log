@@ -8,6 +8,11 @@ from fastapi import FastAPI
 from httpx import AsyncClient
 
 from app.models.activity import Activity
+from app.schemas.activity_classes import (
+    ActivityClassCreate,
+    ActivityClassPatch,
+    ActivityClassRead,
+)
 from app.tests.helpers.seed import (
     seed_activity,
     seed_activity_class,
@@ -38,6 +43,52 @@ def _assert_activity_class_payload(
     assert "created_at" in payload
     datetime.fromisoformat(payload["created_at"])
     assert "user_id" not in payload
+
+
+def _assert_load_weight_rejected(
+    response: Any,
+    *,
+    forbidden_error_types: frozenset[str] = frozenset({"extra_forbidden"}),
+) -> None:
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    if isinstance(detail, str):
+        assert "load_weight" in detail.lower() or "weight" in detail.lower()
+        return
+
+    assert isinstance(detail, list)
+    load_weight_errors = [
+        error
+        for error in detail
+        if isinstance(error, dict)
+        and (error_location := error.get("loc"))
+        and error_location[-1] == "load_weight"
+    ]
+    assert load_weight_errors, detail
+    error_types = {str(error.get("type")) for error in load_weight_errors}
+    assert error_types.isdisjoint(forbidden_error_types)
+
+
+def test_activity_class_create_schema_defaults_load_weight() -> None:
+    assert "load_weight" in ActivityClassCreate.model_fields
+    payload = ActivityClassCreate(
+        id="cls-weight-default",
+        name="Walking",
+        description="Omits load_weight",
+        type="performance",
+    )
+    assert payload.load_weight == 1.0
+
+
+def test_activity_class_patch_schema_treats_load_weight_as_optional() -> None:
+    assert "load_weight" in ActivityClassPatch.model_fields
+    payload = ActivityClassPatch(name="Updated name")
+    assert "load_weight" not in payload.model_fields_set
+
+
+def test_activity_class_read_schema_includes_load_weight() -> None:
+    assert "load_weight" in ActivityClassRead.model_fields
+    assert ActivityClassRead.model_fields["load_weight"].is_required()
 
 
 async def test_list_activity_classes_returns_empty_list(client: AsyncClient) -> None:
@@ -274,6 +325,273 @@ async def test_patch_activity_class_rejects_null_required_fields_without_changin
         class_type="performance",
         default_recovery_window_days=3,
     )
+
+
+async def test_create_activity_class_defaults_omitted_load_weight_to_one(
+    client: AsyncClient,
+) -> None:
+    response = await client.post(
+        "/api/activity-classes",
+        json={
+            "id": "cls-weight-default",
+            "name": "Default Weight",
+            "description": "Omits load_weight on create.",
+            "type": "performance",
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["load_weight"] == 1.0
+
+    listed = await client.get("/api/activity-classes")
+    assert listed.status_code == 200
+    assert listed.json()[0]["id"] == "cls-weight-default"
+    assert listed.json()[0]["load_weight"] == 1.0
+
+
+async def test_create_activity_class_round_trips_explicit_load_weight(
+    client: AsyncClient,
+) -> None:
+    response = await client.post(
+        "/api/activity-classes",
+        json={
+            "id": "cls-weight-explicit",
+            "name": "Weighted Class",
+            "description": "Creates with load_weight 2.0.",
+            "type": "performance",
+            "load_weight": 2.0,
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["load_weight"] == 2.0
+
+    listed = await client.get("/api/activity-classes")
+    assert listed.status_code == 200
+    assert listed.json()[0]["load_weight"] == 2.0
+
+
+async def test_create_recovery_activity_class_stores_load_weight(
+    client: AsyncClient,
+) -> None:
+    response = await client.post(
+        "/api/activity-classes",
+        json={
+            "id": "cls-recovery-weight",
+            "name": "Recovery Stretch",
+            "description": "API still stores weight on recovery classes.",
+            "type": "recovery",
+            "load_weight": 2.5,
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["type"] == "recovery"
+    assert response.json()["load_weight"] == 2.5
+
+    listed = await client.get("/api/activity-classes")
+    assert listed.status_code == 200
+    assert listed.json()[0]["load_weight"] == 2.5
+
+
+async def test_patch_activity_class_updates_load_weight(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    seed_activity_class(
+        app_with_test_database,
+        class_id="cls-foot-load",
+        name="High-Intensity Foot Load",
+    )
+
+    response = await client.patch(
+        "/api/activity-classes/cls-foot-load",
+        json={"load_weight": 2.0},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["load_weight"] == 2.0
+
+    listed = await client.get("/api/activity-classes")
+    assert listed.status_code == 200
+    assert listed.json()[0]["load_weight"] == 2.0
+
+
+async def test_patch_activity_class_leaves_load_weight_unchanged_when_omitted(
+    client: AsyncClient,
+) -> None:
+    create_response = await client.post(
+        "/api/activity-classes",
+        json={
+            "id": "cls-weight-keep",
+            "name": "Keep Weight",
+            "description": "Before",
+            "type": "performance",
+            "load_weight": 2.0,
+        },
+    )
+    assert create_response.status_code == 201
+    assert create_response.json()["load_weight"] == 2.0
+
+    response = await client.patch(
+        "/api/activity-classes/cls-weight-keep",
+        json={"description": "After"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["description"] == "After"
+    assert response.json()["load_weight"] == 2.0
+
+
+@pytest.mark.parametrize("load_weight", [0.0, 10.0])
+async def test_patch_activity_class_accepts_load_weight_bounds(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+    load_weight: float,
+) -> None:
+    seed_activity_class(
+        app_with_test_database,
+        class_id="cls-foot-load",
+        name="High-Intensity Foot Load",
+    )
+
+    response = await client.patch(
+        "/api/activity-classes/cls-foot-load",
+        json={"load_weight": load_weight},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["load_weight"] == load_weight
+
+
+@pytest.mark.parametrize("load_weight", [-0.1, 10.1])
+async def test_create_activity_class_rejects_out_of_range_load_weight(
+    client: AsyncClient,
+    load_weight: float,
+) -> None:
+    response = await client.post(
+        "/api/activity-classes",
+        json={
+            "id": "cls-weight-range",
+            "name": "Out Of Range",
+            "description": "Rejects load_weight outside 0..10.",
+            "type": "performance",
+            "load_weight": load_weight,
+        },
+    )
+
+    _assert_load_weight_rejected(response)
+
+
+@pytest.mark.parametrize("load_weight", [-0.1, 10.1])
+async def test_patch_activity_class_rejects_out_of_range_load_weight(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+    load_weight: float,
+) -> None:
+    seed_activity_class(
+        app_with_test_database,
+        class_id="cls-foot-load",
+        name="High-Intensity Foot Load",
+    )
+
+    response = await client.patch(
+        "/api/activity-classes/cls-foot-load",
+        json={"load_weight": load_weight},
+    )
+
+    _assert_load_weight_rejected(response)
+
+    listed = await client.get("/api/activity-classes")
+    assert listed.status_code == 200
+    assert listed.json()[0]["name"] == "High-Intensity Foot Load"
+
+
+@pytest.mark.parametrize("load_weight", ["NaN", "Infinity", "-Infinity"])
+async def test_create_activity_class_rejects_non_finite_load_weight(
+    client: AsyncClient,
+    load_weight: str,
+) -> None:
+    response = await client.post(
+        "/api/activity-classes",
+        json={
+            "id": "cls-weight-nonfinite",
+            "name": "Non-finite",
+            "description": "Rejects NaN/Inf load_weight.",
+            "type": "performance",
+            "load_weight": load_weight,
+        },
+    )
+
+    _assert_load_weight_rejected(response)
+
+
+@pytest.mark.parametrize("load_weight", ["NaN", "Infinity", "-Infinity"])
+async def test_patch_activity_class_rejects_non_finite_load_weight(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+    load_weight: str,
+) -> None:
+    seed_activity_class(
+        app_with_test_database,
+        class_id="cls-foot-load",
+        name="High-Intensity Foot Load",
+    )
+
+    response = await client.patch(
+        "/api/activity-classes/cls-foot-load",
+        json={"load_weight": load_weight},
+    )
+
+    _assert_load_weight_rejected(response)
+
+
+async def test_patch_activity_class_rejects_null_load_weight_without_changing_row(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    seed_activity_class(
+        app_with_test_database,
+        class_id="cls-foot-load",
+        name="High-Intensity Foot Load",
+        description="Before",
+        class_type="performance",
+        default_recovery_window_days=3,
+    )
+
+    response = await client.patch(
+        "/api/activity-classes/cls-foot-load",
+        json={"load_weight": None},
+    )
+
+    _assert_load_weight_rejected(response)
+
+    listed = await client.get("/api/activity-classes")
+    assert listed.status_code == 200
+    _assert_activity_class_payload(
+        listed.json()[0],
+        class_id="cls-foot-load",
+        name="High-Intensity Foot Load",
+        description="Before",
+        class_type="performance",
+        default_recovery_window_days=3,
+    )
+
+
+async def test_seeded_activity_class_uses_model_load_weight_default(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    seed_activity_class(
+        app_with_test_database,
+        class_id="cls-seed-weight",
+        name="Seeded Class",
+    )
+
+    listed = await client.get("/api/activity-classes")
+    assert listed.status_code == 200
+    assert listed.json()[0]["id"] == "cls-seed-weight"
+    assert listed.json()[0]["load_weight"] == 1.0
 
 
 async def test_patch_missing_activity_class_returns_stable_not_found(

@@ -201,6 +201,7 @@ def test_phase_one_metadata_contains_exact_tables_and_columns() -> None:
             "description",
             "type",
             "default_recovery_window_days",
+            "load_weight",
             "created_at",
         },
     )
@@ -400,6 +401,11 @@ def test_column_nullability_defaults_json_and_uniqueness_constraints_are_declare
     assert not recovery_window_column.nullable
     assert _normalized_server_default(recovery_window_column) == "3"
 
+    load_weight_column = _get_column(activity_classes, "load_weight")
+    assert not load_weight_column.nullable
+    assert isinstance(load_weight_column.type, Float)
+    assert _normalized_server_default(load_weight_column) in {"1.0", "1"}
+
     activities = SQLModel.metadata.tables["activities"]
     assert not _get_column(activities, "default_volume_unit").nullable
 
@@ -460,6 +466,7 @@ def test_sqlite_schema_declares_required_database_defaults() -> None:
 
     activity_class_defaults = _sqlite_column_defaults(engine, "activity_classes")
     assert activity_class_defaults["default_recovery_window_days"] == "3"
+    assert activity_class_defaults["load_weight"] in {"1.0", "1"}
 
     training_block_defaults = _sqlite_column_defaults(engine, "training_blocks")
     assert training_block_defaults["is_review_milestone_hit"] in {"0", "false"}
@@ -897,3 +904,53 @@ def test_sqlite_constraints_reject_out_of_range_scores(
         session.add(model_classes[model_name](**values))
         with pytest.raises(IntegrityError):
             session.commit()
+
+
+def test_activity_class_model_defaults_load_weight_to_one() -> None:
+    model_classes = _load_model_classes()
+    activity_class_model = model_classes["ActivityClass"]
+
+    assert "load_weight" in activity_class_model.model_fields
+    assert activity_class_model.model_fields["load_weight"].default == 1.0
+
+    engine = _make_engine()
+    activity_class = activity_class_model(
+        id="class-weight-default",
+        name="Walking",
+        description="Omits load_weight so the model default applies",
+        type="performance",
+        created_at=_utc_now(),
+    )
+    assert activity_class.load_weight == 1.0
+
+    with Session(engine) as session:
+        session.add(activity_class)
+        session.commit()
+        persisted = session.get(activity_class_model, "class-weight-default")
+
+    assert persisted is not None
+    assert persisted.load_weight == 1.0
+
+
+def test_activity_class_model_persists_explicit_load_weight() -> None:
+    model_classes = _load_model_classes()
+    activity_class_model = model_classes["ActivityClass"]
+    assert "load_weight" in activity_class_model.model_fields
+    engine = _make_engine()
+
+    activity_class = activity_class_model(
+        id="class-weight-explicit",
+        name="Walking",
+        description="Stores an explicit load_weight",
+        type="performance",
+        load_weight=2.0,
+        created_at=_utc_now(),
+    )
+
+    with Session(engine) as session:
+        session.add(activity_class)
+        session.commit()
+        persisted = session.get(activity_class_model, "class-weight-explicit")
+
+    assert persisted is not None
+    assert persisted.load_weight == 2.0
