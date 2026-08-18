@@ -45,6 +45,7 @@ def create_activity_class(session: Session, payload: ActivityClassCreate) -> Act
         description=payload.description,
         type=payload.type,
         default_recovery_window_days=payload.default_recovery_window_days,
+        load_weight=payload.load_weight,
         created_at=datetime.now(UTC),
     )
     session.add(activity_class)

@@ -12,9 +12,13 @@ from sqlalchemy import text
 from sqlmodel import Session
 
 from app.models.goal import Goal
+from app.schemas.activity_classes import ActivityClassPatch
 from app.schemas.dashboard import DashboardRead
 from app.schemas.load import ActivityClassStatusRead
 from app.schemas.load_engine import LoadRiskSummary, Suggestion
+from app.services.activities import list_activities
+from app.services.activity_classes import list_activity_classes, update_activity_class
+from app.services.activity_logs import list_activity_logs
 from app.services.daily_check_ins import list_daily_check_ins
 from app.services.dashboard import get_dashboard
 from app.services.flare_up_incidents import list_flare_up_incidents
@@ -22,8 +26,8 @@ from app.services.goals import list_goals
 from app.services.load_engine import (
     compute_class_statuses,
     compute_clean_streak,
+    compute_combined_load_series,
     compute_load_risk_summary,
-    compute_load_series,
     compute_suggestion_buckets,
     detect_delayed_tax,
     format_iso_date,
@@ -207,12 +211,13 @@ def test_get_dashboard_load_series_spans_last_thirty_days_through_as_of_inclusiv
     assert dashboard.load_series[-1].date == FROZEN_AS_OF
     assert dashboard.load_series[0].date != BLOCK_START_DATE
 
-    expected_series = compute_load_series(
-        "cls-foot",
+    expected_series = compute_combined_load_series(
         ACTIVITIES,
         LOGS,
         format_iso_date(graph_start),
         AS_OF,
+        activity_classes=ACTIVITY_CLASSES,
+        rules=RULES,
     )
     assert len(dashboard.load_series) == len(expected_series)
 
@@ -273,6 +278,9 @@ def test_get_dashboard_without_active_block_auto_creates_weekly_focus(
     assert dashboard.recovery_streaks == []
     assert dashboard.weekly_progress == []
     assert all(status.state == "safe" for status in dashboard.class_statuses)
+    assert dashboard.graph_class_id is None
+    assert len(dashboard.load_series) == GRAPH_WINDOW_DAYS
+    assert all(point.daily_load == pytest.approx(0.0) for point in dashboard.load_series)
 
 
 def test_get_dashboard_previous_blocks_excludes_active_block_and_orders_by_end_date_desc(
@@ -376,6 +384,12 @@ def test_get_dashboard_empty_database_returns_neutral_payload(
     assert dashboard.weekly_progress == []
     assert dashboard.clean_streak == 0
     assert dashboard.week_load_threshold is None
+    assert dashboard.graph_class_id is None
+    assert len(dashboard.load_series) == GRAPH_WINDOW_DAYS
+    assert dashboard.load_series[0].date == _graph_window_start(FROZEN_AS_OF)
+    assert dashboard.load_series[-1].date == FROZEN_AS_OF
+    assert all(point.daily_load == pytest.approx(0.0) for point in dashboard.load_series)
+    assert all(point.load == pytest.approx(0.0) for point in dashboard.load_series)
 
 
 def test_get_dashboard_excludes_records_after_as_of(
@@ -1235,13 +1249,9 @@ def test_get_dashboard_load_series_matches_load_tax_engine_series(
     app_with_test_database: FastAPI,
     session: Session,
 ) -> None:
-    from app.services.activities import list_activities
-    from app.services.activity_classes import list_activity_classes
-    from app.services.activity_logs import list_activity_logs
     from app.tests.helpers.wtl_b5_fixtures import (
         WTL_B5_AS_OF,
         WTL_B5_BLOCK_ID,
-        WTL_B5_CLASS_ID,
         seed_wtl_b5_dashboard_graph,
     )
 
@@ -1257,8 +1267,7 @@ def test_get_dashboard_load_series_matches_load_tax_engine_series(
     logs = [log_dict(log) for log in list_activity_logs(session, end_date=as_of)]
     rules = [rule_dict(rule) for rule in list_rules(session, active_block.id)]
 
-    expected = compute_load_series(
-        WTL_B5_CLASS_ID,
+    expected = compute_combined_load_series(
         activities,
         logs,
         format_iso_date(graph_start),
@@ -1269,6 +1278,7 @@ def test_get_dashboard_load_series_matches_load_tax_engine_series(
 
     dashboard = get_dashboard(session, as_of=as_of)
 
+    assert dashboard.graph_class_id is None
     assert len(dashboard.load_series) == len(expected)
     for actual, engine_point in zip(dashboard.load_series, expected, strict=True):
         assert actual.date.isoformat() == engine_point["date"]
@@ -1488,3 +1498,203 @@ def test_dashboard_auto_creates_active_week_when_no_focus_exists(
     assert dashboard.block.end_date == WEEK_ONE_END
     assert dashboard.weekly_progress == []
     assert dashboard.recovery_streaks == []
+
+
+# ---------------------------------------------------------------------------
+# Combined weighted dashboard load_series (null graph_class_id)
+# ---------------------------------------------------------------------------
+
+
+def _dashboard_engine_inputs(
+    session: Session,
+    *,
+    as_of: date,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    active_block = get_active_training_block(session, as_of=as_of)
+    activity_classes = [activity_class_dict(cls) for cls in list_activity_classes(session)]
+    activities = [activity_dict(activity) for activity in list_activities(session)]
+    logs = [log_dict(log) for log in list_activity_logs(session, end_date=as_of)]
+    rules = [rule_dict(rule) for rule in list_rules(session, active_block.id)]
+    return activity_classes, activities, logs, rules
+
+
+def _rule_limit_actuals(dashboard: DashboardRead) -> list[tuple[str, float, float]]:
+    assert dashboard.load_risk_summary is not None
+    return [
+        (row.rule_id, row.actual, row.limit)
+        for row in dashboard.load_risk_summary.rule_limit_rows
+    ]
+
+
+def _weekly_progress_values(dashboard: DashboardRead) -> list[tuple[str, float]]:
+    return [(row.weekly_target_id, row.value) for row in dashboard.weekly_progress]
+
+
+def _suggestion_bucket_keys(
+    dashboard: DashboardRead,
+) -> list[tuple[str | None, str | None, str | None, str | None]]:
+    return [
+        (row.bucket, row.scope, row.activity_class_id, row.description)
+        for row in dashboard.suggestion_buckets
+    ]
+
+
+def test_get_dashboard_load_series_matches_combined_weighted_engine_series(
+    app_with_test_database: FastAPI,
+    session: Session,
+) -> None:
+    """Dashboard series is combined across performance classes, not a single graph class."""
+    seed_dashboard_mock_graph(app_with_test_database)
+    graph_start = _graph_window_start(FROZEN_AS_OF)
+    activity_classes, activities, logs, rules = _dashboard_engine_inputs(
+        session, as_of=FROZEN_AS_OF
+    )
+    expected = compute_combined_load_series(
+        activities,
+        logs,
+        format_iso_date(graph_start),
+        AS_OF,
+        activity_classes=activity_classes,
+        rules=rules,
+    )
+
+    dashboard = get_dashboard(session, as_of=FROZEN_AS_OF)
+
+    assert len(dashboard.load_series) == len(expected)
+    for actual, engine_point in zip(dashboard.load_series, expected, strict=True):
+        assert actual.date.isoformat() == engine_point["date"]
+        assert actual.load == pytest.approx(engine_point["load"])
+        assert actual.daily_load == pytest.approx(engine_point["daily_load"])
+
+    upper_log_day = date(2026, 5, 11)
+    upper_point = next(point for point in dashboard.load_series if point.date == upper_log_day)
+    assert upper_point.daily_load > 0
+    assert dashboard.graph_class_id is None
+    mapped_weights = {row["id"]: row["load_weight"] for row in activity_classes}
+    assert dashboard.activity_classes
+    for cls in dashboard.activity_classes:
+        assert cls.load_weight == pytest.approx(mapped_weights[cls.id])
+
+
+def test_get_dashboard_load_series_increases_when_second_class_log_is_backdated(
+    app_with_test_database: FastAPI,
+    session: Session,
+) -> None:
+    """A backdated log in a non-former-graph class must lift that day and later rolling points."""
+    seed_dashboard_mock_graph(app_with_test_database)
+    baseline = get_dashboard(session, as_of=FROZEN_AS_OF)
+    backfill_day = FROZEN_AS_OF - timedelta(days=2)
+    later_day = FROZEN_AS_OF - timedelta(days=1)
+
+    seed_activity_log(
+        app_with_test_database,
+        log_id="log-upper-backfill",
+        activity_id="act-bands",
+        logged_date=backfill_day,
+        duration_minutes=30,
+        volume_value=3.0,
+        volume_unit="sets",
+        rpe=5,
+    )
+
+    dashboard = get_dashboard(session, as_of=FROZEN_AS_OF)
+    baseline_by_date = {point.date: point for point in baseline.load_series}
+    updated_by_date = {point.date: point for point in dashboard.load_series}
+
+    for day in (backfill_day, later_day, FROZEN_AS_OF):
+        assert updated_by_date[day].load > baseline_by_date[day].load
+    assert updated_by_date[backfill_day].daily_load > baseline_by_date[backfill_day].daily_load
+    # Mock graph already logs act-bands on later_day (2026-05-24); a 05-23 backfill
+    # correctly raises that day's tax via rest-window proximity. Do not require
+    # later-day daily_load to stay unchanged.
+    assert updated_by_date[FROZEN_AS_OF].daily_load == pytest.approx(
+        baseline_by_date[FROZEN_AS_OF].daily_load
+    )
+
+
+def test_get_dashboard_load_series_changes_when_class_load_weight_is_patched(
+    app_with_test_database: FastAPI,
+    session: Session,
+) -> None:
+    """Patching load_weight changes the combined series on refetch with no new logs."""
+    seed_dashboard_mock_graph(app_with_test_database)
+    baseline = get_dashboard(session, as_of=FROZEN_AS_OF)
+
+    update_activity_class(session, "cls-upper", ActivityClassPatch(load_weight=2.0))
+    dashboard = get_dashboard(session, as_of=FROZEN_AS_OF)
+
+    upper = next(cls for cls in dashboard.activity_classes if cls.id == "cls-upper")
+    assert upper.load_weight == pytest.approx(2.0)
+    assert [point.date for point in dashboard.load_series] == [
+        point.date for point in baseline.load_series
+    ]
+    upper_log_day = date(2026, 5, 11)
+    baseline_point = next(point for point in baseline.load_series if point.date == upper_log_day)
+    updated_point = next(point for point in dashboard.load_series if point.date == upper_log_day)
+    assert updated_point.daily_load > baseline_point.daily_load
+    assert updated_point.load > baseline_point.load
+    assert any(
+        updated.load != pytest.approx(original.load)
+        for updated, original in zip(dashboard.load_series, baseline.load_series, strict=True)
+    )
+    assert dashboard.graph_class_id is None
+
+
+def test_get_dashboard_unweighted_rows_ignore_class_load_weight_patch(
+    app_with_test_database: FastAPI,
+    session: Session,
+) -> None:
+    """Rule-limit rows, weekly progress, and suggestion buckets stay unweighted."""
+    seed_dashboard_mock_graph(app_with_test_database)
+    baseline = get_dashboard(session, as_of=FROZEN_AS_OF)
+
+    update_activity_class(session, "cls-upper", ActivityClassPatch(load_weight=2.0))
+    dashboard = get_dashboard(session, as_of=FROZEN_AS_OF)
+
+    assert _rule_limit_actuals(dashboard) == _rule_limit_actuals(baseline)
+    assert _weekly_progress_values(dashboard) == _weekly_progress_values(baseline)
+    assert _suggestion_bucket_keys(dashboard) == _suggestion_bucket_keys(baseline)
+
+    upper_log_day = date(2026, 5, 11)
+    baseline_point = next(point for point in baseline.load_series if point.date == upper_log_day)
+    updated_point = next(point for point in dashboard.load_series if point.date == upper_log_day)
+    assert updated_point.daily_load > baseline_point.daily_load
+
+
+def test_get_dashboard_recovery_only_series_is_all_zeros_with_null_graph_class_id(
+    app_with_test_database: FastAPI,
+    session: Session,
+) -> None:
+    seed_activity_class(
+        app_with_test_database,
+        class_id="cls-recovery-only",
+        name="Recovery Only",
+        class_type="recovery",
+        load_weight=10.0,
+    )
+    seed_activity(
+        app_with_test_database,
+        activity_id="act-stretch-only",
+        activity_class_id="cls-recovery-only",
+        name="Stretch",
+        activity_type="recovery",
+        default_volume_unit="minutes",
+    )
+    seed_activity_log(
+        app_with_test_database,
+        log_id="log-stretch-only",
+        activity_id="act-stretch-only",
+        logged_date=FROZEN_AS_OF,
+        duration_minutes=40,
+        volume_value=40.0,
+        volume_unit="minutes",
+        rpe=10,
+    )
+
+    dashboard = get_dashboard(session, as_of=FROZEN_AS_OF)
+
+    assert dashboard.graph_class_id is None
+    assert len(dashboard.load_series) == GRAPH_WINDOW_DAYS
+    assert all(point.daily_load == pytest.approx(0.0) for point in dashboard.load_series)
+    assert all(point.load == pytest.approx(0.0) for point in dashboard.load_series)
+

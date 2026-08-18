@@ -32,6 +32,7 @@ const CLASS_STRENGTH: ActivityClass = {
   name: 'Strength',
   type: 'performance',
   defaultRecoveryWindowDays: 2,
+  loadWeight: 1,
   createdAt: '2026-01-01T00:00:00Z',
 };
 
@@ -41,6 +42,7 @@ const CLASS_MOBILITY: ActivityClass = {
   name: 'Mobility',
   type: 'recovery',
   defaultRecoveryWindowDays: 1,
+  loadWeight: 1,
   createdAt: '2026-01-01T00:00:00Z',
 };
 

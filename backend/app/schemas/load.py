@@ -65,15 +65,26 @@ class RuleViolationRead(BaseModel):
     severity: Literal["caution", "danger"]
 
 
+def normalize_violation_snapshot_keys(violation: dict[str, Any]) -> dict[str, Any]:
+    """Shallow copy with camelCase rule keys converted to snake_case."""
+    normalized = dict(violation)
+    if "rule_id" not in normalized and "ruleId" in normalized:
+        normalized["rule_id"] = normalized.pop("ruleId")
+    if "rule_type" not in normalized and "ruleType" in normalized:
+        normalized["rule_type"] = normalized.pop("ruleType")
+    return normalized
+
+
 def normalize_rule_violation_dict(violation: dict[str, Any]) -> dict[str, Any]:
     """Accept legacy camelCase snapshots stored in activity log JSON."""
-    rule_id = violation.get("rule_id", violation.get("ruleId"))
-    rule_type = violation.get("rule_type", violation.get("ruleType"))
+    normalized = normalize_violation_snapshot_keys(violation)
+    rule_id = normalized.get("rule_id")
+    rule_type = normalized.get("rule_type")
     return {
         "rule_id": rule_id,
         "rule_type": rule_type,
-        "message": violation.get("message", ""),
-        "severity": violation["severity"],
+        "message": normalized.get("message", ""),
+        "severity": normalized["severity"],
     }
 
 

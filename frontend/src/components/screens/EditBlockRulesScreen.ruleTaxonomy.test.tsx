@@ -32,6 +32,7 @@ const CLASS_RUNNING: ActivityClass = {
   name: 'Running',
   type: 'performance',
   defaultRecoveryWindowDays: 2,
+  loadWeight: 1,
   createdAt: '2026-01-01T00:00:00Z',
 };
 
@@ -41,6 +42,7 @@ const CLASS_FOOT: ActivityClass = {
   name: 'Foot load',
   type: 'performance',
   defaultRecoveryWindowDays: 2,
+  loadWeight: 1,
   createdAt: '2026-01-01T00:00:00Z',
 };
 

@@ -24,6 +24,7 @@ from app.tests.helpers.load_engine_fixtures import AS_OF, WEEKLY_TARGETS
 from app.tests.helpers.seed import (
     seed_activity,
     seed_activity_class,
+    seed_activity_log,
     seed_goal,
     seed_recovery_target,
     seed_training_block,
@@ -267,7 +268,13 @@ async def test_get_dashboard_empty_database_returns_neutral_payload(
     assert payload["block"]["end_date"] == week_end.isoformat()
     assert payload["class_statuses"] == []
     assert payload["weekly_progress"] == []
-    assert payload["load_series"] == []
+    assert payload["graph_class_id"] is None
+    assert len(payload["load_series"]) == 30
+    expected_start = as_of_date - timedelta(days=29)
+    assert payload["load_series"][0]["date"] == expected_start.isoformat()
+    assert payload["load_series"][-1]["date"] == AS_OF
+    assert all(point["daily_load"] == pytest.approx(0.0) for point in payload["load_series"])
+    assert all(point["load"] == pytest.approx(0.0) for point in payload["load_series"])
     assert payload["recovery_streaks"] == []
     assert payload["has_checked_in_today"] is False
 
@@ -943,6 +950,43 @@ async def test_get_dashboard_week_load_threshold_null_avoids_zero_cap_display(
     assert payload["week_load_threshold"] is None
 
 
+async def test_get_dashboard_load_series_changes_when_class_load_weight_is_patched(
+    app_with_test_database: FastAPI,
+    client: AsyncClient,
+) -> None:
+    """PATCH load_weight then refetch dashboard: combined series moves, no new logs."""
+    seed_dashboard_mock_graph(app_with_test_database)
+    upper_log_day = "2026-05-11"
+
+    baseline_response = await client.get(DASHBOARD_URL, params={"as_of": AS_OF})
+    assert baseline_response.status_code == 200
+    baseline = baseline_response.json()
+    baseline_point = next(
+        point for point in baseline["load_series"] if point["date"] == upper_log_day
+    )
+
+    patch_response = await client.patch(
+        "/api/activity-classes/cls-upper",
+        json={"load_weight": 2.0},
+    )
+    assert patch_response.status_code == 200
+    assert patch_response.json()["load_weight"] == pytest.approx(2.0)
+
+    refreshed_response = await client.get(DASHBOARD_URL, params={"as_of": AS_OF})
+    assert refreshed_response.status_code == 200
+    refreshed = refreshed_response.json()
+    upper = next(cls for cls in refreshed["activity_classes"] if cls["id"] == "cls-upper")
+    assert upper["load_weight"] == pytest.approx(2.0)
+    refreshed_point = next(
+        point for point in refreshed["load_series"] if point["date"] == upper_log_day
+    )
+    assert refreshed_point["daily_load"] > baseline_point["daily_load"]
+    assert refreshed_point["load"] > baseline_point["load"]
+    assert [log["id"] for log in refreshed["logs"]] == [log["id"] for log in baseline["logs"]]
+    assert baseline["graph_class_id"] is None
+    assert refreshed["graph_class_id"] is None
+
+
 # ---------------------------------------------------------------------------
 # WTL.B6 — load_risk_summary rule-limit rows contract
 # ---------------------------------------------------------------------------
@@ -1060,10 +1104,6 @@ async def test_get_dashboard_tolerates_legacy_camel_case_rule_violations_on_logs
     client: AsyncClient,
 ) -> None:
     """Production logs may store camelCase violation snapshots from older PATCH payloads."""
-    from datetime import date
-
-    from app.tests.helpers.seed import seed_activity, seed_activity_class, seed_activity_log, seed_training_block
-
     seed_activity_class(
         app_with_test_database,
         class_id="cls-foot",

@@ -24,7 +24,7 @@ function loadGraphTitle(
   activityClasses: ActivityClass[],
 ): string {
   if (graphClassId === null) {
-    return 'Weekly load';
+    return 'Performance load';
   }
   return activityClasses.find((c) => c.id === graphClassId)?.name ?? 'Unknown class';
 }

@@ -40,6 +40,7 @@ def seed_activity_class(
     description: str = "Seeded class",
     class_type: str = "performance",
     default_recovery_window_days: int = 3,
+    load_weight: float = 1.0,
     created_at: datetime | None = None,
 ) -> None:
     for session in with_session(app_with_test_database):
@@ -51,6 +52,7 @@ def seed_activity_class(
                 description=description,
                 type=class_type,
                 default_recovery_window_days=default_recovery_window_days,
+                load_weight=load_weight,
                 created_at=created_at or utc_datetime(8),
             )
         )

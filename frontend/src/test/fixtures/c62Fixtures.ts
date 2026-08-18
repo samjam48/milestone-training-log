@@ -11,6 +11,7 @@ export const logActivityClass: ActivityClass = {
   name: 'High-Intensity Foot Load',
   type: 'performance',
   defaultRecoveryWindowDays: 3,
+  loadWeight: 1,
   createdAt: CREATED_AT,
 };
 

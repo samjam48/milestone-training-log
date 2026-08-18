@@ -27,6 +27,7 @@ export const WTL_F2_CLASS_FOOT: ActivityClass = {
   name: 'Foot load',
   type: 'performance',
   defaultRecoveryWindowDays: 2,
+  loadWeight: 1,
   createdAt: '2026-06-01T00:00:00Z',
 };
 
@@ -36,6 +37,7 @@ export const WTL_F2_CLASS_MOBILITY: ActivityClass = {
   name: 'Mobility',
   type: 'recovery',
   defaultRecoveryWindowDays: 1,
+  loadWeight: 1,
   createdAt: '2026-06-01T00:00:00Z',
 };
 

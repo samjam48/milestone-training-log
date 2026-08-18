@@ -54,6 +54,7 @@ describe('App — P25.3 edit activity centered modal', () => {
       name: 'Performance',
       type: 'performance',
       defaultRecoveryWindowDays: 3,
+      loadWeight: 1,
       createdAt: '2026-04-07T06:00:00Z',
     };
     const activity: Activity = {

@@ -39,9 +39,9 @@ from app.services.goals import list_goals
 from app.services.load_engine import (
     compute_class_statuses,
     compute_clean_streak,
+    compute_combined_load_series,
     compute_daily_safety_scores,
     compute_load_risk_summary,
-    compute_load_series,
     compute_suggestion_buckets,
     compute_weekly_progress,
     detect_delayed_tax,
@@ -55,7 +55,6 @@ from app.services.load_queries import (
     incident_dict,
     log_dict,
     resolve_as_of,
-    resolve_graph_class_id,
     rule_dict,
     weekly_target_dict,
 )
@@ -192,15 +191,13 @@ def get_dashboard(session: Session, *, as_of: date | None = None) -> DashboardRe
         else []
     )
 
-    graph_class_id = resolve_graph_class_id(rule_dicts, class_dicts)
     graph_start = (
         format_iso_date(resolved - timedelta(days=29))
         if block_start is not None
         else None
     )
     load_series = (
-        compute_load_series(
-            graph_class_id,
+        compute_combined_load_series(
             activity_dicts,
             log_dicts,
             graph_start,
@@ -208,11 +205,11 @@ def get_dashboard(session: Session, *, as_of: date | None = None) -> DashboardRe
             activity_classes=class_dicts,
             rules=rule_dicts,
         )
-        if block_start is not None and graph_class_id is not None and graph_start is not None
+        if block_start is not None and graph_start is not None
         else []
     )
 
-    week_load_threshold = _week_load_threshold(graph_class_id, rule_dicts)
+    week_load_threshold = _week_load_threshold(None, rule_dicts)
     clean_streak = compute_clean_streak(log_dicts)
     recovery_streaks = _build_recovery_streaks(recovery_targets, activities)
     flare_up_dates = sorted({format_iso_date(incident.incident_date) for incident in incidents})
@@ -247,7 +244,7 @@ def get_dashboard(session: Session, *, as_of: date | None = None) -> DashboardRe
         ],
         daily_scores=[daily_safety_score_from_dict(dict(score)) for score in daily_scores],
         load_series=[load_point_from_dict(dict(point)) for point in load_series],
-        graph_class_id=graph_class_id if block_start is not None else None,
+        graph_class_id=None,
         flare_up_dates=flare_up_dates,
         week_load_threshold=week_load_threshold,
         clean_streak=clean_streak,

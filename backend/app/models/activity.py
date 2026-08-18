@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Column, ForeignKey, Integer, String
+from sqlalchemy import Column, Float, ForeignKey, Integer, String
 from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
@@ -25,6 +25,10 @@ class ActivityClass(SQLModel, table=True):
     default_recovery_window_days: int = Field(
         default=3,
         sa_column=Column(Integer, nullable=False, default=3, server_default="3"),
+    )
+    load_weight: float = Field(
+        default=1.0,
+        sa_column=Column(Float, nullable=False, default=1.0, server_default="1.0"),
     )
     created_at: datetime
 

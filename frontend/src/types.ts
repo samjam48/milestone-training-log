@@ -47,6 +47,8 @@ export interface ActivityClass extends Timestamped {
   type: ActivityType;
   /** Default recovery window applied to new activities in this class. */
   defaultRecoveryWindowDays: number;  // typically 3
+  /** Scales this class's contribution to the Safety load graph. Range 0–10; 0 mutes. */
+  loadWeight: number;
 }
 
 export interface Activity extends Timestamped {

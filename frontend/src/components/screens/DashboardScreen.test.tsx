@@ -5,6 +5,7 @@
  * F10.2 — Dashboard clean streak relabel (plans/tickets-phase-10-polish-2026-06-04.md).
  * Load-risk panel removed from dashboard (owner feedback 2026-06-04); delayed tax kept on incident/check-in flows.
  * F10.5 — Load graph title from engine.graphClassId (plans/tickets-phase-10-polish-2026-06-04.md).
+ * CLW.F2 — null graphClassId titles the Safety graph Performance load (combined series).
  * S25.F2 — Goals dashboard card (plans/tickets-stage-2-5-usage-logic-2026-06-06.md).
  * WTL.F1 — This Week weekly progress card (plans/tickets-weekly-targets-load-risk-2026-06-07.md).
  * WTL.F6 — Remove Recovery streaks dashboard section (plans/tickets-weekly-targets-load-risk-2026-06-07.md).
@@ -154,6 +155,7 @@ const FOOT_PERFORMANCE_CLASS: ActivityClass = {
   name: 'Foot load',
   type: 'performance',
   defaultRecoveryWindowDays: 3,
+  loadWeight: 1,
   createdAt: '2026-04-07T06:00:00Z',
 };
 
@@ -163,6 +165,7 @@ const ARM_PERFORMANCE_CLASS: ActivityClass = {
   name: 'Upper body',
   type: 'performance',
   defaultRecoveryWindowDays: 2,
+  loadWeight: 1,
   createdAt: '2026-04-07T06:00:00Z',
 };
 
@@ -535,7 +538,7 @@ describe('DashboardScreen — WTL.F6 remove recovery streaks section', () => {
   });
 });
 
-describe('DashboardScreen — F10.5 load graph title (engine.graphClassId / B10.2)', () => {
+describe('DashboardScreen — F10.5 load graph title (engine.graphClassId / B10.2 / CLW.F2)', () => {
   beforeEach(() => {
     useDashboardTab('safety');
   });
@@ -552,11 +555,12 @@ describe('DashboardScreen — F10.5 load graph title (engine.graphClassId / B10.
 
     renderDashboard();
 
-    expect(screen.getByText('Foot load')).toBeInTheDocument();
-    expect(screen.queryByText('Upper body')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Foot load' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Upper body' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Performance load' })).not.toBeInTheDocument();
   });
 
-  it('shows Weekly load when graphClassId is null', () => {
+  it('shows Performance load when graphClassId is null', () => {
     mockEngine.block = ACTIVE_BLOCK;
     mockEngine.dailyScores = DAILY_SCORES;
     mockEngine.previousBlocks = [];
@@ -567,8 +571,11 @@ describe('DashboardScreen — F10.5 load graph title (engine.graphClassId / B10.
 
     renderDashboard();
 
-    expect(screen.getByText('Weekly load')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Performance load' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Weekly load' })).not.toBeInTheDocument();
     expect(screen.queryByText('Foot load')).not.toBeInTheDocument();
+    expect(screen.getByText(/Rolling 7-day/i)).toBeInTheDocument();
+    expect(screen.getByText(/last 30 days/i)).toBeInTheDocument();
   });
 
   it('shows Unknown class when graphClassId is not in activityClasses', () => {
@@ -582,7 +589,7 @@ describe('DashboardScreen — F10.5 load graph title (engine.graphClassId / B10.
 
     renderDashboard();
 
-    expect(screen.getByText('Unknown class')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Unknown class' })).toBeInTheDocument();
   });
 });
 

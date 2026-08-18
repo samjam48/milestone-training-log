@@ -130,7 +130,21 @@ def test_backend_dockerfile_includes_alembic_assets_for_explicit_migration_comma
     )
 
 
+def _docker_daemon_available() -> bool:
+    result = subprocess.run(
+        ["docker", "info"],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    return result.returncode == 0
+
+
 def test_backend_dockerfile_builds_from_backend_directory() -> None:
+    if not _docker_daemon_available():
+        pytest.skip("Docker daemon is not available.")
+
     result = subprocess.run(
         ["docker", "build", "-f", "Dockerfile", "."],
         cwd=BACKEND_DIR,

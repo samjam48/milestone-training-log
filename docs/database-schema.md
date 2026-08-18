@@ -103,6 +103,7 @@ Purpose:
 - `description`
 - `type` — performance or recovery
 - `default_recovery_window_days`
+- `load_weight` — non-null float, default `1.0`, range `0..10` (`0` mutes)
 - `created_at`
 
 Purpose:

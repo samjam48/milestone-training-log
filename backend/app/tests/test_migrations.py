@@ -83,6 +83,7 @@ EXPECTED_UNIQUE_COLUMN_SETS = {
 }
 
 STAGE_2_5_HEAD_REVISION = "20260606_0002"
+LOAD_WEIGHT_PARENT_REVISION = "20260614_0007"
 
 
 def _read_required_text(path: Path) -> str:
@@ -253,9 +254,17 @@ def test_upgrade_head_creates_phase_one_schema_in_temporary_sqlite(
         defaults = _sqlite_column_defaults(engine, table_name)
         assert defaults["user_id"] == "local"
 
-    assert _sqlite_column_defaults(engine, "activity_classes")[
-        "default_recovery_window_days"
-    ] == "3"
+    activity_class_defaults = _sqlite_column_defaults(engine, "activity_classes")
+    assert activity_class_defaults["default_recovery_window_days"] == "3"
+    assert activity_class_defaults["load_weight"] in {"1.0", "1"}
+
+    activity_class_columns = {
+        column["name"]: column for column in inspector.get_columns("activity_classes")
+    }
+    assert "load_weight" in activity_class_columns
+    assert activity_class_columns["load_weight"]["nullable"] is False
+    load_weight_type = str(activity_class_columns["load_weight"]["type"]).lower()
+    assert any(token in load_weight_type for token in ("float", "real", "double"))
     assert _sqlite_column_defaults(engine, "training_blocks")[
         "is_review_milestone_hit"
     ] in {"0", "false"}
@@ -347,3 +356,51 @@ def test_downgrade_base_removes_application_tables_from_temporary_sqlite(
 
     engine = create_engine(database_url)
     assert APPLICATION_TABLES.isdisjoint(inspect(engine).get_table_names())
+
+
+def test_alembic_revision_adds_activity_class_load_weight() -> None:
+    revision_texts = [path.read_text(encoding="utf-8") for path in _migration_revision_files()]
+    assert any(
+        "load_weight" in revision_text and "activity_classes" in revision_text
+        for revision_text in revision_texts
+    ), "Expected an Alembic revision that adds activity_classes.load_weight."
+
+
+def test_upgrade_head_backfills_existing_activity_class_load_weight(tmp_path: Path) -> None:
+    database_url = f"sqlite:///{tmp_path / 'load-weight-backfill.db'}"
+    config = _make_alembic_config(database_url)
+
+    command.upgrade(config, LOAD_WEIGHT_PARENT_REVISION)
+
+    engine = create_engine(database_url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                INSERT INTO activity_classes (
+                    id, user_id, name, description, type,
+                    default_recovery_window_days, created_at
+                ) VALUES (
+                    'cls-legacy-weight', 'local', 'Legacy Walk', 'Pre-weight row',
+                    'performance', 3, '2026-04-07T00:00:00'
+                )
+                """
+            )
+        )
+
+    command.upgrade(config, "head")
+
+    inspector = inspect(engine)
+    columns = {column["name"]: column for column in inspector.get_columns("activity_classes")}
+    assert "load_weight" in columns
+    assert columns["load_weight"]["nullable"] is False
+    load_weight_type = str(columns["load_weight"]["type"]).lower()
+    assert any(token in load_weight_type for token in ("float", "real", "double"))
+    assert _sqlite_column_defaults(engine, "activity_classes")["load_weight"] in {"1.0", "1"}
+
+    with engine.connect() as connection:
+        stored_weight = connection.execute(
+            text("SELECT load_weight FROM activity_classes WHERE id = 'cls-legacy-weight'")
+        ).scalar_one()
+
+    assert float(stored_weight) == 1.0

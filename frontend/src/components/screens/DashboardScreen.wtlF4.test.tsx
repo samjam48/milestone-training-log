@@ -3,7 +3,7 @@
  * plans/tickets-weekly-targets-load-risk-2026-06-07.md §WTL.F4
  *
  * Covers: last-30-days window, effort-load subtitle, no /0 header metric,
- * and performance-class graph title.
+ * combined-series Performance load title (CLW.F2), and defensive class-name title.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen, within } from '@testing-library/react';
@@ -76,7 +76,8 @@ function setupDashboardLoadGraph(
   mockEngine.hasCheckedInToday = true;
   mockEngine.loadSeries = wtlF4LoadSeries;
   mockEngine.flareUpDates = [];
-  mockEngine.graphClassId = options.graphClassId ?? WTL_F4_CLASS_FOOT.id;
+  mockEngine.graphClassId =
+    options.graphClassId === undefined ? WTL_F4_CLASS_FOOT.id : options.graphClassId;
   mockEngine.weekLoadThreshold =
     options.weekLoadThreshold === undefined ? null : options.weekLoadThreshold;
 }
@@ -157,6 +158,19 @@ describe('DashboardScreen — WTL.F4 load-tax graph', () => {
 
     renderDashboardLoadGraph();
 
-    expect(screen.getByText('Foot load')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Foot load' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Performance load' })).not.toBeInTheDocument();
+  });
+
+  it('titles the graph Performance load when graphClassId is null', () => {
+    setupDashboardLoadGraph({ graphClassId: null });
+
+    renderDashboardLoadGraph();
+
+    expect(screen.getByRole('heading', { name: 'Performance load' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Weekly load' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Foot load' })).not.toBeInTheDocument();
+    expect(screen.getByText(/Rolling 7-day/i)).toBeInTheDocument();
+    expect(screen.getByText(/last 30 days/i)).toBeInTheDocument();
   });
 });

@@ -146,11 +146,13 @@ export interface NewActivityClassDraft {
   type: ActivityType;
   description?: string;
   defaultRecoveryWindowDays?: number;
+  loadWeight?: number;
 }
 
 export interface ActivityClassPatch {
   name?: string;
   type?: ActivityType;
+  loadWeight?: number;
 }
 
 export interface GoalDraft {
@@ -473,6 +475,7 @@ export function useMilestoneEngine(): MilestoneEngineResult {
         type: draft.type,
         description: draft.description ?? '',
         defaultRecoveryWindowDays: draft.defaultRecoveryWindowDays ?? 3,
+        loadWeight: draft.loadWeight ?? 1,
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['dashboard'] });

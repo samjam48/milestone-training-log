@@ -15,6 +15,7 @@ const CLASSES: ActivityClass[] = [
     name: 'High-Intensity Foot Load',
     type: 'performance',
     defaultRecoveryWindowDays: 3,
+    loadWeight: 1,
     createdAt: '2026-01-01T00:00:00Z',
   },
 ];

@@ -91,6 +91,7 @@ const ACTIVITY_CLASS: ActivityClass = {
   name: 'Gentle Walk',
   type: 'performance',
   defaultRecoveryWindowDays: 1,
+  loadWeight: 1,
   createdAt: '2026-04-01T00:00:00Z',
 };
 

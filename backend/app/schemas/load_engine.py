@@ -127,6 +127,7 @@ class LoadRiskSummary(TypedDict):
 
 LogDict = dict[str, Any]
 ActivityDict = dict[str, Any]
+# Keys: id, name, type, default_recovery_window_days, load_weight (default 1.0).
 ActivityClassDict = dict[str, Any]
 RuleDict = dict[str, Any]
 CheckInDict = dict[str, Any]

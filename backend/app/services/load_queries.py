@@ -222,6 +222,7 @@ def activity_class_dict(activity_class: ActivityClass) -> ActivityClassDict:
         "name": activity_class.name,
         "type": activity_class.type,
         "default_recovery_window_days": activity_class.default_recovery_window_days,
+        "load_weight": activity_class.load_weight,
     }
 
 
@@ -297,28 +298,3 @@ def incident_dict(incident: FlareUpIncident) -> IncidentDict:
         "severity": incident.severity,
     }
 
-
-def resolve_graph_class_id(
-    rules: list[RuleDict],
-    activity_classes: list[ActivityClassDict],
-) -> str | None:
-    enabled_caps = sorted(
-        (
-            rule
-            for rule in rules
-            if rule.get("enabled", True)
-            and rule["rule_type"] == "weekly_load_cap"
-            and rule.get("activity_class_id")
-        ),
-        key=lambda rule: rule["activity_class_id"],
-    )
-    if enabled_caps:
-        class_id = enabled_caps[0]["activity_class_id"]
-        return str(class_id) if class_id is not None else None
-
-    performance_class_ids = sorted(
-        cls["id"] for cls in activity_classes if cls.get("type") == "performance"
-    )
-    if performance_class_ids:
-        return str(performance_class_ids[0])
-    return None

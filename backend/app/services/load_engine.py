@@ -1392,6 +1392,16 @@ def compute_clean_streak(logs: list[LogDict]) -> int:
 # ---------------------------------------------------------------------------
 
 
+_DEFAULT_CLASS_LOAD_WEIGHT = 1.0
+
+
+def _class_load_weight(cls: ActivityClassDict) -> float:
+    raw = cls.get("load_weight", _DEFAULT_CLASS_LOAD_WEIGHT)
+    if raw is None:
+        return _DEFAULT_CLASS_LOAD_WEIGHT
+    return float(raw)
+
+
 def _daily_load_tax_for_class(
     class_id: str,
     activities: list[ActivityDict],
@@ -1417,6 +1427,29 @@ def _daily_load_tax_for_class(
             logs,
             rules,
             as_of=day,
+        )
+    return total
+
+
+def _daily_combined_load_tax(
+    activities: list[ActivityDict],
+    activity_classes: list[ActivityClassDict],
+    logs: list[LogDict],
+    rules: list[RuleDict],
+    day: str,
+) -> float:
+    """Weighted performance daily tax: Σ load_weight(C) * daily_load_tax(C, D)."""
+    total = 0.0
+    for cls in activity_classes:
+        if cls.get("type") != "performance":
+            continue
+        total += _class_load_weight(cls) * _daily_load_tax_for_class(
+            cls["id"],
+            activities,
+            activity_classes,
+            logs,
+            rules,
+            day,
         )
     return total
 
@@ -1457,6 +1490,7 @@ def compute_load_series(
     activity_classes: list[ActivityClassDict] | None = None,
     rules: list[RuleDict] | None = None,
 ) -> list[LoadPoint]:
+    """Per-class load-tax series. Prefer ``compute_combined_load_series`` for Safety."""
     ids = set(_activity_ids_for_class(class_id, activities))
     class_logs = [
         log for log in logs if log["activity_id"] in ids and log["logged_date"] <= end_date
@@ -1500,6 +1534,67 @@ def compute_load_series(
                     "daily_load": daily_load(scoped, day),
                 }
             )
+    return series
+
+
+def _recency_weighted_combined_load_tax(
+    activities: list[ActivityDict],
+    activity_classes: list[ActivityClassDict],
+    logs: list[LogDict],
+    rules: list[RuleDict],
+    as_of: str,
+) -> float:
+    total = 0.0
+    for offset, weight in enumerate(LOAD_TAX_RECENCY_WEIGHTS):
+        day = add_days(as_of, -offset)
+        total += _daily_combined_load_tax(
+            activities,
+            activity_classes,
+            logs,
+            rules,
+            day,
+        ) * weight
+    return total
+
+
+def compute_combined_load_series(
+    activities: list[ActivityDict],
+    logs: list[LogDict],
+    start_date: str,
+    end_date: str,
+    window_days: int = 7,
+    *,
+    activity_classes: list[ActivityClassDict],
+    rules: list[RuleDict],
+) -> list[LoadPoint]:
+    """Combined weighted performance load-tax series (Safety/block-review entry point).
+
+    ``daily_load`` is Σ load_weight(C) * daily_load_tax(C, D) across performance
+    classes. Rolling ``load`` applies ``LOAD_TAX_RECENCY_WEIGHTS`` to those dailies.
+    """
+    del window_days
+    scoped_logs = [log for log in logs if log["logged_date"] <= end_date]
+    series: list[LoadPoint] = []
+    for day in each_day(start_date, end_date):
+        series.append(
+            {
+                "date": day,
+                "load": _recency_weighted_combined_load_tax(
+                    activities,
+                    activity_classes,
+                    scoped_logs,
+                    rules,
+                    day,
+                ),
+                "daily_load": _daily_combined_load_tax(
+                    activities,
+                    activity_classes,
+                    scoped_logs,
+                    rules,
+                    day,
+                ),
+            }
+        )
     return series
 
 
@@ -1875,48 +1970,20 @@ def _rule_has_finite_limit(rule: RuleDict) -> bool:
     return float(threshold) > 0
 
 
-def _strip_graph_class_id(
-    classes: list[ActivityClassDict],
-    rules: list[RuleDict],
-) -> str | None:
-    enabled_caps = sorted(
-        (
-            rule
-            for rule in rules
-            if rule.get("enabled", True)
-            and rule["rule_type"] == "weekly_load_cap"
-            and rule.get("activity_class_id")
-            and not rule.get("activity_id")
-        ),
-        key=lambda rule: str(rule.get("activity_class_id")),
-    )
-    if enabled_caps:
-        return str(enabled_caps[0]["activity_class_id"])
-
-    performance_class_ids = sorted(
-        cls["id"] for cls in classes if cls.get("type") == "performance"
-    )
-    if performance_class_ids:
-        return str(performance_class_ids[0])
-    return None
-
-
 def _strip_load_tax_for_day(
-    graph_class_id: str,
     activities: list[ActivityDict],
     classes: list[ActivityClassDict],
     logs: list[LogDict],
     rules: list[RuleDict],
     as_of: str,
 ) -> float:
-    """Recency-weighted load tax from prior days only (excludes same-day load)."""
+    """Recency-weighted combined load tax from prior days only (excludes same-day load)."""
     total = 0.0
     for offset, weight in enumerate(LOAD_TAX_RECENCY_WEIGHTS):
         if offset == 0:
             continue
         day = add_days(as_of, -offset)
-        daily_tax = _daily_load_tax_for_class(
-            graph_class_id,
+        daily_tax = _daily_combined_load_tax(
             activities,
             classes,
             logs,
@@ -2295,21 +2362,15 @@ def compute_load_risk_summary(
 ) -> LoadRiskSummary:
     week_start = add_days(as_of, -(_LOAD_RISK_WEEK_DAYS - 1))
     elevated_dates = _delayed_tax_elevated_dates(delayed_tax_hits)
-    graph_class_id = _strip_graph_class_id(classes, rules)
 
     week_days: list[LoadRiskDay] = []
     for day in each_day(week_start, as_of):
-        load_tax = (
-            _strip_load_tax_for_day(
-                graph_class_id,
-                activities,
-                classes,
-                logs,
-                rules,
-                day,
-            )
-            if graph_class_id is not None
-            else 0.0
+        load_tax = _strip_load_tax_for_day(
+            activities,
+            classes,
+            logs,
+            rules,
+            day,
         )
         week_days.append(
             {
