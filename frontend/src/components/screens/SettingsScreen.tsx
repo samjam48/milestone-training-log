@@ -528,6 +528,43 @@ function PreferenceRow({
   );
 }
 
+const DEFAULT_LOAD_WEIGHT = 1;
+const LOAD_WEIGHT_MAX = 10;
+
+function isValidLoadWeightInput(value: string): boolean {
+  if (value.trim() === '') {
+    return false;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 && parsed <= LOAD_WEIGHT_MAX;
+}
+
+function LoadWeightField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+}): React.ReactElement {
+  return (
+    <label className="flex flex-col gap-1.5">
+      <span className="text-label font-medium text-ink-muted">Load weight</span>
+      <input
+        type="number"
+        min={0}
+        max={LOAD_WEIGHT_MAX}
+        step="any"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-11 rounded-md border border-border bg-bg px-3 text-body text-ink tabular-nums"
+      />
+      <span className="text-caption text-ink-muted">
+        Scales how much this class contributes to the Safety load graph.
+      </span>
+    </label>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // NewActivityClassForm — create activity class dialog
 // ---------------------------------------------------------------------------
@@ -547,6 +584,7 @@ function NewActivityClassForm({
   const [type, setType] = React.useState<ActivityType>('performance');
   const [description, setDescription] = React.useState('');
   const [recoveryWindowDays, setRecoveryWindowDays] = React.useState(3);
+  const [loadWeightInput, setLoadWeightInput] = React.useState(String(DEFAULT_LOAD_WEIGHT));
   const [apiError, setApiError] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
 
@@ -556,6 +594,7 @@ function NewActivityClassForm({
       setType('performance');
       setDescription('');
       setRecoveryWindowDays(3);
+      setLoadWeightInput(String(DEFAULT_LOAD_WEIGHT));
       setApiError(null);
       setSubmitting(false);
     }
@@ -564,7 +603,8 @@ function NewActivityClassForm({
   if (!open) return null;
 
   const trimmedName = name.trim();
-  const canCreate = trimmedName.length > 0 && !submitting;
+  const loadWeightOk = type === 'recovery' || isValidLoadWeightInput(loadWeightInput);
+  const canCreate = trimmedName.length > 0 && loadWeightOk && !submitting;
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>): Promise<void> {
     e.preventDefault();
@@ -577,6 +617,7 @@ function NewActivityClassForm({
       name: trimmedName,
       type,
       defaultRecoveryWindowDays: recoveryWindowDays,
+      loadWeight: type === 'recovery' ? DEFAULT_LOAD_WEIGHT : Number(loadWeightInput),
     };
     const trimmedDescription = description.trim();
     if (trimmedDescription.length > 0) {
@@ -658,6 +699,10 @@ function NewActivityClassForm({
               </label>
             </fieldset>
 
+            {type === 'performance' && (
+              <LoadWeightField value={loadWeightInput} onChange={setLoadWeightInput} />
+            )}
+
             <label className="flex flex-col gap-1.5">
               <span className="text-label font-medium text-ink-muted">Description</span>
               <textarea
@@ -720,6 +765,7 @@ function EditActivityClassForm({
 }: EditActivityClassFormProps): React.ReactElement | null {
   const [name, setName] = React.useState('');
   const [type, setType] = React.useState<ActivityType>('performance');
+  const [loadWeightInput, setLoadWeightInput] = React.useState(String(DEFAULT_LOAD_WEIGHT));
   const [apiError, setApiError] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
 
@@ -727,6 +773,7 @@ function EditActivityClassForm({
     if (activityClass != null) {
       setName(activityClass.name);
       setType(activityClass.type);
+      setLoadWeightInput(String(activityClass.loadWeight));
       setApiError(null);
       setSubmitting(false);
     }
@@ -736,7 +783,8 @@ function EditActivityClassForm({
 
   const classId = activityClass.id;
   const trimmedName = name.trim();
-  const canSave = trimmedName.length > 0 && !submitting;
+  const loadWeightOk = type === 'recovery' || isValidLoadWeightInput(loadWeightInput);
+  const canSave = trimmedName.length > 0 && loadWeightOk && !submitting;
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>): Promise<void> {
     e.preventDefault();
@@ -745,8 +793,13 @@ function EditActivityClassForm({
     setApiError(null);
     setSubmitting(true);
 
+    const patch: ActivityClassPatch = { name: trimmedName, type };
+    if (type === 'performance') {
+      patch.loadWeight = Number(loadWeightInput);
+    }
+
     try {
-      await onSubmit(classId, { name: trimmedName, type });
+      await onSubmit(classId, patch);
       onClose();
     } catch (err) {
       if (err instanceof ApiError) {
@@ -819,6 +872,10 @@ function EditActivityClassForm({
                 <span aria-hidden="true">Recovery</span>
               </label>
             </fieldset>
+
+            {type === 'performance' && (
+              <LoadWeightField value={loadWeightInput} onChange={setLoadWeightInput} />
+            )}
 
             {apiError != null && (
               <p className="text-body text-danger-fg" role="alert">

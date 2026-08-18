@@ -154,6 +154,7 @@ const FOOT_PERFORMANCE_CLASS: ActivityClass = {
   name: 'Foot load',
   type: 'performance',
   defaultRecoveryWindowDays: 3,
+  loadWeight: 1,
   createdAt: '2026-04-07T06:00:00Z',
 };
 
@@ -163,6 +164,7 @@ const ARM_PERFORMANCE_CLASS: ActivityClass = {
   name: 'Upper body',
   type: 'performance',
   defaultRecoveryWindowDays: 2,
+  loadWeight: 1,
   createdAt: '2026-04-07T06:00:00Z',
 };
 

@@ -43,6 +43,7 @@ const CLASS_RUNNING: ActivityClass = {
   name: 'Running',
   type: 'performance',
   defaultRecoveryWindowDays: 2,
+  loadWeight: 1,
   createdAt: '2026-01-01T00:00:00Z',
 };
 

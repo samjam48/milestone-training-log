@@ -54,6 +54,7 @@ const CLASS_RUNNING: ActivityClass = {
   name: 'Running',
   type: 'performance',
   defaultRecoveryWindowDays: 2,
+  loadWeight: 1,
   createdAt: '2026-01-01T00:00:00Z',
 };
 
@@ -63,6 +64,7 @@ const CLASS_STRENGTH: ActivityClass = {
   name: 'Strength',
   type: 'performance',
   defaultRecoveryWindowDays: 3,
+  loadWeight: 1,
   createdAt: '2026-01-01T00:00:00Z',
 };
 
@@ -1621,6 +1623,7 @@ function renderStatefulActivityClassSettings(options: {
         type: draft.type,
         description: draft.description,
         defaultRecoveryWindowDays: draft.defaultRecoveryWindowDays ?? 3,
+        loadWeight: 1,
         createdAt: '2026-06-05T00:00:00Z',
       },
     ];
@@ -1747,6 +1750,7 @@ describe('SettingsScreen — S2.6 create activity class', () => {
       name: 'Foot Load',
       type: 'performance',
       defaultRecoveryWindowDays: 3,
+      loadWeight: 1,
     });
   });
 
@@ -2130,5 +2134,288 @@ describe('SettingsScreen — S25.F8 activity class edit and delete', () => {
 
     expect(deleteActivityClass).not.toHaveBeenCalled();
     expect(screen.queryByText(/delete class\?/i)).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Activity class load weight (Settings create / edit)
+// Contract:
+//   - Performance: show numeric Load weight (default 1) and include it on submit/PATCH.
+//   - Recovery create: hide the control; still send loadWeight: 1 explicitly.
+//   - Recovery edit / type flip to recovery: hide the control; omit loadWeight from
+//     PATCH so the stored weight is left unchanged.
+// ---------------------------------------------------------------------------
+
+const CLASS_RECOVERY: ActivityClass = {
+  id: 'cls-recovery',
+  userId: 'user-1',
+  name: 'Mobility',
+  type: 'recovery',
+  defaultRecoveryWindowDays: 1,
+  loadWeight: 1,
+  createdAt: '2026-01-01T00:00:00Z',
+};
+
+const CLASS_WEIGHTED = {
+  ...CLASS_RUNNING,
+  loadWeight: 2.5,
+};
+
+const LOAD_WEIGHT_HELPER =
+  /scales how much this class contributes to the safety load graph/i;
+
+describe('SettingsScreen — activity class load weight', () => {
+  it('shows a Load weight control defaulting to 1 for a new performance class', async () => {
+    const user = userEvent.setup();
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [],
+      activities: [],
+      logs: [],
+    });
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    await user.click(screen.getByRole('button', { name: /\+ new class/i }));
+
+    const dialog = screen.getByRole('dialog', { name: /new activity class/i });
+    const weightInput = within(dialog).getByLabelText(/load weight/i);
+    expect(weightInput).toHaveValue(1);
+    expect(within(dialog).getByText(LOAD_WEIGHT_HELPER)).toBeInTheDocument();
+  });
+
+  it('hides Load weight for a new recovery class and still submits loadWeight: 1', async () => {
+    // Contract: recovery creates send loadWeight: 1 explicitly (do not omit).
+    const user = userEvent.setup();
+    const submitNewActivityClass = vi.fn();
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [],
+      activities: [],
+      logs: [],
+      submitNewActivityClass,
+    } as Partial<typeof mockEngine>);
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    await user.click(screen.getByRole('button', { name: /\+ new class/i }));
+
+    const dialog = screen.getByRole('dialog', { name: /new activity class/i });
+    expect(within(dialog).getByLabelText(/load weight/i)).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole('radio', { name: /^recovery$/i }));
+
+    expect(within(dialog).queryByLabelText(/load weight/i)).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(LOAD_WEIGHT_HELPER)).not.toBeInTheDocument();
+
+    await user.type(within(dialog).getByLabelText(/class name/i), 'Mobility');
+    await user.click(within(dialog).getByRole('button', { name: /create class/i }));
+
+    expect(submitNewActivityClass).toHaveBeenCalledWith({
+      name: 'Mobility',
+      type: 'recovery',
+      defaultRecoveryWindowDays: 3,
+      loadWeight: 1,
+    });
+  });
+
+  it('submits a custom loadWeight for a new performance class', async () => {
+    const user = userEvent.setup();
+    const submitNewActivityClass = vi.fn();
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [],
+      activities: [],
+      logs: [],
+      submitNewActivityClass,
+    } as Partial<typeof mockEngine>);
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    await user.click(screen.getByRole('button', { name: /\+ new class/i }));
+
+    const dialog = screen.getByRole('dialog', { name: /new activity class/i });
+    await user.type(within(dialog).getByLabelText(/class name/i), 'Active exercise');
+    const weightInput = within(dialog).getByLabelText(/load weight/i);
+    await user.clear(weightInput);
+    await user.type(weightInput, '2');
+    await user.click(within(dialog).getByRole('button', { name: /create class/i }));
+
+    expect(submitNewActivityClass).toHaveBeenCalledWith({
+      name: 'Active exercise',
+      type: 'performance',
+      defaultRecoveryWindowDays: 3,
+      loadWeight: 2,
+    });
+  });
+
+  it('disables create when Load weight is empty', async () => {
+    const user = userEvent.setup();
+    const submitNewActivityClass = vi.fn();
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [],
+      activities: [],
+      logs: [],
+      submitNewActivityClass,
+    } as Partial<typeof mockEngine>);
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    await user.click(screen.getByRole('button', { name: /\+ new class/i }));
+
+    const dialog = screen.getByRole('dialog', { name: /new activity class/i });
+    await user.type(within(dialog).getByLabelText(/class name/i), 'Foot Load');
+    await user.clear(within(dialog).getByLabelText(/load weight/i));
+
+    const createButton = within(dialog).getByRole('button', { name: /create class/i });
+    expect(createButton).toBeDisabled();
+    await user.click(createButton);
+    expect(submitNewActivityClass).not.toHaveBeenCalled();
+  });
+
+  it('disables create when Load weight is greater than 10', async () => {
+    const user = userEvent.setup();
+    const submitNewActivityClass = vi.fn();
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [],
+      activities: [],
+      logs: [],
+      submitNewActivityClass,
+    } as Partial<typeof mockEngine>);
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    await user.click(screen.getByRole('button', { name: /\+ new class/i }));
+
+    const dialog = screen.getByRole('dialog', { name: /new activity class/i });
+    await user.type(within(dialog).getByLabelText(/class name/i), 'Foot Load');
+    const weightInput = within(dialog).getByLabelText(/load weight/i);
+    await user.clear(weightInput);
+    await user.type(weightInput, '10.1');
+
+    const createButton = within(dialog).getByRole('button', { name: /create class/i });
+    expect(createButton).toBeDisabled();
+    await user.click(createButton);
+    expect(submitNewActivityClass).not.toHaveBeenCalled();
+  });
+
+  it('prefills Load weight on edit for a performance class and PATCHes the value', async () => {
+    const user = userEvent.setup();
+    const updateActivityClass = vi.fn().mockResolvedValue(undefined);
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [CLASS_WEIGHTED],
+      activities: [],
+      logs: [],
+      updateActivityClass,
+    });
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    await user.click(screen.getByRole('button', { name: /edit running/i }));
+
+    const dialog = screen.getByRole('dialog', { name: /edit activity class/i });
+    const weightInput = within(dialog).getByLabelText(/load weight/i);
+    expect(weightInput).toHaveValue(2.5);
+    expect(within(dialog).getByText(LOAD_WEIGHT_HELPER)).toBeInTheDocument();
+
+    await user.clear(weightInput);
+    await user.type(weightInput, '3');
+    await user.click(within(dialog).getByRole('button', { name: /^save$/i }));
+
+    await waitFor(() => {
+      expect(updateActivityClass).toHaveBeenCalledWith(CLASS_WEIGHTED.id, {
+        name: CLASS_WEIGHTED.name,
+        type: 'performance',
+        loadWeight: 3,
+      });
+    });
+  });
+
+  it('hides Load weight when editing a recovery class', async () => {
+    const user = userEvent.setup();
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [CLASS_WEIGHTED, CLASS_RECOVERY],
+      activities: [],
+      logs: [],
+    });
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    await user.click(screen.getByRole('button', { name: /edit running/i }));
+    const performanceDialog = screen.getByRole('dialog', { name: /edit activity class/i });
+    expect(within(performanceDialog).getByLabelText(/load weight/i)).toBeInTheDocument();
+    await user.click(within(performanceDialog).getByRole('button', { name: /close/i }));
+
+    await user.click(screen.getByRole('button', { name: /edit mobility/i }));
+    const recoveryDialog = screen.getByRole('dialog', { name: /edit activity class/i });
+    expect(within(recoveryDialog).queryByLabelText(/load weight/i)).not.toBeInTheDocument();
+    expect(within(recoveryDialog).queryByText(LOAD_WEIGHT_HELPER)).not.toBeInTheDocument();
+  });
+
+  it('hides Load weight after flipping type to recovery and omits it from the PATCH', async () => {
+    // Contract: type flip to recovery hides UI only. Omit loadWeight so the stored
+    // weight is left unchanged (do not send 1).
+    const user = userEvent.setup();
+    const updateActivityClass = vi.fn().mockResolvedValue(undefined);
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [CLASS_WEIGHTED],
+      activities: [],
+      logs: [],
+      updateActivityClass,
+    });
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    await user.click(screen.getByRole('button', { name: /edit running/i }));
+
+    const dialog = screen.getByRole('dialog', { name: /edit activity class/i });
+    expect(within(dialog).getByLabelText(/load weight/i)).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole('radio', { name: /^recovery$/i }));
+
+    expect(within(dialog).queryByLabelText(/load weight/i)).not.toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole('button', { name: /^save$/i }));
+
+    await waitFor(() => {
+      expect(updateActivityClass).toHaveBeenCalledWith(CLASS_WEIGHTED.id, {
+        name: CLASS_WEIGHTED.name,
+        type: 'recovery',
+      });
+    });
+    expect(updateActivityClass.mock.calls[0]?.[1]).not.toHaveProperty('loadWeight');
+  });
+
+  it('disables save when edited Load weight is empty or greater than 10', async () => {
+    const user = userEvent.setup();
+    const updateActivityClass = vi.fn();
+    const engine = makeEngine({
+      block: ACTIVE_BLOCK,
+      activityClasses: [CLASS_WEIGHTED],
+      activities: [],
+      logs: [],
+      updateActivityClass,
+    });
+
+    renderWithProviders(<SettingsScreen engine={engine} />);
+
+    await user.click(screen.getByRole('button', { name: /edit running/i }));
+
+    const dialog = screen.getByRole('dialog', { name: /edit activity class/i });
+    const weightInput = within(dialog).getByLabelText(/load weight/i);
+    const saveButton = within(dialog).getByRole('button', { name: /^save$/i });
+
+    await user.clear(weightInput);
+    expect(saveButton).toBeDisabled();
+
+    await user.type(weightInput, '11');
+    expect(saveButton).toBeDisabled();
+    await user.click(saveButton);
+    expect(updateActivityClass).not.toHaveBeenCalled();
   });
 });

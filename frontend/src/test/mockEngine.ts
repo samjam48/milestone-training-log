@@ -57,6 +57,7 @@ function createBaseline(): MilestoneEngineResult {
         type: draft.type,
         description: draft.description,
         defaultRecoveryWindowDays: draft.defaultRecoveryWindowDays ?? 3,
+        loadWeight: draft.loadWeight ?? 1,
       });
     },
     updateActivityClass: async () => undefined,
@@ -110,6 +111,7 @@ export const c63MobilityClass: ActivityClass = {
   name: 'Mobility',
   type: 'recovery',
   defaultRecoveryWindowDays: 1,
+  loadWeight: 1,
   createdAt: CREATED_AT,
 };
 

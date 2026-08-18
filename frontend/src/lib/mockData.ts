@@ -35,9 +35,9 @@ export const BLOCK: TrainingBlock = {
 // Activity classes
 // ---------------------------------------------------------------------------
 export const ACTIVITY_CLASSES: ActivityClass[] = [
-  { id: 'cls-foot',     userId: USER_ID, name: 'High-Intensity Foot Load', type: 'performance', defaultRecoveryWindowDays: 3, createdAt: '2026-04-07T06:00:00Z' },
-  { id: 'cls-recovery', userId: USER_ID, name: 'Low-Impact Recovery',      type: 'recovery',    defaultRecoveryWindowDays: 1, createdAt: '2026-04-07T06:00:00Z' },
-  { id: 'cls-upper',    userId: USER_ID, name: 'Upper Body Strength',       type: 'performance', defaultRecoveryWindowDays: 2, createdAt: '2026-04-07T06:00:00Z' },
+  { id: 'cls-foot',     userId: USER_ID, name: 'High-Intensity Foot Load', type: 'performance', defaultRecoveryWindowDays: 3, loadWeight: 1, createdAt: '2026-04-07T06:00:00Z' },
+  { id: 'cls-recovery', userId: USER_ID, name: 'Low-Impact Recovery',      type: 'recovery',    defaultRecoveryWindowDays: 1, loadWeight: 1, createdAt: '2026-04-07T06:00:00Z' },
+  { id: 'cls-upper',    userId: USER_ID, name: 'Upper Body Strength',       type: 'performance', defaultRecoveryWindowDays: 2, loadWeight: 1, createdAt: '2026-04-07T06:00:00Z' },
 ];
 
 // ---------------------------------------------------------------------------

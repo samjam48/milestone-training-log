@@ -243,6 +243,7 @@ function setupDefaultApiMocks(): void {
     name: 'Foot Load',
     type: 'performance',
     defaultRecoveryWindowDays: 3,
+    loadWeight: 1,
     createdAt: '2026-05-30T06:00:00Z',
   });
   vi.mocked(patchActivityClass).mockResolvedValue({
@@ -250,6 +251,7 @@ function setupDefaultApiMocks(): void {
     name: 'Foot Load Updated',
     type: 'recovery',
     defaultRecoveryWindowDays: 3,
+    loadWeight: 1,
     createdAt: '2026-05-30T06:00:00Z',
   });
   vi.mocked(deleteActivityClass).mockResolvedValue(undefined);
@@ -795,6 +797,30 @@ describe('useMilestoneEngine data plane (F2.0)', () => {
     expect(draft?.type).toBe('performance');
     expect(draft?.description).toBe('Impact-heavy lower limb loading.');
     expect(draft?.defaultRecoveryWindowDays).toBe(4);
+  });
+
+  it('submitNewActivityClass forwards loadWeight for performance creates', async () => {
+    const { result } = renderHookWithProviders(() => useMilestoneEngine());
+
+    await waitFor(() => {
+      expect(result.current.todayDate).toBe(dashboardPayload.todayDate);
+    });
+
+    await act(async () => {
+      await result.current.submitNewActivityClass({
+        name: 'Active exercise',
+        type: 'performance',
+        defaultRecoveryWindowDays: 3,
+        loadWeight: 2,
+      });
+    });
+
+    await waitFor(() => {
+      expect(createActivityClass).toHaveBeenCalledTimes(1);
+    });
+
+    const draft = vi.mocked(createActivityClass).mock.calls[0]?.[0];
+    expect(draft?.loadWeight).toBe(2);
   });
 
   it('submitNewActivityClass defaults description to empty string when omitted', async () => {
@@ -1701,6 +1727,28 @@ describe('useMilestoneEngine — S25.F8/F9 check-ins and activity class mutation
     });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['dashboard'] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['activity-classes'] });
+  });
+
+  it('updateActivityClass forwards loadWeight on patch', async () => {
+    const { result } = renderHookWithProviders(() => useMilestoneEngine());
+
+    await waitFor(() => {
+      expect(result.current.todayDate).toBe(dashboardPayload.todayDate);
+    });
+
+    await act(async () => {
+      await result.current.updateActivityClass('cls-foot', {
+        name: 'Foot load',
+        type: 'performance',
+        loadWeight: 2,
+      });
+    });
+
+    expect(patchActivityClass).toHaveBeenCalledWith('cls-foot', {
+      name: 'Foot load',
+      type: 'performance',
+      loadWeight: 2,
+    });
   });
 
   it('deleteActivityClass DELETEs and invalidates dashboard, activity-classes, and activities', async () => {

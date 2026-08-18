@@ -56,6 +56,7 @@ const walkClass: ActivityClass = {
   name: 'Gentle walk',
   type: 'recovery',
   defaultRecoveryWindowDays: 1,
+  loadWeight: 1,
   createdAt: CREATED_AT,
 };
 
@@ -76,6 +77,7 @@ const otherClass: ActivityClass = {
   name: 'Strength',
   type: 'performance',
   defaultRecoveryWindowDays: 2,
+  loadWeight: 1,
   createdAt: CREATED_AT,
 };
 

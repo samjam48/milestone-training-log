@@ -18,6 +18,7 @@ export const WTL_F3_CLASS_FOOT: ActivityClass = {
   name: 'WTL Foot Load',
   type: 'performance',
   defaultRecoveryWindowDays: 3,
+  loadWeight: 1,
   createdAt: '2026-06-01T00:00:00Z',
 };
 

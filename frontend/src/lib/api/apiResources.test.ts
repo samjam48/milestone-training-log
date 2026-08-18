@@ -3,7 +3,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { listActivities, createActivity, patchActivity } from './activities';
-import { listActivityClasses, createActivityClass } from './activityClasses';
+import { listActivityClasses, createActivityClass, patchActivityClass } from './activityClasses';
 import {
   createActivityLog,
   deleteActivityLog,
@@ -148,6 +148,84 @@ describe('F1.4 api resource wrappers', () => {
 
     expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/activity-classes');
     expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ method: 'POST' });
+  });
+
+  it('listActivityClasses maps load_weight to loadWeight (default 1 when omitted)', async () => {
+    if (!firstClass) {
+      throw new Error('mock class required');
+    }
+    const withWeight = {
+      id: firstClass.id,
+      name: firstClass.name,
+      description: null,
+      type: firstClass.type,
+      default_recovery_window_days: firstClass.defaultRecoveryWindowDays,
+      load_weight: 2,
+      created_at: firstClass.createdAt,
+      updated_at: firstClass.updatedAt ?? firstClass.createdAt,
+    };
+    const withoutWeight = {
+      id: 'cls-recovery',
+      name: 'Recovery',
+      description: null,
+      type: 'recovery',
+      default_recovery_window_days: 1,
+      created_at: firstClass.createdAt,
+      updated_at: firstClass.createdAt,
+    };
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse([withWeight, withoutWeight]));
+    globalThis.fetch = fetchMock;
+
+    const listed = await listActivityClasses();
+
+    expect(listed[0]?.loadWeight).toBe(2);
+    expect(listed[1]?.loadWeight).toBe(1);
+  });
+
+  it('createActivityClass and patchActivityClass send load_weight and map loadWeight from the response', async () => {
+    if (!firstClass) {
+      throw new Error('mock class required');
+    }
+    const createdSnake = {
+      id: 'cls-new',
+      name: 'New class',
+      description: null,
+      type: 'performance',
+      default_recovery_window_days: 2,
+      load_weight: 2,
+      created_at: firstClass.createdAt,
+      updated_at: firstClass.createdAt,
+    };
+    const patchedSnake = {
+      ...createdSnake,
+      load_weight: 0,
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(createdSnake))
+      .mockResolvedValueOnce(jsonResponse(patchedSnake));
+    globalThis.fetch = fetchMock;
+
+    const created = await createActivityClass({
+      id: 'cls-new',
+      name: 'New class',
+      type: 'performance',
+      defaultRecoveryWindowDays: 2,
+      loadWeight: 2,
+    });
+    const patched = await patchActivityClass(firstClass.id, { loadWeight: 0 });
+
+    const createBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
+      load_weight?: number;
+    };
+    const patchBody = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body)) as {
+      load_weight?: number;
+    };
+
+    expect(createBody.load_weight).toBe(2);
+    expect(created.loadWeight).toBe(2);
+    expect(patchBody.load_weight).toBe(0);
+    expect(patched.loadWeight).toBe(0);
   });
 
   it('activity log create, patch, and delete routes', async () => {

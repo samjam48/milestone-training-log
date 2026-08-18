@@ -57,6 +57,7 @@ const CLASS_RUNNING: ActivityClass = {
   name: 'Running',
   type: 'performance',
   defaultRecoveryWindowDays: 2,
+  loadWeight: 1,
   createdAt: '2026-01-01T00:00:00Z',
 };
 
@@ -66,6 +67,7 @@ const CLASS_WALK: ActivityClass = {
   name: 'Gentle walk',
   type: 'performance',
   defaultRecoveryWindowDays: 1,
+  loadWeight: 1,
   createdAt: '2026-01-01T00:00:00Z',
 };
 

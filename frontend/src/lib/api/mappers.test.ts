@@ -46,6 +46,9 @@ import type { LoadRiskSummary } from '../engine';
 import { parseApiError } from './client';
 import {
   buildQuery,
+  mapActivityClassCreateBody,
+  mapActivityClassFromApi,
+  mapActivityClassPatchBody,
   mapActivityLogFromApi,
   mapActivityLogCreateBody,
   mapActivityLogPatchBody,
@@ -834,5 +837,95 @@ describe('mapLoadSummaryFromApi — WTL.F1 weekly progress metadata', () => {
       activityId: weeklyProgressActivityScopedSnake.activity_id,
       activityName: weeklyProgressActivityScopedSnake.activity_name,
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CLW.F1 — activity class loadWeight (snake load_weight ↔ camel loadWeight)
+// ---------------------------------------------------------------------------
+
+function activityClassReadSnake(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: 'cls-foot',
+    name: 'High-Intensity Foot Load',
+    description: null,
+    type: 'performance',
+    default_recovery_window_days: 3,
+    created_at: '2026-04-07T06:00:00Z',
+    updated_at: '2026-04-07T06:00:00Z',
+    ...overrides,
+  };
+}
+
+describe('mapActivityClassFromApi — loadWeight', () => {
+  it('maps load_weight onto ActivityClass.loadWeight as a number', () => {
+    const mapped = mapActivityClassFromApi(activityClassReadSnake({ load_weight: 2.5 }));
+
+    expect(mapped.loadWeight).toBe(2.5);
+  });
+
+  it('defaults loadWeight to 1 when load_weight is absent (defensive parse)', () => {
+    const mapped = mapActivityClassFromApi(activityClassReadSnake());
+
+    expect(mapped.loadWeight).toBe(1);
+  });
+
+  it('preserves loadWeight 0 (mute) instead of treating it as absent', () => {
+    const mapped = mapActivityClassFromApi(activityClassReadSnake({ load_weight: 0 }));
+
+    expect(mapped.loadWeight).toBe(0);
+  });
+});
+
+describe('mapActivityClassCreateBody / mapActivityClassPatchBody — loadWeight', () => {
+  it('maps camelCase loadWeight to snake_case load_weight on create', () => {
+    const body = mapActivityClassCreateBody({
+      name: 'Foot load',
+      type: 'performance',
+      defaultRecoveryWindowDays: 3,
+      loadWeight: 2,
+    });
+
+    expect(body.load_weight).toBe(2);
+    expect(body).not.toHaveProperty('loadWeight');
+  });
+
+  it('maps camelCase loadWeight to snake_case load_weight on patch', () => {
+    const body = mapActivityClassPatchBody({ loadWeight: 0 });
+
+    expect(body.load_weight).toBe(0);
+    expect(body).not.toHaveProperty('loadWeight');
+  });
+
+  it('omits load_weight from the patch body when loadWeight is undefined', () => {
+    // Edit type-flip to recovery should omit the field so stored weight is unchanged.
+    const body = mapActivityClassPatchBody({
+      name: 'Foot load',
+      type: 'recovery',
+    });
+
+    expect(body).not.toHaveProperty('load_weight');
+    expect(body).not.toHaveProperty('loadWeight');
+  });
+});
+
+describe('mapDashboardFromApi — activity class loadWeight', () => {
+  it('populates loadWeight on embedded activity_classes', () => {
+    const firstClass = dashboardReadSnake.activity_classes[0];
+    const secondClass = dashboardReadSnake.activity_classes[1];
+    if (firstClass === undefined || secondClass === undefined) {
+      throw new Error('dashboard fixture must include at least two activity classes');
+    }
+
+    const mapped = mapDashboardFromApi({
+      ...dashboardReadSnake,
+      activity_classes: [
+        { ...firstClass, load_weight: 2 },
+        secondClass,
+      ],
+    });
+
+    expect(mapped.activityClasses[0]?.loadWeight).toBe(2);
+    expect(mapped.activityClasses[1]?.loadWeight).toBe(1);
   });
 });

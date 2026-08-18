@@ -145,6 +145,7 @@ describe('S2.4 — App stack flows use shared back header wired to navigateBack'
     name: 'Performance',
     type: 'performance',
     defaultRecoveryWindowDays: 3,
+    loadWeight: 1,
     createdAt: '2026-04-07T06:00:00Z',
   };
   const activity: Activity = {

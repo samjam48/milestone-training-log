@@ -292,6 +292,7 @@ export function mapActivityClassFromApi(
     description: (raw.description as string | null) ?? undefined,
     type: raw.type as ActivityClass['type'],
     defaultRecoveryWindowDays: Number(raw.default_recovery_window_days),
+    loadWeight: typeof raw.load_weight === 'number' ? raw.load_weight : Number(raw.load_weight ?? 1),
     ...readTimestamped(raw),
   };
 }

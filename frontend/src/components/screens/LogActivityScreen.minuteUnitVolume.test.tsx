@@ -43,6 +43,7 @@ const minuteClass: ActivityClass = {
   name: 'Mobility',
   type: 'recovery',
   defaultRecoveryWindowDays: 1,
+  loadWeight: 1,
   createdAt: CREATED_AT,
 };
 
