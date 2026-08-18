@@ -3172,6 +3172,584 @@ def test_compute_load_series_early_point_uses_logs_before_series_start_in_window
 
 
 # ---------------------------------------------------------------------------
+# Combined weighted performance load (class load_weight)
+# ---------------------------------------------------------------------------
+
+_CLW_AS_OF = "2026-06-07"
+_CLW_ALPHA_ID = "cls-alpha"
+_CLW_BRAVO_ID = "cls-bravo"
+_CLW_RECOVERY_ID = "cls-recovery-weight"
+_CLW_ACT_ALPHA = "act-alpha"
+_CLW_ACT_BRAVO = "act-bravo"
+_CLW_ACT_RECOVERY = "act-recovery-weight"
+
+
+def _require_combined_load_series() -> Any:
+    if not hasattr(load_engine, "compute_combined_load_series"):
+        pytest.fail(
+            "app.services.load_engine must export compute_combined_load_series "
+            "as the combined weighted performance load-series entry point"
+        )
+    return load_engine.compute_combined_load_series
+
+
+def _clw_class(
+    class_id: str,
+    *,
+    name: str,
+    class_type: str = "performance",
+    load_weight: float | None = 1.0,
+) -> dict[str, Any]:
+    cls: dict[str, Any] = {
+        "id": class_id,
+        "name": name,
+        "type": class_type,
+        "default_recovery_window_days": 3,
+    }
+    if load_weight is not None:
+        cls["load_weight"] = load_weight
+    return cls
+
+
+def _clw_activity(
+    activity_id: str,
+    class_id: str,
+    *,
+    name: str,
+    activity_type: str = "performance",
+) -> dict[str, Any]:
+    return {
+        "id": activity_id,
+        "activity_class_id": class_id,
+        "name": name,
+        "type": activity_type,
+        "default_volume_unit": "km",
+        "is_active": True,
+    }
+
+
+def _clw_log(
+    activity_id: str,
+    logged_date: str,
+    *,
+    rpe: int = 3,
+    volume_value: float = 1.0,
+    volume_unit: str = "km",
+    log_id: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "id": log_id or f"log-{activity_id}-{logged_date}",
+        "activity_id": activity_id,
+        "logged_date": logged_date,
+        "volume_value": volume_value,
+        "volume_unit": volume_unit,
+        "rpe": rpe,
+    }
+
+
+def _two_performance_classes(
+    *,
+    alpha_weight: float | None = 1.0,
+    bravo_weight: float | None = 2.0,
+    include_recovery: bool = False,
+    recovery_weight: float = 10.0,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    classes = [
+        _clw_class(_CLW_ALPHA_ID, name="Alpha", load_weight=alpha_weight),
+        _clw_class(_CLW_BRAVO_ID, name="Bravo", load_weight=bravo_weight),
+    ]
+    activities = [
+        _clw_activity(_CLW_ACT_ALPHA, _CLW_ALPHA_ID, name="Alpha walk"),
+        _clw_activity(_CLW_ACT_BRAVO, _CLW_BRAVO_ID, name="Bravo run"),
+    ]
+    if include_recovery:
+        classes.append(
+            _clw_class(
+                _CLW_RECOVERY_ID,
+                name="Recovery",
+                class_type="recovery",
+                load_weight=recovery_weight,
+            )
+        )
+        activities.append(
+            _clw_activity(
+                _CLW_ACT_RECOVERY,
+                _CLW_RECOVERY_ID,
+                name="Stretch",
+                activity_type="recovery",
+            )
+        )
+    return classes, activities
+
+
+def _call_combined_load_series(
+    *,
+    activities: list[dict[str, Any]],
+    logs: list[dict[str, Any]],
+    start_date: str,
+    end_date: str,
+    activity_classes: list[dict[str, Any]],
+    rules: list[dict[str, Any]] | None = None,
+    window_days: int = 7,
+) -> list[dict[str, Any]]:
+    compute = _require_combined_load_series()
+    return cast(
+        list[dict[str, Any]],
+        compute(
+            activities,
+            logs,
+            start_date,
+            end_date,
+            window_days,
+            activity_classes=activity_classes,
+            rules=rules or [],
+        ),
+    )
+
+
+def _single_class_point(
+    class_id: str,
+    *,
+    activities: list[dict[str, Any]],
+    logs: list[dict[str, Any]],
+    activity_classes: list[dict[str, Any]],
+    day: str,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    rules: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    series = compute_load_series(
+        class_id,
+        activities,
+        logs,
+        start_date or day,
+        end_date or day,
+        activity_classes=activity_classes,
+        rules=rules or [],
+    )
+    by_date = {point["date"]: point for point in series}
+    return by_date[day]
+
+
+def test_activity_class_dict_includes_load_weight() -> None:
+    from datetime import UTC, datetime
+
+    from app.models.activity import ActivityClass
+    from app.services.load_queries import activity_class_dict
+
+    mapped = activity_class_dict(
+        ActivityClass(
+            id="cls-mapper-weight",
+            name="Weighted class",
+            description="Engine dict must expose load_weight",
+            type="performance",
+            created_at=datetime.now(UTC),
+            load_weight=2.5,
+        )
+    )
+    assert "load_weight" in mapped
+    assert mapped["load_weight"] == pytest.approx(2.5)
+
+
+def test_activity_class_dict_includes_model_default_load_weight() -> None:
+    from datetime import UTC, datetime
+
+    from app.models.activity import ActivityClass
+    from app.services.load_queries import activity_class_dict
+
+    mapped = activity_class_dict(
+        ActivityClass(
+            id="cls-mapper-default-weight",
+            name="Default weight class",
+            description="Omits load_weight so the model default applies",
+            type="performance",
+            created_at=datetime.now(UTC),
+        )
+    )
+    assert "load_weight" in mapped
+    assert mapped["load_weight"] == pytest.approx(1.0)
+
+
+def test_compute_log_load_tax_is_unchanged_by_class_load_weight() -> None:
+    classes, activities = _two_performance_classes(alpha_weight=10.0, bravo_weight=10.0)
+    log = _clw_log(_CLW_ACT_ALPHA, _CLW_AS_OF, rpe=3)
+    alpha = next(activity for activity in activities if activity["id"] == _CLW_ACT_ALPHA)
+    tax = load_engine.compute_log_load_tax(
+        log,
+        alpha,
+        activities,
+        classes,
+        [log],
+        [],
+        as_of=_CLW_AS_OF,
+    )
+    assert tax == pytest.approx(1.0)
+
+
+def test_combined_load_series_weights_two_performance_classes_equal_raw_tax() -> None:
+    """Weights 1 and 2 with equal per-class daily tax combine as 1*a + 2*b."""
+    classes, activities = _two_performance_classes(alpha_weight=1.0, bravo_weight=2.0)
+    logs = [
+        _clw_log(_CLW_ACT_ALPHA, _CLW_AS_OF, rpe=3),
+        _clw_log(_CLW_ACT_BRAVO, _CLW_AS_OF, rpe=3),
+    ]
+    alpha = _single_class_point(
+        _CLW_ALPHA_ID,
+        activities=activities,
+        logs=logs,
+        activity_classes=classes,
+        day=_CLW_AS_OF,
+    )
+    bravo = _single_class_point(
+        _CLW_BRAVO_ID,
+        activities=activities,
+        logs=logs,
+        activity_classes=classes,
+        day=_CLW_AS_OF,
+    )
+    assert alpha["daily_load"] == pytest.approx(bravo["daily_load"])
+    combined = _call_combined_load_series(
+        activities=activities,
+        logs=logs,
+        start_date=_CLW_AS_OF,
+        end_date=_CLW_AS_OF,
+        activity_classes=classes,
+    )
+    point = combined[0]
+    assert point["daily_load"] == pytest.approx(
+        1.0 * alpha["daily_load"] + 2.0 * bravo["daily_load"]
+    )
+    assert point["load"] == pytest.approx(1.0 * alpha["load"] + 2.0 * bravo["load"])
+
+
+def test_combined_load_series_rolling_applies_recency_weights_to_combined_dailies() -> None:
+    classes, activities = _two_performance_classes(alpha_weight=1.0, bravo_weight=2.0)
+    older = add_days(_CLW_AS_OF, -6)
+    logs = [
+        _clw_log(_CLW_ACT_ALPHA, older, rpe=3),
+        _clw_log(_CLW_ACT_BRAVO, _CLW_AS_OF, rpe=7),
+    ]
+    combined = _call_combined_load_series(
+        activities=activities,
+        logs=logs,
+        start_date=_CLW_AS_OF,
+        end_date=_CLW_AS_OF,
+        activity_classes=classes,
+    )
+    older_alpha = _single_class_point(
+        _CLW_ALPHA_ID,
+        activities=activities,
+        logs=logs,
+        activity_classes=classes,
+        day=older,
+        start_date=older,
+        end_date=_CLW_AS_OF,
+    )
+    today_bravo = _single_class_point(
+        _CLW_BRAVO_ID,
+        activities=activities,
+        logs=logs,
+        activity_classes=classes,
+        day=_CLW_AS_OF,
+    )
+    weights = load_engine.LOAD_TAX_RECENCY_WEIGHTS
+    expected_load = (2.0 * today_bravo["daily_load"] * weights[0]) + (
+        1.0 * older_alpha["daily_load"] * weights[6]
+    )
+    assert combined[0]["daily_load"] == pytest.approx(2.0 * today_bravo["daily_load"])
+    assert combined[0]["load"] == pytest.approx(expected_load)
+
+
+def test_combined_load_series_ignores_recovery_logs_regardless_of_load_weight() -> None:
+    classes, activities = _two_performance_classes(
+        alpha_weight=1.0,
+        bravo_weight=1.0,
+        include_recovery=True,
+        recovery_weight=10.0,
+    )
+    logs = [
+        _clw_log(_CLW_ACT_ALPHA, _CLW_AS_OF, rpe=3),
+        _clw_log(_CLW_ACT_RECOVERY, _CLW_AS_OF, rpe=10, volume_value=45.0),
+    ]
+    performance_only = _single_class_point(
+        _CLW_ALPHA_ID,
+        activities=activities,
+        logs=logs,
+        activity_classes=classes,
+        day=_CLW_AS_OF,
+    )
+    combined = _call_combined_load_series(
+        activities=activities,
+        logs=logs,
+        start_date=_CLW_AS_OF,
+        end_date=_CLW_AS_OF,
+        activity_classes=classes,
+    )
+    assert combined[0]["daily_load"] == pytest.approx(performance_only["daily_load"])
+    assert combined[0]["load"] == pytest.approx(performance_only["load"])
+
+
+def test_combined_load_series_weight_zero_mutes_performance_class() -> None:
+    classes, activities = _two_performance_classes(alpha_weight=0.0, bravo_weight=2.0)
+    logs = [
+        _clw_log(_CLW_ACT_ALPHA, _CLW_AS_OF, rpe=9),
+        _clw_log(_CLW_ACT_BRAVO, _CLW_AS_OF, rpe=3),
+    ]
+    bravo = _single_class_point(
+        _CLW_BRAVO_ID,
+        activities=activities,
+        logs=logs,
+        activity_classes=classes,
+        day=_CLW_AS_OF,
+    )
+    combined = _call_combined_load_series(
+        activities=activities,
+        logs=logs,
+        start_date=_CLW_AS_OF,
+        end_date=_CLW_AS_OF,
+        activity_classes=classes,
+    )
+    assert combined[0]["daily_load"] == pytest.approx(2.0 * bravo["daily_load"])
+    assert combined[0]["load"] == pytest.approx(2.0 * bravo["load"])
+
+
+def test_combined_load_series_sums_multiple_same_day_logs_across_classes() -> None:
+    classes, activities = _two_performance_classes(alpha_weight=1.0, bravo_weight=2.0)
+    logs = [
+        _clw_log(_CLW_ACT_ALPHA, _CLW_AS_OF, rpe=3, log_id="log-alpha-a"),
+        _clw_log(_CLW_ACT_ALPHA, _CLW_AS_OF, rpe=3, log_id="log-alpha-b"),
+        _clw_log(_CLW_ACT_BRAVO, _CLW_AS_OF, rpe=3, log_id="log-bravo"),
+    ]
+    alpha = _single_class_point(
+        _CLW_ALPHA_ID,
+        activities=activities,
+        logs=logs,
+        activity_classes=classes,
+        day=_CLW_AS_OF,
+    )
+    bravo = _single_class_point(
+        _CLW_BRAVO_ID,
+        activities=activities,
+        logs=logs,
+        activity_classes=classes,
+        day=_CLW_AS_OF,
+    )
+    combined = _call_combined_load_series(
+        activities=activities,
+        logs=logs,
+        start_date=_CLW_AS_OF,
+        end_date=_CLW_AS_OF,
+        activity_classes=classes,
+    )
+    assert alpha["daily_load"] == pytest.approx(2.0)
+    assert bravo["daily_load"] == pytest.approx(1.0)
+    assert combined[0]["daily_load"] == pytest.approx(
+        1.0 * alpha["daily_load"] + 2.0 * bravo["daily_load"]
+    )
+
+
+def test_combined_load_series_backfill_on_d_minus_2_increases_later_points() -> None:
+    classes, activities = _two_performance_classes(alpha_weight=1.0, bravo_weight=2.0)
+    d_minus_2 = add_days(_CLW_AS_OF, -2)
+    d_minus_1 = add_days(_CLW_AS_OF, -1)
+    empty = _call_combined_load_series(
+        activities=activities,
+        logs=[],
+        start_date=d_minus_2,
+        end_date=_CLW_AS_OF,
+        activity_classes=classes,
+    )
+    backfilled = _call_combined_load_series(
+        activities=activities,
+        logs=[_clw_log(_CLW_ACT_BRAVO, d_minus_2, rpe=3)],
+        start_date=d_minus_2,
+        end_date=_CLW_AS_OF,
+        activity_classes=classes,
+    )
+    empty_by_date = {point["date"]: point for point in empty}
+    backfilled_by_date = {point["date"]: point for point in backfilled}
+    for day in (d_minus_2, d_minus_1, _CLW_AS_OF):
+        assert backfilled_by_date[day]["load"] > empty_by_date[day]["load"]
+    assert backfilled_by_date[d_minus_2]["daily_load"] > empty_by_date[d_minus_2][
+        "daily_load"
+    ]
+    assert backfilled_by_date[d_minus_1]["daily_load"] == pytest.approx(0.0)
+    assert backfilled_by_date[_CLW_AS_OF]["daily_load"] == pytest.approx(0.0)
+
+
+def test_combined_load_series_all_zero_when_no_performance_classes() -> None:
+    """No performance classes → one all-zero point per requested day (not an empty series)."""
+    classes = [
+        _clw_class(
+            _CLW_RECOVERY_ID,
+            name="Recovery only",
+            class_type="recovery",
+            load_weight=10.0,
+        )
+    ]
+    activities = [
+        _clw_activity(
+            _CLW_ACT_RECOVERY,
+            _CLW_RECOVERY_ID,
+            name="Stretch",
+            activity_type="recovery",
+        )
+    ]
+    start = add_days(_CLW_AS_OF, -2)
+    series = _call_combined_load_series(
+        activities=activities,
+        logs=[_clw_log(_CLW_ACT_RECOVERY, start, rpe=10, volume_value=40.0)],
+        start_date=start,
+        end_date=_CLW_AS_OF,
+        activity_classes=classes,
+    )
+    assert [point["date"] for point in series] == each_day(start, _CLW_AS_OF)
+    assert all(point["daily_load"] == pytest.approx(0.0) for point in series)
+    assert all(point["load"] == pytest.approx(0.0) for point in series)
+
+
+def test_combined_load_series_treats_missing_load_weight_as_one() -> None:
+    classes, activities = _two_performance_classes(
+        alpha_weight=None,
+        bravo_weight=2.0,
+    )
+    logs = [
+        _clw_log(_CLW_ACT_ALPHA, _CLW_AS_OF, rpe=3),
+        _clw_log(_CLW_ACT_BRAVO, _CLW_AS_OF, rpe=3),
+    ]
+    alpha = _single_class_point(
+        _CLW_ALPHA_ID,
+        activities=activities,
+        logs=logs,
+        activity_classes=classes,
+        day=_CLW_AS_OF,
+    )
+    bravo = _single_class_point(
+        _CLW_BRAVO_ID,
+        activities=activities,
+        logs=logs,
+        activity_classes=classes,
+        day=_CLW_AS_OF,
+    )
+    combined = _call_combined_load_series(
+        activities=activities,
+        logs=logs,
+        start_date=_CLW_AS_OF,
+        end_date=_CLW_AS_OF,
+        activity_classes=classes,
+    )
+    assert combined[0]["daily_load"] == pytest.approx(
+        1.0 * alpha["daily_load"] + 2.0 * bravo["daily_load"]
+    )
+
+
+def test_strip_week_days_state_uses_combined_weighted_tax() -> None:
+    """Logs on the non-first performance class must still color week_days via combined tax."""
+    classes, activities = _two_performance_classes(alpha_weight=1.0, bravo_weight=2.0)
+    yesterday = add_days(_CLW_AS_OF, -1)
+    logs = [_clw_log(_CLW_ACT_BRAVO, yesterday, rpe=9)]
+    summary = _call_load_risk_summary(
+        as_of=_CLW_AS_OF,
+        classes=classes,
+        activities=activities,
+        logs=logs,
+        rules=[],
+        delayed_tax_hits=[],
+    )
+    states = {row["date"]: row["state"] for row in summary["week_days"]}
+    # 3.0 tax * weight 2 * recency[1]=0.85 = 5.1 → danger. First-class-only strip stays safe.
+    assert states[_CLW_AS_OF] == "danger"
+
+
+def test_strip_excludes_same_day_combined_daily_from_week_days_state() -> None:
+    classes, activities = _two_performance_classes(alpha_weight=1.0, bravo_weight=2.0)
+    logs = [
+        _clw_log(_CLW_ACT_ALPHA, _CLW_AS_OF, rpe=9, log_id="log-alpha-today-a"),
+        _clw_log(_CLW_ACT_ALPHA, _CLW_AS_OF, rpe=9, log_id="log-alpha-today-b"),
+        _clw_log(_CLW_ACT_BRAVO, _CLW_AS_OF, rpe=9),
+    ]
+    series = _call_combined_load_series(
+        activities=activities,
+        logs=logs,
+        start_date=_CLW_AS_OF,
+        end_date=_CLW_AS_OF,
+        activity_classes=classes,
+    )
+    assert series[0]["daily_load"] >= load_engine.LOAD_RISK_STRIP_DANGER_AT
+    summary = _call_load_risk_summary(
+        as_of=_CLW_AS_OF,
+        classes=classes,
+        activities=activities,
+        logs=logs,
+        rules=[],
+        delayed_tax_hits=[],
+    )
+    states = {row["date"]: row["state"] for row in summary["week_days"]}
+    assert states[_CLW_AS_OF] == "safe"
+
+
+def test_strip_tax_matches_combined_series_daily_load_excluding_offset_zero() -> None:
+    classes, activities = _two_performance_classes(alpha_weight=1.0, bravo_weight=2.0)
+    yesterday = add_days(_CLW_AS_OF, -1)
+    logs = [
+        _clw_log(_CLW_ACT_BRAVO, yesterday, rpe=9),
+        _clw_log(_CLW_ACT_BRAVO, _CLW_AS_OF, rpe=9),
+    ]
+    start = add_days(_CLW_AS_OF, -6)
+    series = _call_combined_load_series(
+        activities=activities,
+        logs=logs,
+        start_date=start,
+        end_date=_CLW_AS_OF,
+        activity_classes=classes,
+    )
+    daily_by_date = {point["date"]: point["daily_load"] for point in series}
+    assert daily_by_date[_CLW_AS_OF] > 0
+    expected_strip = 0.0
+    for offset, weight in enumerate(load_engine.LOAD_TAX_RECENCY_WEIGHTS):
+        if offset == 0:
+            continue
+        expected_strip += daily_by_date[add_days(_CLW_AS_OF, -offset)] * weight
+    assert expected_strip >= load_engine.LOAD_RISK_STRIP_DANGER_AT
+    summary = _call_load_risk_summary(
+        as_of=_CLW_AS_OF,
+        classes=classes,
+        activities=activities,
+        logs=logs,
+        rules=[],
+        delayed_tax_hits=[],
+    )
+    states = {row["date"]: row["state"] for row in summary["week_days"]}
+    assert states[_CLW_AS_OF] == "danger"
+
+
+def test_load_risk_rule_limit_rows_remain_unweighted() -> None:
+    classes, activities = _two_performance_classes(alpha_weight=10.0, bravo_weight=10.0)
+    logs = [_clw_log(_CLW_ACT_ALPHA, _CLW_AS_OF, volume_value=2.0, rpe=3)]
+    rules = [
+        _make_rule(
+            id="rule-vol-alpha-weekly",
+            activity_class_id=_CLW_ALPHA_ID,
+            activity_id=_CLW_ACT_ALPHA,
+            rule_type="weekly_volume_cap",
+            threshold_value=8,
+            limit_unit="km",
+        )
+    ]
+    summary = _call_load_risk_summary(
+        as_of=_CLW_AS_OF,
+        classes=classes,
+        activities=activities,
+        logs=logs,
+        rules=rules,
+        delayed_tax_hits=[],
+    )
+    row = _rule_limit_row(summary, "rule-vol-alpha-weekly")
+    assert row["actual"] == pytest.approx(2.0)
+    assert row["limit"] == pytest.approx(8.0)
+
+
+# ---------------------------------------------------------------------------
 # Import surface — module must export all planned functions
 # ---------------------------------------------------------------------------
 
@@ -3198,6 +3776,7 @@ def test_compute_load_series_early_point_uses_logs_before_series_start_in_window
         "compute_weekly_progress",
         "compute_clean_streak",
         "compute_load_series",
+        "compute_combined_load_series",
         "check_violations",
         "detect_delayed_tax",
         "effective_rules_for_activity",

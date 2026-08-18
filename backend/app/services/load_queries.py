@@ -222,6 +222,7 @@ def activity_class_dict(activity_class: ActivityClass) -> ActivityClassDict:
         "name": activity_class.name,
         "type": activity_class.type,
         "default_recovery_window_days": activity_class.default_recovery_window_days,
+        "load_weight": activity_class.load_weight,
     }
 
 
