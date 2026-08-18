@@ -190,7 +190,7 @@ function setupDashboardTabsEngine(): void {
   mockEngine.classStatuses = [FOOT_STATUS];
   mockEngine.loadRiskSummary = LOAD_RISK_SUMMARY;
   mockEngine.loadSeries = LOAD_SERIES;
-  mockEngine.graphClassId = FOOT_CLASS.id;
+  mockEngine.graphClassId = null;
   mockEngine.weekLoadThreshold = 10;
   mockEngine.dailyScores = [
     { date: '2026-06-12', state: 'safe', violations: [], hadFlareUp: false },
@@ -312,7 +312,7 @@ describe('DashboardScreen dashboard tabs', () => {
     renderDashboard();
     await chooseDashboardTab('Safety');
 
-    expect(screen.getByRole('heading', { name: FOOT_CLASS.name })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Performance load' })).toBeInTheDocument();
     expect(screen.getByTestId('load-risk-section')).toBeInTheDocument();
     expect(screen.getByTestId('calendar-heatmap')).toBeInTheDocument();
     expect(screen.getByText('Activity status')).toBeInTheDocument();
